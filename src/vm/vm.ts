@@ -7,7 +7,7 @@
  */
 
 import { Chunk } from '../compiler/chunk';
-import { OpCode } from '../compiler/opcodes';
+import { OpCode, CompoundOp } from '../compiler/opcodes';
 import { CompiledFunction } from '../compiler/compiler';
 import {
   RuntimeValue,
@@ -47,6 +47,24 @@ interface CallFrame {
   upvalues: UpvalueObj[];
   /** The 'this' binding for method calls */
   thisBinding: RuntimeValue | null;
+  /**
+   * How many arguments the caller actually passed, before padding to arity.
+   * The default-parameter prologue reads this via LOAD_ARGC so that an omitted
+   * argument can be told apart from an explicit null.
+   */
+  argCount: number;
+}
+
+/**
+ * An installed `catch` handler, recorded by TRY_BEGIN.
+ */
+interface TryHandler {
+  /** Index into `frames` of the frame that installed the handler. */
+  frameIndex: number;
+  /** Address of the catch block within that frame's chunk. */
+  handlerIp: number;
+  /** Operand stack height when the handler was installed. */
+  stackHeight: number;
 }
 
 interface UpvalueObj {
@@ -63,6 +81,12 @@ export interface VMClosure {
   upvalues: UpvalueObj[];
 }
 
+/**
+ * Raised when the step budget is exhausted. Distinct from RuntimeError so that
+ * `try`/`catch` inside the runaway code cannot catch and resume it.
+ */
+export class StepLimitExceeded extends RuntimeError {}
+
 export type OutputHandler = (message: string) => void;
 
 export interface VMOptions {
@@ -74,6 +98,7 @@ export interface VMOptions {
 export class VM {
   private stack: RuntimeValue[] = [];
   private frames: CallFrame[] = [];
+  private handlers: TryHandler[] = [];
   private globals: Map<string, RuntimeValue> = new Map();
   private output: OutputHandler;
   private maxSteps: number;
@@ -138,6 +163,7 @@ export class VM {
   run(chunk: Chunk): RuntimeValue {
     this.stack = [];
     this.frames = [];
+    this.handlers = [];
     this.steps = 0;
     this.outputBuffer = [];
 
@@ -148,6 +174,7 @@ export class VM {
       basePointer: 0,
       upvalues: [],
       thisBinding: null,
+      argCount: 0,
     });
 
     return this.execute();
@@ -204,9 +231,82 @@ export class VM {
    *   run a single nested call and hand control back to the native caller.
    */
   private execute(stopDepth: number = 0): RuntimeValue {
+    // The dispatch loop itself is unaware of try/catch. When anything throws,
+    // control lands here; if a handler installed by this invocation covers the
+    // throw we rewind the machine to it and resume dispatching, otherwise the
+    // error keeps propagating (out through a native frame if need be).
+    while (true) {
+      try {
+        return this.dispatch(stopDepth);
+      } catch (error) {
+        if (!this.unwindToHandler(error, stopDepth)) {
+          throw error;
+        }
+      }
+    }
+  }
+
+  /**
+   * Rewind to the innermost catch handler that this invocation of the dispatch
+   * loop is responsible for, pushing the error object for the catch block.
+   *
+   * Returns false when no such handler exists, in which case the caller must
+   * let the error propagate. Handlers belonging to frames below `stopDepth` are
+   * deliberately left alone: those frames are owned by an outer dispatch loop,
+   * possibly with native code in between, so unwinding to them has to happen as
+   * a real JS throw rather than a bytecode jump.
+   */
+  private unwindToHandler(error: unknown, stopDepth: number): boolean {
+    if (error instanceof StepLimitExceeded) {
+      // A runaway program must not be catchable, or a `catch` inside the
+      // offending loop would swallow the limit and spin forever.
+      return false;
+    }
+
+    while (this.handlers.length > 0) {
+      const handler = this.handlers[this.handlers.length - 1];
+      if (handler.frameIndex < stopDepth) {
+        return false;
+      }
+      this.handlers.pop();
+
+      // Defensive: a handler whose frame is already gone cannot be resumed.
+      // Setting frames.length past the end would leave a hole and the next
+      // dereference would fail with a bare TypeError.
+      if (handler.frameIndex >= this.frames.length) {
+        continue;
+      }
+
+      this.frames.length = handler.frameIndex + 1;
+      this.frames[handler.frameIndex].ip = handler.handlerIp;
+      this.stack.length = handler.stackHeight;
+      this.push(this.makeErrorValue(error));
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Build the object a `catch` clause binds, mirroring the interpreter: a
+   * `message` string, plus a `line` for errors that carry one.
+   */
+  private makeErrorValue(error: unknown): RuntimeValue {
+    const properties = new Map<string, RuntimeValue>();
+    if (error instanceof RuntimeError) {
+      properties.set('message', createString(error.message));
+      properties.set('line', error.line ? createNumber(error.line) : createNull());
+    } else if (error instanceof Error) {
+      properties.set('message', createString(error.message));
+    } else {
+      properties.set('message', createString(String(error)));
+    }
+    return createObject(properties);
+  }
+
+  private dispatch(stopDepth: number): RuntimeValue {
     while (true) {
       if (this.steps++ > this.maxSteps) {
-        throw new RuntimeError(
+        throw new StepLimitExceeded(
           'Maximum execution steps exceeded (possible infinite loop)',
           this.currentLine()
         );
@@ -230,6 +330,37 @@ export class VM {
           this.push(this.peek());
           break;
 
+        case OpCode.ROT: {
+          const count = this.read16();
+          // Move the deepest of the top `count` values to the top:
+          // [a, b, c] -> [b, c, a]
+          const from = this.stack.length - count;
+          if (from < 0) {
+            throw new RuntimeError('Stack underflow');
+          }
+          const [value] = this.stack.splice(from, 1);
+          this.stack.push(value);
+          break;
+        }
+
+        case OpCode.COMPOUND: {
+          const op = this.read16();
+          const value = this.pop();
+          const current = this.pop();
+          this.push(this.applyCompound(current, value, op));
+          break;
+        }
+
+        case OpCode.DUP2: {
+          // Copy the top two values keeping their relative order:
+          // [a, b] -> [a, b, a, b]
+          const b = this.peek(0);
+          const a = this.peek(1);
+          this.push(a);
+          this.push(b);
+          break;
+        }
+
         case OpCode.ADD: {
           const b = this.pop();
           const a = this.pop();
@@ -241,7 +372,7 @@ export class VM {
             this.push(createArray([...a.elements, ...b.elements]));
           } else {
             throw new RuntimeError(
-              `Cannot add ${a.type} and ${b.type}`,
+              `Cannot add ${a.type} and ${b.type}. The + operator works with numbers, strings, and arrays.`,
               this.currentLine()
             );
           }
@@ -249,9 +380,8 @@ export class VM {
         }
 
         case OpCode.SUB: {
-          const b = this.pop() as NumberValue;
-          const a = this.pop() as NumberValue;
-          this.push(createNumber(a.value - b.value));
+          const [a, b] = this.popNumericOperands();
+          this.push(createNumber(a - b));
           break;
         }
 
@@ -261,7 +391,9 @@ export class VM {
           if (a.type === 'number' && b.type === 'number') {
             this.push(createNumber(a.value * b.value));
           } else if (a.type === 'string' && b.type === 'number') {
-            this.push(createString(a.value.repeat(b.value)));
+            this.push(createString(a.value.repeat(Math.floor(b.value))));
+          } else if (a.type === 'number' && b.type === 'string') {
+            this.push(createString(b.value.repeat(Math.floor(a.value))));
           } else {
             throw new RuntimeError(
               `Cannot multiply ${a.type} and ${b.type}`,
@@ -272,31 +404,44 @@ export class VM {
         }
 
         case OpCode.DIV: {
-          const b = this.pop() as NumberValue;
-          const a = this.pop() as NumberValue;
+          const b = this.pop();
+          const a = this.pop();
+          if (a.type !== 'number' || b.type !== 'number') {
+            throw new RuntimeError(
+              `Cannot divide ${a.type} by ${b.type}. Division only works with numbers.`,
+              this.currentLine()
+            );
+          }
           if (b.value === 0) {
-            throw new RuntimeError('Division by zero', this.currentLine());
+            throw new RuntimeError(
+              `Division by zero! You tried to divide ${a.value} by 0, which is undefined in mathematics.`,
+              this.currentLine()
+            );
           }
           this.push(createNumber(a.value / b.value));
           break;
         }
 
         case OpCode.MOD: {
-          const b = this.pop() as NumberValue;
-          const a = this.pop() as NumberValue;
-          this.push(createNumber(a.value % b.value));
+          const [a, b] = this.popNumericOperands();
+          this.push(createNumber(a % b));
           break;
         }
 
         case OpCode.POW: {
-          const b = this.pop() as NumberValue;
-          const a = this.pop() as NumberValue;
-          this.push(createNumber(Math.pow(a.value, b.value)));
+          const [a, b] = this.popNumericOperands();
+          this.push(createNumber(Math.pow(a, b)));
           break;
         }
 
         case OpCode.NEGATE: {
-          const val = this.pop() as NumberValue;
+          const val = this.pop();
+          if (val.type !== 'number') {
+            throw new RuntimeError(
+              `Cannot negate ${val.type}. The - operator only works with numbers.`,
+              this.currentLine()
+            );
+          }
           this.push(createNumber(-val.value));
           break;
         }
@@ -315,33 +460,21 @@ export class VM {
           break;
         }
 
-        case OpCode.LT: {
-          const b = this.pop() as NumberValue;
-          const a = this.pop() as NumberValue;
-          this.push(createBoolean(a.value < b.value));
+        case OpCode.LT:
+          this.compareOperands((a, b) => a < b);
           break;
-        }
 
-        case OpCode.LTE: {
-          const b = this.pop() as NumberValue;
-          const a = this.pop() as NumberValue;
-          this.push(createBoolean(a.value <= b.value));
+        case OpCode.LTE:
+          this.compareOperands((a, b) => a <= b);
           break;
-        }
 
-        case OpCode.GT: {
-          const b = this.pop() as NumberValue;
-          const a = this.pop() as NumberValue;
-          this.push(createBoolean(a.value > b.value));
+        case OpCode.GT:
+          this.compareOperands((a, b) => a > b);
           break;
-        }
 
-        case OpCode.GTE: {
-          const b = this.pop() as NumberValue;
-          const a = this.pop() as NumberValue;
-          this.push(createBoolean(a.value >= b.value));
+        case OpCode.GTE:
+          this.compareOperands((a, b) => a >= b);
           break;
-        }
 
         case OpCode.NOT: {
           const val = this.pop();
@@ -390,6 +523,15 @@ export class VM {
         case OpCode.LOOP: {
           const target = this.read16();
           this.currentFrame.ip = target;
+          break;
+        }
+
+        case OpCode.JMP_IF_NULL: {
+          const target = this.read16();
+          // Peeks: the null itself becomes the value of an `?.` chain.
+          if (this.peek().type === 'null') {
+            this.currentFrame.ip = target;
+          }
           break;
         }
 
@@ -450,6 +592,10 @@ export class VM {
           break;
         }
 
+        case OpCode.LOAD_ARGC:
+          this.push(createNumber(this.currentFrame.argCount));
+          break;
+
         case OpCode.CALL: {
           const argCount = this.read16();
           const callee = this.stack[this.stack.length - 1 - argCount];
@@ -460,6 +606,15 @@ export class VM {
         case OpCode.RETURN: {
           const result = this.pop();
           const frame = this.frames.pop()!;
+
+          // A `return` inside a try block jumps straight out without reaching
+          // TRY_END, so drop any handlers the departing frame installed.
+          while (
+            this.handlers.length > 0 &&
+            this.handlers[this.handlers.length - 1].frameIndex >= this.frames.length
+          ) {
+            this.handlers.pop();
+          }
 
           if (this.frames.length === 0) {
             // Return from top-level - done
@@ -509,6 +664,18 @@ export class VM {
             fn,
             upvalues,
           };
+
+          // A function defined inside a method must see the same `this`. The
+          // interpreter gets this for free because `this` lives in the method's
+          // environment and the nested function closes over it; here the
+          // binding has to be captured explicitly, or `this.x` inside a
+          // callback passed to map/filter reads null.
+          const enclosingThis = this.currentFrame.thisBinding;
+          if (enclosingThis) {
+            (closure as VMClosure & { boundThis: RuntimeValue }).boundThis =
+              enclosingThis;
+          }
+
           this.push(closure as unknown as RuntimeValue);
           break;
         }
@@ -525,13 +692,84 @@ export class VM {
 
         case OpCode.OBJECT: {
           const count = this.read16();
-          const properties = new Map<string, RuntimeValue>();
-          for (let i = 0; i < count; i++) {
+          // Popping yields the pairs in reverse source order, so collect them
+          // first and only then insert. A Map preserves insertion order, and
+          // stringify()/keys() expose that order, so inserting as popped would
+          // make the VM print `{third: 3, ..., first: 1}`.
+          const pairs: [string, RuntimeValue][] = new Array(count);
+          for (let i = count - 1; i >= 0; i--) {
             const value = this.pop();
             const key = this.pop() as StringValue;
-            properties.set(key.value, value);
+            pairs[i] = [key.value, value];
+          }
+          const properties = new Map<string, RuntimeValue>();
+          for (const [key, value] of pairs) {
+            properties.set(key, value);
           }
           this.push(createObject(properties));
+          break;
+        }
+
+        case OpCode.CHECK_ITERABLE: {
+          const iterable = this.peek();
+          if (iterable.type !== 'array' && iterable.type !== 'string') {
+            throw new RuntimeError(
+              `Cannot iterate over ${iterable.type}. For loops work with arrays, strings, and ranges.`,
+              this.currentLine()
+            );
+          }
+          break;
+        }
+
+        case OpCode.ARRAY_APPEND: {
+          const value = this.pop();
+          const arr = this.peek() as ArrayValue;
+          arr.elements.push(value);
+          break;
+        }
+
+        case OpCode.ARRAY_SPREAD: {
+          const value = this.pop();
+          const arr = this.peek() as ArrayValue;
+          if (value.type === 'array') {
+            arr.elements.push(...value.elements);
+          } else if (value.type === 'string') {
+            arr.elements.push(...value.value.split('').map(createString));
+          } else {
+            throw new RuntimeError(
+              `Cannot spread ${value.type}. Spread (...) works with arrays and strings.`,
+              this.currentLine()
+            );
+          }
+          break;
+        }
+
+        case OpCode.DESTRUCT_ELEM: {
+          const index = this.read16();
+          const subject = this.pop();
+          if (subject.type !== 'array') {
+            throw new RuntimeError(
+              `Cannot destructure ${subject.type} as an array. Right side must be an array.`,
+              this.currentLine()
+            );
+          }
+          this.push(
+            index < subject.elements.length ? subject.elements[index] : createNull()
+          );
+          break;
+        }
+
+        case OpCode.DESTRUCT_PROP: {
+          const keyIdx = this.read16();
+          const key = this.currentFrame.chunk.constants[keyIdx] as StringValue;
+          const subject = this.pop();
+          if (subject.type !== 'object') {
+            throw new RuntimeError(
+              `Cannot destructure ${subject.type} as an object. Right side must be an object.`,
+              this.currentLine()
+            );
+          }
+          this.push(subject.properties.get(key.value) || createNull());
           break;
         }
 
@@ -539,6 +777,13 @@ export class VM {
           const index = this.pop();
           const obj = this.pop();
           this.push(this.performIndex(obj, index));
+          break;
+        }
+
+        case OpCode.INDEX_OPTIONAL: {
+          const index = this.pop();
+          const obj = this.pop();
+          this.push(this.performIndex(obj, index, true));
           break;
         }
 
@@ -556,6 +801,14 @@ export class VM {
           const propName = this.currentFrame.chunk.constants[propIdx] as StringValue;
           const obj = this.pop();
           this.push(this.performGetProp(obj, propName.value));
+          break;
+        }
+
+        case OpCode.GET_METHOD: {
+          const propIdx = this.read16();
+          const propName = this.currentFrame.chunk.constants[propIdx] as StringValue;
+          const obj = this.pop();
+          this.push(this.performGetMethod(obj, propName.value));
           break;
         }
 
@@ -618,12 +871,7 @@ export class VM {
             throw new RuntimeError(`'${stringify(classVal)}' is not a class`, this.currentLine());
           }
 
-          const instance: InstanceValue = {
-            type: 'instance',
-            className: classVal.name,
-            classRef: classVal,
-            properties: new Map(classVal.properties),
-          };
+          const instance = this.instantiate(classVal);
 
           // Check for init/constructor method
           const initMethod = classVal.methods.get('init') || classVal.methods.get('constructor');
@@ -636,12 +884,14 @@ export class VM {
             // so args start at basePointer, and instance is at basePointer - 1
             if ((initMethod as unknown as VMClosure).type === 'vm-closure') {
               const closure = initMethod as unknown as VMClosure;
+              this.reconcileArity(closure.fn.arity, argCount);
               const frame: CallFrame = {
                 chunk: closure.fn.chunk,
                 ip: 0,
-                basePointer: this.stack.length - argCount,
+                basePointer: this.stack.length - closure.fn.arity,
                 upvalues: closure.upvalues,
                 thisBinding: instance,
+                argCount,
               };
               // Mark this frame so RETURN knows to return 'this' instead of the return value
               (frame as CallFrame & { isConstructor: boolean }).isConstructor = true;
@@ -689,6 +939,25 @@ export class VM {
           break;
         }
 
+        case OpCode.TRY_BEGIN: {
+          const handlerIp = this.read16();
+          this.handlers.push({
+            frameIndex: this.frames.length - 1,
+            handlerIp,
+            stackHeight: this.stack.length,
+          });
+          break;
+        }
+
+        case OpCode.TRY_END:
+          this.handlers.pop();
+          break;
+
+        case OpCode.THROW: {
+          const value = this.pop();
+          throw new RuntimeError(this.throwMessage(value), this.currentLine());
+        }
+
         case OpCode.HALT: {
           // Return the top of stack if anything is there, otherwise null
           return this.stack.length > 0 ? this.stack[this.stack.length - 1] : createNull();
@@ -701,6 +970,90 @@ export class VM {
           );
       }
     }
+  }
+
+  /**
+   * Message for a thrown value, matching the interpreter's evalThrowStatement.
+   */
+  private throwMessage(value: RuntimeValue): string {
+    if (value.type === 'string') {
+      return value.value;
+    }
+    if (value.type === 'object' && value.properties.has('message')) {
+      const msg = value.properties.get('message')!;
+      return msg.type === 'string' ? msg.value : stringify(msg);
+    }
+    return stringify(value);
+  }
+
+  /**
+   * Apply a compound-assignment operator, mirroring the interpreter's
+   * evalCompoundAssignment. Deliberately stricter than the equivalent binary
+   * operator: `s += "!"` concatenates for `+` but is an error for `+=`.
+   */
+  private applyCompound(
+    current: RuntimeValue,
+    value: RuntimeValue,
+    op: number
+  ): RuntimeValue {
+    if (current.type !== 'number' || value.type !== 'number') {
+      throw new RuntimeError(
+        'Compound assignment operators only work with numbers',
+        this.currentLine()
+      );
+    }
+    switch (op) {
+      case CompoundOp.ADD:
+        return createNumber(current.value + value.value);
+      case CompoundOp.SUB:
+        return createNumber(current.value - value.value);
+      case CompoundOp.MUL:
+        return createNumber(current.value * value.value);
+      case CompoundOp.DIV:
+        if (value.value === 0) {
+          throw new RuntimeError('Division by zero!', this.currentLine());
+        }
+        return createNumber(current.value / value.value);
+      default:
+        throw new RuntimeError(
+          `Unknown assignment operator: ${op}`,
+          this.currentLine()
+        );
+    }
+  }
+
+  /** Operands of an arithmetic opcode, validated the way the interpreter does. */
+  private popNumericOperands(): [number, number] {
+    const b = this.pop();
+    const a = this.pop();
+    if (a.type !== 'number' || b.type !== 'number') {
+      throw new RuntimeError(
+        `Cannot perform arithmetic on ${a.type} and ${b.type}. Arithmetic operators only work with numbers.`,
+        this.currentLine()
+      );
+    }
+    return [a.value, b.value];
+  }
+
+  /**
+   * Comparison, matching the interpreter: numbers compare numerically, strings
+   * by locale, and anything else is an error rather than a silent NaN.
+   */
+  private compareOperands(op: (a: number, b: number) => boolean): void {
+    const b = this.pop();
+    const a = this.pop();
+    if (a.type === 'number' && b.type === 'number') {
+      this.push(createBoolean(op(a.value, b.value)));
+      return;
+    }
+    if (a.type === 'string' && b.type === 'string') {
+      this.push(createBoolean(op(a.value.localeCompare(b.value), 0)));
+      return;
+    }
+    throw new RuntimeError(
+      `Cannot compare ${a.type} and ${b.type}. Comparison works with numbers and strings.`,
+      this.currentLine()
+    );
   }
 
   private callValue(callee: RuntimeValue, argCount: number): void {
@@ -723,15 +1076,28 @@ export class VM {
     }
   }
 
+  /**
+   * Reconcile the arguments on the stack with the callee's arity so the frame's
+   * locals occupy exactly the slots the compiler assigned them.
+   *
+   * Missing arguments are padded with null (the default-parameter prologue then
+   * overwrites them where a default exists). Surplus arguments are discarded:
+   * leaving them would push basePointer below where the compiler expects it and
+   * shift every local index in the callee.
+   */
+  private reconcileArity(arity: number, argCount: number): void {
+    for (let i = argCount; i > arity; i--) {
+      this.pop();
+    }
+    for (let i = argCount; i < arity; i++) {
+      this.push(createNull());
+    }
+  }
+
   private callClosure(closure: VMClosure, argCount: number): void {
     const fn = closure.fn;
 
-    // Handle default parameters
-    // For now, pad missing args with null
-    while (argCount < fn.arity) {
-      this.push(createNull());
-      argCount++;
-    }
+    this.reconcileArity(fn.arity, argCount);
 
     // Check if this closure has a bound 'this'
     const boundThis = (closure as VMClosure & { boundThis?: RuntimeValue }).boundThis || null;
@@ -739,9 +1105,12 @@ export class VM {
     const frame: CallFrame = {
       chunk: fn.chunk,
       ip: 0,
-      basePointer: this.stack.length - argCount,
+      basePointer: this.stack.length - fn.arity,
       upvalues: closure.upvalues,
       thisBinding: boundThis,
+      // The count as written at the call site, so LOAD_ARGC can tell an omitted
+      // argument from an explicit null.
+      argCount,
     };
     this.frames.push(frame);
   }
@@ -792,13 +1161,31 @@ export class VM {
     this.push(result);
   }
 
-  private callClass(classVal: ClassValue, argCount: number): void {
-    const instance: InstanceValue = {
+  /**
+   * Create an instance seeded with the class's declared property defaults, then
+   * any the superclass declares that the subclass does not override. INHERIT
+   * copies methods but not properties, so the chain is walked here, matching the
+   * interpreter's evalNewExpression.
+   */
+  private instantiate(classVal: ClassValue): InstanceValue {
+    const properties = new Map(classVal.properties);
+    if (classVal.superClass) {
+      for (const [key, value] of classVal.superClass.properties) {
+        if (!properties.has(key)) {
+          properties.set(key, value);
+        }
+      }
+    }
+    return {
       type: 'instance',
       className: classVal.name,
       classRef: classVal,
-      properties: new Map(classVal.properties),
+      properties,
     };
+  }
+
+  private callClass(classVal: ClassValue, argCount: number): void {
+    const instance = this.instantiate(classVal);
 
     const initMethod = classVal.methods.get('init') || classVal.methods.get('constructor');
     if (initMethod) {
@@ -820,12 +1207,14 @@ export class VM {
   ): void {
     if ((method as unknown as VMClosure).type === 'vm-closure') {
       const closure = method as unknown as VMClosure;
+      this.reconcileArity(closure.fn.arity, argCount);
       const frame: CallFrame = {
         chunk: closure.fn.chunk,
         ip: 0,
-        basePointer: this.stack.length - argCount,
+        basePointer: this.stack.length - closure.fn.arity,
         upvalues: closure.upvalues,
         thisBinding: instance,
+        argCount,
       };
       this.frames.push(frame);
     } else if (method.type === 'native-function') {
@@ -833,50 +1222,90 @@ export class VM {
     }
   }
 
-  private performIndex(obj: RuntimeValue, index: RuntimeValue): RuntimeValue {
+  /**
+   * Index into an array, string or object.
+   *
+   * An out-of-range index is an error, matching the interpreter, which reports
+   * it rather than yielding null. Returning null here instead meant a
+   * `try`/`catch` around a bad index saw nothing to catch and the program
+   * carried on with a bogus value.
+   *
+   * @param optional Set for `?.[]`, where the interpreter does yield null
+   *   out of range instead of throwing.
+   */
+  private performIndex(
+    obj: RuntimeValue,
+    index: RuntimeValue,
+    optional = false
+  ): RuntimeValue {
     if (obj.type === 'array') {
       if (index.type !== 'number') {
-        throw new RuntimeError('Array index must be a number', this.currentLine());
+        throw new RuntimeError(
+          `Array index must be a number, got ${index.type}`,
+          this.currentLine()
+        );
       }
       const idx = Math.floor(index.value);
       if (idx < 0 || idx >= obj.elements.length) {
-        return createNull();
+        if (optional) return createNull();
+        throw new RuntimeError(
+          `Array index ${idx} is out of bounds. Array has ${obj.elements.length} elements (valid indices: 0 to ${obj.elements.length - 1}).`,
+          this.currentLine()
+        );
       }
       return obj.elements[idx];
     }
     if (obj.type === 'object') {
       if (index.type !== 'string') {
-        throw new RuntimeError('Object key must be a string', this.currentLine());
+        throw new RuntimeError(
+          `Object keys must be strings, got ${index.type}`,
+          this.currentLine()
+        );
       }
       return obj.properties.get(index.value) || createNull();
     }
     if (obj.type === 'string') {
       if (index.type !== 'number') {
-        throw new RuntimeError('String index must be a number', this.currentLine());
+        throw new RuntimeError(
+          `String index must be a number, got ${index.type}`,
+          this.currentLine()
+        );
       }
       const idx = Math.floor(index.value);
       if (idx < 0 || idx >= obj.value.length) {
-        return createNull();
+        if (optional) return createNull();
+        throw new RuntimeError(
+          `String index ${idx} is out of bounds. String has ${obj.value.length} characters.`,
+          this.currentLine()
+        );
       }
       return createString(obj.value[idx]);
     }
-    throw new RuntimeError(`Cannot index into ${obj.type}`, this.currentLine());
+    if (optional) {
+      throw new RuntimeError(`Cannot index into ${obj.type}`, this.currentLine());
+    }
+    throw new RuntimeError(
+      `Cannot index into ${obj.type}. Indexing works with arrays, strings, and objects.`,
+      this.currentLine()
+    );
   }
 
+  /**
+   * Indexed assignment.
+   *
+   * Only arrays with a numeric index are assignable, matching the interpreter's
+   * evalAssignmentExpression. Notably `o["k"] = v` is rejected even though
+   * `o["k"]` reads fine; the VM used to allow it, which made the two engines
+   * disagree on a program the reference implementation refuses to run.
+   */
   private performSetIndex(obj: RuntimeValue, index: RuntimeValue, value: RuntimeValue): void {
-    if (obj.type === 'array') {
-      if (index.type !== 'number') {
-        throw new RuntimeError('Array index must be a number', this.currentLine());
-      }
-      obj.elements[Math.floor(index.value)] = value;
-    } else if (obj.type === 'object') {
-      if (index.type !== 'string') {
-        throw new RuntimeError('Object key must be a string', this.currentLine());
-      }
-      obj.properties.set(index.value, value);
-    } else {
-      throw new RuntimeError(`Cannot set index on ${obj.type}`, this.currentLine());
+    if (obj.type !== 'array' || index.type !== 'number') {
+      throw new RuntimeError(
+        `Cannot assign to index of ${obj.type}`,
+        this.currentLine()
+      );
     }
+    obj.elements[index.value] = value;
   }
 
   private performGetProp(obj: RuntimeValue, prop: string): RuntimeValue {
@@ -911,14 +1340,22 @@ export class VM {
       if (prop === 'length') {
         return createNumber(obj.elements.length);
       }
-      // Array methods
-      return this.getArrayMethod(obj, prop);
+      // `length` is the only readable property. Builtin methods are reachable
+      // only by calling them, via GET_METHOD, exactly as in the interpreter:
+      // `a.push` is an error there, not a function value.
+      throw new RuntimeError(
+        `Cannot access property '${prop}' on array`,
+        this.currentLine()
+      );
     }
     if (obj.type === 'string') {
       if (prop === 'length') {
         return createNumber(obj.value.length);
       }
-      return this.getStringMethod(obj, prop);
+      throw new RuntimeError(
+        `Cannot access property '${prop}' on string`,
+        this.currentLine()
+      );
     }
     if (obj.type === 'class') {
       // Static access
@@ -928,9 +1365,101 @@ export class VM {
       if (obj.methods.has(prop)) {
         return obj.methods.get(prop) as unknown as RuntimeValue;
       }
-      return createNull();
     }
-    return createNull();
+    // Numbers, booleans, null and functions have no properties. Answering null
+    // here let a typo read as a legitimate null instead of being reported.
+    throw new RuntimeError(
+      `Cannot access property '${prop}' on ${obj.type}`,
+      this.currentLine()
+    );
+  }
+
+  /**
+   * Resolve `prop` on `receiver` for use as the callee of a method call.
+   *
+   * Mirrors the interpreter's evalCallExpression: builtin methods on arrays,
+   * strings and objects win over anything else, then instance methods, then
+   * static methods, then callable object properties. Notably this is not the
+   * same as reading the property: `arr.length` is a number while `arr.length()`
+   * invokes a builtin, and an instance's function-valued *property* is not
+   * callable as a method.
+   */
+  private performGetMethod(receiver: RuntimeValue, prop: string): RuntimeValue {
+    if (receiver.type === 'array') {
+      const method = this.getArrayMethod(receiver, prop);
+      if (method) return method;
+      throw new RuntimeError(
+        `Cannot call method '${prop}' on array`,
+        this.currentLine()
+      );
+    }
+
+    if (receiver.type === 'string') {
+      const method = this.getStringMethod(receiver, prop);
+      if (method) return method;
+      throw new RuntimeError(
+        `Cannot call method '${prop}' on string`,
+        this.currentLine()
+      );
+    }
+
+    if (receiver.type === 'object') {
+      const builtin = this.getObjectMethod(receiver, prop);
+      if (builtin) return builtin;
+      const value = receiver.properties.get(prop);
+      if (
+        !value ||
+        (value.type !== 'function' && value.type !== 'native-function')
+      ) {
+        // A VM closure is a valid callable even though it is not one of the
+        // interpreter's function types.
+        if (value && (value as unknown as VMClosure).type === 'vm-closure') {
+          return value;
+        }
+        throw new RuntimeError(
+          `'${prop}' is not a callable method on this object`,
+          this.currentLine()
+        );
+      }
+      return value;
+    }
+
+    if (receiver.type === 'instance') {
+      const method = receiver.classRef.methods.get(prop);
+      if (!method) {
+        throw new RuntimeError(
+          `'${receiver.className}' has no method '${prop}'`,
+          this.currentLine()
+        );
+      }
+      if ((method as unknown as VMClosure).type === 'vm-closure') {
+        const closure = method as unknown as VMClosure;
+        const bound: VMClosure = {
+          type: 'vm-closure',
+          fn: closure.fn,
+          upvalues: closure.upvalues,
+        };
+        (bound as VMClosure & { boundThis: RuntimeValue }).boundThis = receiver;
+        return bound as unknown as RuntimeValue;
+      }
+      return method as unknown as RuntimeValue;
+    }
+
+    if (receiver.type === 'class') {
+      const method = receiver.methods.get(prop);
+      if (!method) {
+        throw new RuntimeError(
+          `Class '${receiver.name}' has no static method '${prop}'`,
+          this.currentLine()
+        );
+      }
+      return method as unknown as RuntimeValue;
+    }
+
+    throw new RuntimeError(
+      `Cannot call method '${prop}' on ${receiver.type}`,
+      this.currentLine()
+    );
   }
 
   private performSetProp(obj: RuntimeValue, prop: string, value: RuntimeValue): void {
@@ -945,16 +1474,18 @@ export class VM {
     }
   }
 
-  private getArrayMethod(arr: ArrayValue, method: string): RuntimeValue {
+  /** Builtin array methods, or null if there is no such method. */
+  private getArrayMethod(arr: ArrayValue, method: string): RuntimeValue | null {
     const self = arr;
     switch (method) {
       case 'push':
         return {
           type: 'native-function',
           name: 'push',
-          arity: 1,
+          arity: -1,
           fn: (args: RuntimeValue[]) => {
-            self.elements.push(args[0]);
+            // Variadic, matching the interpreter's array push.
+            self.elements.push(...args);
             return createNumber(self.elements.length);
           },
         };
@@ -976,9 +1507,10 @@ export class VM {
         return {
           type: 'native-function',
           name: 'unshift',
-          arity: 1,
+          arity: -1,
           fn: (args: RuntimeValue[]) => {
-            self.elements.unshift(args[0]);
+            // Variadic, matching the interpreter's array unshift.
+            self.elements.unshift(...args);
             return createNumber(self.elements.length);
           },
         };
@@ -1104,49 +1636,139 @@ export class VM {
           },
         };
       default:
-        throw new RuntimeError(
-          `Arrays have no method '${method}'`,
-          this.currentLine()
-        );
+        return null;
     }
   }
 
-  private getStringMethod(_str: StringValue, method: string): RuntimeValue {
+  /**
+   * Builtin string methods, or null if there is no such method.
+   *
+   * Kept at parity with the interpreter's tryBuiltinMethod; the VM previously
+   * offered only split/trim/upper/lower and silently returned null for the rest,
+   * so `"a,b".contains("a")` produced a "not callable" failure under the VM but
+   * worked under the interpreter.
+   */
+  private getStringMethod(_str: StringValue, method: string): RuntimeValue | null {
     const self = _str;
+    const native = (
+      name: string,
+      arity: number,
+      fn: (args: RuntimeValue[]) => RuntimeValue
+    ): NativeFunctionValue => ({ type: 'native-function', name, arity, fn });
+
     switch (method) {
       case 'split':
+        return native('split', -1, (args) => {
+          const sep = args[0]?.type === 'string' ? args[0].value : '';
+          return createArray(self.value.split(sep).map(createString));
+        });
+      case 'trim':
+        return native('trim', 0, () => createString(self.value.trim()));
+      case 'upper':
+        return native('upper', 0, () => createString(self.value.toUpperCase()));
+      case 'lower':
+        return native('lower', 0, () => createString(self.value.toLowerCase()));
+      case 'contains':
+        return native('contains', -1, (args) => {
+          if (args.length === 0 || args[0].type !== 'string') {
+            return createBoolean(false);
+          }
+          return createBoolean(self.value.includes(args[0].value));
+        });
+      case 'replace':
+        return native('replace', -1, (args) => {
+          if (args.length < 2) {
+            throw new RuntimeError(
+              'replace() needs 2 arguments: pattern and replacement',
+              this.currentLine()
+            );
+          }
+          return createString(
+            self.value.replace(stringify(args[0]), stringify(args[1]))
+          );
+        });
+      case 'startsWith':
+        return native('startsWith', -1, (args) => {
+          if (args.length === 0 || args[0].type !== 'string') {
+            return createBoolean(false);
+          }
+          return createBoolean(self.value.startsWith(args[0].value));
+        });
+      case 'endsWith':
+        return native('endsWith', -1, (args) => {
+          if (args.length === 0 || args[0].type !== 'string') {
+            return createBoolean(false);
+          }
+          return createBoolean(self.value.endsWith(args[0].value));
+        });
+      case 'charAt':
+        return native('charAt', -1, (args) => {
+          if (args.length === 0 || args[0].type !== 'number') {
+            return createString('');
+          }
+          return createString(self.value[Math.floor(args[0].value)] || '');
+        });
+      case 'indexOf':
+        return native('indexOf', -1, (args) => {
+          if (args.length === 0 || args[0].type !== 'string') {
+            return createNumber(-1);
+          }
+          return createNumber(self.value.indexOf(args[0].value));
+        });
+      case 'slice':
+        return native('slice', -1, (args) => {
+          const start = args[0]?.type === 'number' ? args[0].value : 0;
+          const end =
+            args[1]?.type === 'number' ? args[1].value : self.value.length;
+          return createString(self.value.slice(start, end));
+        });
+      case 'repeat':
+        return native('repeat', -1, (args) => {
+          if (args.length === 0 || args[0].type !== 'number') {
+            return createString(self.value);
+          }
+          return createString(self.value.repeat(Math.floor(args[0].value)));
+        });
+      default:
+        return null;
+    }
+  }
+
+  /** Builtin object methods, or null if there is no such method. */
+  private getObjectMethod(
+    obj: RuntimeValue & { type: 'object' },
+    method: string
+  ): RuntimeValue | null {
+    switch (method) {
+      case 'keys':
         return {
           type: 'native-function',
-          name: 'split',
-          arity: 1,
+          name: 'keys',
+          arity: 0,
+          fn: () =>
+            createArray(Array.from(obj.properties.keys()).map(createString)),
+        };
+      case 'values':
+        return {
+          type: 'native-function',
+          name: 'values',
+          arity: 0,
+          fn: () => createArray(Array.from(obj.properties.values())),
+        };
+      case 'has':
+        return {
+          type: 'native-function',
+          name: 'has',
+          arity: -1,
           fn: (args: RuntimeValue[]) => {
-            const sep = args[0] as StringValue;
-            return createArray(self.value.split(sep.value).map(createString));
+            if (args.length === 0 || args[0].type !== 'string') {
+              return createBoolean(false);
+            }
+            return createBoolean(obj.properties.has(args[0].value));
           },
         };
-      case 'trim':
-        return {
-          type: 'native-function',
-          name: 'trim',
-          arity: 0,
-          fn: () => createString(self.value.trim()),
-        };
-      case 'upper':
-        return {
-          type: 'native-function',
-          name: 'upper',
-          arity: 0,
-          fn: () => createString(self.value.toUpperCase()),
-        };
-      case 'lower':
-        return {
-          type: 'native-function',
-          name: 'lower',
-          arity: 0,
-          fn: () => createString(self.value.toLowerCase()),
-        };
       default:
-        return createNull();
+        return null;
     }
   }
 }

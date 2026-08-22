@@ -19,6 +19,14 @@ import {
   ForStatement,
   PrintStatement,
   MatchStatement,
+  TryCatchStatement,
+  ThrowStatement,
+  DestructuringDeclaration,
+  EnumDeclaration,
+  InterpolatedString,
+  OptionalMemberExpression,
+  OptionalIndexExpression,
+  NullishCoalesceExpression,
   BinaryExpression,
   UnaryExpression,
   LogicalExpression,
@@ -41,7 +49,7 @@ import {
   createBoolean,
   createNull,
 } from '../types/values';
-import { OpCode } from './opcodes';
+import { OpCode, CompoundOp } from './opcodes';
 import { Chunk } from './chunk';
 
 /**
@@ -62,6 +70,30 @@ interface Upvalue {
 }
 
 /**
+ * A loop being compiled, used to resolve `break` and `continue`.
+ *
+ * Both statements are forward jumps whose target is not known until the loop
+ * finishes compiling, so their operands are recorded here and backpatched by
+ * the loop compiler. `localCount` is the number of live locals at the top of
+ * the loop; break/continue must emit that many POPs' worth of difference so the
+ * stack is balanced no matter how deeply nested the jump is.
+ */
+interface LoopContext {
+  /** Offsets of jump operands emitted by `break`, patched to just past the loop. */
+  breakJumps: number[];
+  /** Offsets of jump operands emitted by `continue`, patched to the loop's next-iteration code. */
+  continueJumps: number[];
+  /** Number of live locals at the top of the loop body. */
+  localCount: number;
+  /**
+   * Number of enclosing `try` blocks live at the top of the loop. Jumping out of
+   * a `try` skips its TRY_END, so break/continue must uninstall each handler it
+   * escapes or a later, unrelated error is caught by a dead catch block.
+   */
+  tryDepth: number;
+}
+
+/**
  * Compiler scope for tracking variables
  */
 interface CompilerScope {
@@ -71,6 +103,10 @@ interface CompilerScope {
   chunk: Chunk;
   functionName: string;
   enclosing: CompilerScope | null;
+  /** Loops currently being compiled, innermost last. Per function, so a loop cannot be exited across a call boundary. */
+  loops: LoopContext[];
+  /** How many `try` bodies enclose the code being compiled right now. */
+  tryDepth: number;
 }
 
 /**
@@ -107,6 +143,8 @@ export class Compiler {
       chunk: new Chunk(name),
       functionName: name,
       enclosing,
+      loops: [],
+      tryDepth: 0,
     };
   }
 
@@ -252,14 +290,10 @@ export class Compiler {
         this.compileForStatement(stmt);
         break;
       case 'BreakStatement':
-        // Break is handled via jump - simplified to JMP that gets patched
-        this.emit(OpCode.JMP, stmt.position.line);
-        this.emit16(0xFFFF, stmt.position.line);
+        this.compileBreakStatement(stmt.position.line);
         break;
       case 'ContinueStatement':
-        // Continue is handled via LOOP back
-        this.emit(OpCode.JMP, stmt.position.line);
-        this.emit16(0xFFFF, stmt.position.line);
+        this.compileContinueStatement(stmt.position.line);
         break;
       case 'ExpressionStatement':
         this.compileExpression(stmt.expression);
@@ -274,6 +308,83 @@ export class Compiler {
       case 'MatchStatement':
         this.compileMatchStatement(stmt);
         break;
+      case 'DestructuringDeclaration':
+        this.compileDestructuringDeclaration(stmt);
+        break;
+      case 'EnumDeclaration':
+        this.compileEnumDeclaration(stmt);
+        break;
+      case 'TryCatchStatement':
+        this.compileTryCatchStatement(stmt);
+        break;
+      case 'ThrowStatement':
+        this.compileThrowStatement(stmt);
+        break;
+      case 'TestDeclaration':
+        // Tests are only executed by the test runner, never during a normal
+        // program run. The interpreter treats them as a no-op too.
+        break;
+      default: {
+        // Exhaustiveness guard. Silently ignoring an unhandled statement type
+        // is how f-strings, try/catch and destructuring came to "compile" into
+        // nothing at all and surface much later as a stack underflow.
+        const unhandled: never = stmt;
+        throw new CompilerError(
+          `Unsupported statement type: ${(unhandled as Statement).type}`,
+          (unhandled as Statement).position?.line
+        );
+      }
+    }
+  }
+
+  /**
+   * `break`: unwind the locals declared inside the loop, then jump past it.
+   */
+  private compileBreakStatement(line: number): void {
+    const loop = this.currentLoop();
+    if (!loop) {
+      throw new CompilerError("'break' can only be used inside a loop", line);
+    }
+    this.emitLoopExitPops(loop, line);
+    loop.breakJumps.push(this.emitJump(OpCode.JMP, line));
+  }
+
+  /**
+   * `continue`: unwind the locals declared inside the loop, then jump to the
+   * loop's next-iteration code (the increment for `for`, the condition for
+   * `while`).
+   */
+  private compileContinueStatement(line: number): void {
+    const loop = this.currentLoop();
+    if (!loop) {
+      throw new CompilerError("'continue' can only be used inside a loop", line);
+    }
+    this.emitLoopExitPops(loop, line);
+    loop.continueJumps.push(this.emitJump(OpCode.JMP, line));
+  }
+
+  private currentLoop(): LoopContext | null {
+    const loops = this.current.loops;
+    return loops.length > 0 ? loops[loops.length - 1] : null;
+  }
+
+  /**
+   * Emit a POP for every local that is live inside the loop body but not at the
+   * top of the loop. Jumping out of a block skips the `endScope()` that would
+   * normally discard those slots, so they must be discarded here instead or the
+   * loop's own bookkeeping slots end up at the wrong stack offsets.
+   *
+   * The compile-time locals list is deliberately left untouched: control flow
+   * jumps away, but compilation continues with the same set of live locals.
+   */
+  private emitLoopExitPops(loop: LoopContext, line: number): void {
+    for (let i = this.current.locals.length; i > loop.localCount; i--) {
+      this.emit(OpCode.POP, line);
+    }
+    // Uninstall the handler of every `try` this jump escapes, since their
+    // TRY_END instructions are being skipped.
+    for (let i = this.current.tryDepth; i > loop.tryDepth; i--) {
+      this.emit(OpCode.TRY_END, line);
     }
   }
 
@@ -332,6 +443,33 @@ export class Compiler {
       if (param.defaultValue) {
         defaultParams++;
       }
+    }
+
+    // Emit the default-parameter prologue.
+    //
+    // The VM pads missing arguments with null so every parameter has a stack
+    // slot, which means "absent" and "explicitly passed null" look identical
+    // from inside the frame. The interpreter distinguishes them by comparing
+    // against the real argument count, so the prologue does the same via
+    // LOAD_ARGC rather than testing the slot for null.
+    for (let i = 0; i < params.length; i++) {
+      const param = params[i];
+      if (!param.defaultValue) continue;
+
+      this.emit(OpCode.LOAD_ARGC, line);
+      this.emitConstant(createNumber(i), line);
+      this.emit(OpCode.GT, line); // argc > i  =>  argument i was supplied
+
+      const suppliedJump = this.emitJump(OpCode.JMP_IF_TRUE, line);
+      this.emit(OpCode.POP, line); // discard the comparison result
+      this.compileExpression(param.defaultValue);
+      this.emit(OpCode.STORE_LOCAL, line);
+      this.emit16(i, line);
+      const doneJump = this.emitJump(OpCode.JMP, line);
+
+      this.patchJump(suppliedJump);
+      this.emit(OpCode.POP, line); // discard the comparison result
+      this.patchJump(doneJump);
     }
 
     // Compile body
@@ -394,9 +532,14 @@ export class Compiler {
       this.emit(OpCode.POP, line); // Pop class after METHOD (METHOD pushes it back)
     }
 
-    // Compile class properties (instance defaults)
+    // Compile class properties (instance defaults).
+    //
+    // These are stored under their plain name. They were previously prefixed
+    // with `__prop_`, but NEW_INSTANCE seeds an instance from the class's
+    // property map verbatim, so the prefix meant every declared default was
+    // invisible to the program (`this.legs` read back as null).
     for (const prop of stmt.properties) {
-      const propNameIdx = this.current.chunk.addConstant(createString(`__prop_${prop.name}`));
+      const propNameIdx = this.current.chunk.addConstant(createString(prop.name));
       this.compileLoadVariable(stmt.name, line);
       this.compileExpression(prop.value);
       this.emit(OpCode.SET_PROP, line);
@@ -458,15 +601,34 @@ export class Compiler {
     const exitJump = this.emitJump(OpCode.JMP_IF_FALSE, line);
     this.emit(OpCode.POP, line); // Pop condition
 
+    const loop: LoopContext = {
+      breakJumps: [],
+      continueJumps: [],
+      localCount: this.current.locals.length,
+      tryDepth: this.current.tryDepth,
+    };
+    this.current.loops.push(loop);
+
     this.beginScope();
     for (const s of stmt.body) {
       this.compileStatement(s);
     }
     this.endScope(line);
 
+    // `continue` re-tests the condition, so it targets the top of the loop.
+    for (const jump of loop.continueJumps) {
+      this.current.chunk.patch16(jump, loopStart);
+    }
+
     this.emitLoop(loopStart, line);
     this.patchJump(exitJump);
     this.emit(OpCode.POP, line); // Pop condition
+
+    // `break` skips the condition POP above, so it lands after it.
+    for (const jump of loop.breakJumps) {
+      this.patchJump(jump);
+    }
+    this.current.loops.pop();
   }
 
   private compileForStatement(stmt: ForStatement): void {
@@ -474,6 +636,11 @@ export class Compiler {
 
     // Compile the iterable
     this.compileExpression(stmt.iterable);
+
+    // Reject a non-iterable up front. Without this the loop's own `__idx <
+    // __iter.length` test is what fails, reporting a confusing "Cannot compare
+    // number and null" instead of naming the real problem.
+    this.emit(OpCode.CHECK_ITERABLE, line);
 
     // Store array in a temporary local
     this.beginScope();
@@ -508,6 +675,17 @@ export class Compiler {
     this.emit16(idxSlot, line);
     this.emit(OpCode.INDEX, line);
 
+    // The loop's own slots (__iter, __idx) are live across iterations; the loop
+    // variable and any body locals are not. break/continue must unwind down to
+    // this count.
+    const loop: LoopContext = {
+      breakJumps: [],
+      continueJumps: [],
+      localCount: this.current.locals.length,
+      tryDepth: this.current.tryDepth,
+    };
+    this.current.loops.push(loop);
+
     // Store as the loop variable, inside its own scope.
     // The scope is essential: any `let` declared in the body allocates a stack
     // slot, and without endScope() emitting matching POPs those slots leak on
@@ -523,6 +701,12 @@ export class Compiler {
     // Pops the loop variable and every body-local declared this iteration
     this.endScope(line);
 
+    // `continue` must still advance the index, so it targets the increment
+    // rather than the top of the loop.
+    for (const jump of loop.continueJumps) {
+      this.current.chunk.patch16(jump, this.current.chunk.currentOffset);
+    }
+
     // Increment __idx
     this.emit(OpCode.LOAD_LOCAL, line);
     this.emit16(idxSlot, line);
@@ -534,6 +718,13 @@ export class Compiler {
     this.emitLoop(loopStart, line);
     this.patchJump(exitJump);
     this.emit(OpCode.POP, line);
+
+    // `break` skips the condition POP above, so it lands after it but still
+    // inside the __iter/__idx scope, whose endScope() discards those slots.
+    for (const jump of loop.breakJumps) {
+      this.patchJump(jump);
+    }
+    this.current.loops.pop();
 
     this.endScope(line);
   }
@@ -592,6 +783,134 @@ export class Compiler {
     // Patch all end jumps
     for (const jump of endJumps) {
       this.patchJump(jump);
+    }
+  }
+
+  /**
+   * try/catch.
+   *
+   * TRY_BEGIN installs a handler pointing at the catch block. On the normal
+   * path TRY_END removes it and control jumps over the catch. If anything
+   * throws while the handler is installed, the VM unwinds to it and pushes the
+   * error object, which the catch block binds as its variable.
+   */
+  private compileTryCatchStatement(stmt: TryCatchStatement): void {
+    const line = stmt.position.line;
+
+    const handlerJump = this.emitJump(OpCode.TRY_BEGIN, line);
+
+    // Only the try body is guarded; by the time the catch body runs the VM has
+    // already uninstalled this handler.
+    this.current.tryDepth++;
+    this.beginScope();
+    for (const s of stmt.tryBody) {
+      this.compileStatement(s);
+    }
+    this.endScope(line);
+    this.current.tryDepth--;
+
+    this.emit(OpCode.TRY_END, line);
+    const overCatch = this.emitJump(OpCode.JMP, line);
+
+    // Handler entry. The VM has already restored the stack to its height at
+    // TRY_BEGIN and pushed the error object, which becomes the catch variable.
+    this.patchJump(handlerJump);
+    this.beginScope();
+    this.addLocalOrStoreGlobal(stmt.catchVariable, line);
+    for (const s of stmt.catchBody) {
+      this.compileStatement(s);
+    }
+    this.endScope(line);
+
+    this.patchJump(overCatch);
+  }
+
+  private compileThrowStatement(stmt: ThrowStatement): void {
+    const line = stmt.position.line;
+    this.compileExpression(stmt.value);
+    this.emit(OpCode.THROW, line);
+  }
+
+  /**
+   * `let [a, b] = expr` / `let {x, y} = expr`.
+   *
+   * The right-hand side is evaluated once and kept on the stack while each name
+   * is extracted from it.
+   */
+  private compileDestructuringDeclaration(stmt: DestructuringDeclaration): void {
+    const line = stmt.position.line;
+    this.compileExpression(stmt.value);
+
+    const isArray = stmt.pattern.kind === 'array';
+    const names = stmt.pattern.names;
+
+    if (this.current.scopeDepth > 0) {
+      // Locals occupy consecutive stack slots, so the subject cannot be popped
+      // from underneath them. Keep it as an unnamed local; endScope() discards
+      // it along with the destructured names.
+      this.addLocal(`__destructured`);
+      const subjectSlot = this.current.locals.length - 1;
+
+      for (let i = 0; i < names.length; i++) {
+        this.emit(OpCode.LOAD_LOCAL, line);
+        this.emit16(subjectSlot, line);
+        this.emitDestructureExtract(isArray, names[i], i, line);
+        this.addLocal(names[i]);
+      }
+    } else {
+      for (let i = 0; i < names.length; i++) {
+        this.emit(OpCode.DUP, line);
+        this.emitDestructureExtract(isArray, names[i], i, line);
+        const nameIdx = this.current.chunk.addConstant(createString(names[i]));
+        this.emit(OpCode.STORE_GLOBAL, line);
+        this.emit16(nameIdx, line);
+      }
+      this.emit(OpCode.POP, line); // discard the subject
+    }
+  }
+
+  private emitDestructureExtract(
+    isArray: boolean,
+    name: string,
+    index: number,
+    line: number
+  ): void {
+    if (isArray) {
+      this.emit(OpCode.DESTRUCT_ELEM, line);
+      this.emit16(index, line);
+    } else {
+      const keyIdx = this.current.chunk.addConstant(createString(name));
+      this.emit(OpCode.DESTRUCT_PROP, line);
+      this.emit16(keyIdx, line);
+    }
+  }
+
+  /**
+   * `enum Color { Red, Green }` compiles to an object mapping each variant name
+   * to itself as a string, matching the interpreter.
+   */
+  private compileEnumDeclaration(stmt: EnumDeclaration): void {
+    const line = stmt.position.line;
+    for (const variant of stmt.variants) {
+      this.emitConstant(createString(variant), line);
+      this.emitConstant(createString(variant), line);
+    }
+    this.emit(OpCode.OBJECT, line);
+    this.emit16(stmt.variants.length, line);
+    this.addLocalOrStoreGlobal(stmt.name, line);
+  }
+
+  /**
+   * Bind the value on top of the stack to `name`: as a local it simply stays on
+   * the stack in its slot, as a global it is stored and popped.
+   */
+  private addLocalOrStoreGlobal(name: string, line: number): void {
+    if (this.current.scopeDepth > 0) {
+      this.addLocal(name);
+    } else {
+      const nameIdx = this.current.chunk.addConstant(createString(name));
+      this.emit(OpCode.STORE_GLOBAL, line);
+      this.emit16(nameIdx, line);
     }
   }
 
@@ -669,7 +988,99 @@ export class Compiler {
       case 'PipeMethodExpression':
         this.compilePipeMethodExpression(expr);
         break;
+      case 'InterpolatedString':
+        this.compileInterpolatedString(expr);
+        break;
+      case 'OptionalMemberExpression':
+        this.compileOptionalMemberExpression(expr);
+        break;
+      case 'OptionalIndexExpression':
+        this.compileOptionalIndexExpression(expr);
+        break;
+      case 'NullishCoalesceExpression':
+        this.compileNullishCoalesceExpression(expr);
+        break;
+      default: {
+        // Exhaustiveness guard: an unhandled expression type used to compile to
+        // no instructions at all, leaving the stack short and failing much later
+        // somewhere unrelated.
+        const unhandled: never = expr;
+        throw new CompilerError(
+          `Unsupported expression type: ${(unhandled as Expression).type}`,
+          (unhandled as Expression).position?.line
+        );
+      }
     }
+  }
+
+  /**
+   * f-strings. Concatenation starts from a string so that ADD always takes its
+   * string branch and every interpolated value is stringified, exactly as the
+   * interpreter's evalInterpolatedString does.
+   */
+  private compileInterpolatedString(expr: InterpolatedString): void {
+    const line = expr.position.line;
+    const parts = expr.parts;
+
+    if (parts.length === 0) {
+      this.emitConstant(createString(''), line);
+      return;
+    }
+
+    let start = 0;
+    const first = parts[0];
+    if (first.kind === 'literal') {
+      this.emitConstant(createString(first.value), line);
+      start = 1;
+    } else {
+      // Seed with "" so that f"{n}" yields the string "42" rather than the
+      // number 42.
+      this.emitConstant(createString(''), line);
+    }
+
+    for (let i = start; i < parts.length; i++) {
+      const part = parts[i];
+      if (part.kind === 'literal') {
+        this.emitConstant(createString(part.value), line);
+      } else {
+        this.compileExpression(part.expression);
+      }
+      this.emit(OpCode.ADD, line);
+    }
+  }
+
+  /** `obj?.prop` - short-circuits to null when obj is null. */
+  private compileOptionalMemberExpression(expr: OptionalMemberExpression): void {
+    const line = expr.position.line;
+    this.compileExpression(expr.object);
+    // JMP_IF_NULL peeks, so the null itself becomes the result.
+    const skip = this.emitJump(OpCode.JMP_IF_NULL, line);
+    const propIdx = this.current.chunk.addConstant(createString(expr.property));
+    this.emit(OpCode.GET_PROP, line);
+    this.emit16(propIdx, line);
+    this.patchJump(skip);
+  }
+
+  /** `obj?.[i]` - short-circuits to null without evaluating the index. */
+  private compileOptionalIndexExpression(expr: OptionalIndexExpression): void {
+    const line = expr.position.line;
+    this.compileExpression(expr.object);
+    const skip = this.emitJump(OpCode.JMP_IF_NULL, line);
+    this.compileExpression(expr.index);
+    this.emit(OpCode.INDEX_OPTIONAL, line);
+    this.patchJump(skip);
+  }
+
+  /** `a ?? b` - evaluates b only when a is null. */
+  private compileNullishCoalesceExpression(expr: NullishCoalesceExpression): void {
+    const line = expr.position.line;
+    this.compileExpression(expr.left);
+    const useRight = this.emitJump(OpCode.JMP_IF_NULL, line);
+    const done = this.emitJump(OpCode.JMP, line);
+    this.patchJump(useRight);
+    this.emit(OpCode.POP, line); // discard the null
+    this.compileExpression(expr.right);
+    this.patchJump(done);
   }
 
   private compileLoadVariable(name: string, line: number): void {
@@ -709,11 +1120,30 @@ export class Compiler {
   }
 
   private compileArrayLiteral(elements: Expression[], line: number): void {
-    for (const el of elements) {
-      this.compileExpression(el);
+    const hasSpread = elements.some((el) => el.type === 'SpreadExpression');
+
+    if (!hasSpread) {
+      for (const el of elements) {
+        this.compileExpression(el);
+      }
+      this.emit(OpCode.ARRAY, line);
+      this.emit16(elements.length, line);
+      return;
     }
+
+    // With a spread the element count is not known until runtime, so build the
+    // array incrementally instead of with a fixed-arity ARRAY.
     this.emit(OpCode.ARRAY, line);
-    this.emit16(elements.length, line);
+    this.emit16(0, line);
+    for (const el of elements) {
+      if (el.type === 'SpreadExpression') {
+        this.compileExpression(el.argument);
+        this.emit(OpCode.ARRAY_SPREAD, el.position.line);
+      } else {
+        this.compileExpression(el);
+        this.emit(OpCode.ARRAY_APPEND, el.position.line);
+      }
+    }
   }
 
   private compileObjectLiteral(
@@ -782,79 +1212,115 @@ export class Compiler {
     }
   }
 
+  /**
+   * Assignment, in all its target forms.
+   *
+   * The right-hand side is always compiled first, because that is the order the
+   * interpreter evaluates in. It is observable: `arr[i()] = v()` must call v()
+   * before i(), and `x += f()` must read x only *after* f() has run, since f
+   * may assign to x. ROT then moves the value from the bottom of the group up
+   * to wherever the store instruction expects it.
+   */
   private compileAssignmentExpression(expr: AssignmentExpression): void {
     const line = expr.position.line;
 
     if (expr.target.type === 'Identifier') {
-      if (expr.operator === '=') {
-        this.compileExpression(expr.value);
-      } else {
-        // Compound assignment: +=, -=, etc.
-        this.compileLoadVariable(expr.target.name, line);
-        this.compileExpression(expr.value);
-        switch (expr.operator) {
-          case '+=': this.emit(OpCode.ADD, line); break;
-          case '-=': this.emit(OpCode.SUB, line); break;
-          case '*=': this.emit(OpCode.MUL, line); break;
-          case '/=': this.emit(OpCode.DIV, line); break;
-          default:
-            throw new CompilerError(`Unknown assignment operator: ${expr.operator}`, line);
-        }
+      this.compileExpression(expr.value); // [value]
+      if (expr.operator !== '=') {
+        this.compileLoadVariable(expr.target.name, line); // [value, current]
+        this.emitRot(2, line); // [current, value]
+        this.emitCompoundOp(expr.operator, line); // [result]
       }
       this.emit(OpCode.DUP, line); // Keep value on stack as expression result
       this.compileStoreVariable(expr.target.name, line);
-    } else if (expr.target.type === 'IndexExpression') {
-      this.compileExpression(expr.target.object);
-      this.compileExpression(expr.target.index);
+      return;
+    }
+
+    if (expr.target.type === 'IndexExpression') {
+      this.compileExpression(expr.value); // [value]
+      this.compileExpression(expr.target.object); // [value, obj]
+      this.compileExpression(expr.target.index); // [value, obj, index]
       if (expr.operator === '=') {
-        this.compileExpression(expr.value);
+        this.emitRot(3, line); // [obj, index, value]
       } else {
-        // Compound: load current value, compute, store
-        this.emit(OpCode.DUP, line); // dup index
-        // Need object, index already on stack
-        this.compileExpression(expr.target.object);
-        this.compileExpression(expr.target.index);
-        this.emit(OpCode.INDEX, line);
-        this.compileExpression(expr.value);
-        switch (expr.operator) {
-          case '+=': this.emit(OpCode.ADD, line); break;
-          case '-=': this.emit(OpCode.SUB, line); break;
-          case '*=': this.emit(OpCode.MUL, line); break;
-          case '/=': this.emit(OpCode.DIV, line); break;
-          default:
-            throw new CompilerError(`Unknown assignment operator: ${expr.operator}`, line);
-        }
+        // DUP2 copies obj and index for the read and leaves the originals for
+        // the store, so `a[idx()] += 1` evaluates idx() exactly once.
+        this.emit(OpCode.DUP2, line); // [value, obj, index, obj, index]
+        // A non-throwing read: the interpreter reads the current element
+        // without a bounds check and lets the numeric check on the compound
+        // operator be what rejects `a[999] += 1`.
+        this.emit(OpCode.INDEX_OPTIONAL, line); // [value, obj, index, current]
+        this.emitRot(4, line); // [obj, index, current, value]
+        this.emitCompoundOp(expr.operator, line); // [obj, index, result]
       }
       this.emit(OpCode.SET_INDEX, line);
-    } else if (expr.target.type === 'MemberExpression') {
-      this.compileExpression(expr.target.object);
-      const propIdx = this.current.chunk.addConstant(createString(expr.target.property));
+      return;
+    }
+
+    if (expr.target.type === 'MemberExpression') {
+      const propIdx = this.current.chunk.addConstant(
+        createString(expr.target.property)
+      );
+      this.compileExpression(expr.value); // [value]
+      this.compileExpression(expr.target.object); // [value, obj]
       if (expr.operator === '=') {
-        this.compileExpression(expr.value);
+        this.emitRot(2, line); // [obj, value]
       } else {
-        this.emit(OpCode.DUP, line);
+        this.emit(OpCode.DUP, line); // [value, obj, obj]
         this.emit(OpCode.GET_PROP, line);
-        this.emit16(propIdx, line);
-        this.compileExpression(expr.value);
-        switch (expr.operator) {
-          case '+=': this.emit(OpCode.ADD, line); break;
-          case '-=': this.emit(OpCode.SUB, line); break;
-          case '*=': this.emit(OpCode.MUL, line); break;
-          case '/=': this.emit(OpCode.DIV, line); break;
-          default:
-            throw new CompilerError(`Unknown assignment operator: ${expr.operator}`, line);
-        }
+        this.emit16(propIdx, line); // [value, obj, current]
+        this.emitRot(3, line); // [obj, current, value]
+        this.emitCompoundOp(expr.operator, line); // [obj, result]
       }
       this.emit(OpCode.SET_PROP, line);
       this.emit16(propIdx, line);
+      return;
     }
+
+    // Anything else (`f() = 1`, `o?.p = 1`, `1 = 2`) parses but is not
+    // assignable. Without this guard the branch emitted no instructions at all
+    // and the POP appended by ExpressionStatement silently consumed an
+    // unrelated value, underflowing the stack or corrupting a local slot.
+    throw new CompilerError('Invalid assignment target', line);
+  }
+
+  private emitRot(count: number, line: number): void {
+    this.emit(OpCode.ROT, line);
+    this.emit16(count, line);
+  }
+
+  private emitCompoundOp(operator: string, line: number): void {
+    const ops: Record<string, CompoundOp> = {
+      '+=': CompoundOp.ADD,
+      '-=': CompoundOp.SUB,
+      '*=': CompoundOp.MUL,
+      '/=': CompoundOp.DIV,
+    };
+    const op = ops[operator];
+    if (op === undefined) {
+      throw new CompilerError(`Unknown assignment operator: ${operator}`, line);
+    }
+    this.emit(OpCode.COMPOUND, line);
+    this.emit16(op, line);
   }
 
   private compileCallExpression(expr: CallExpression): void {
     const line = expr.position.line;
 
-    // Compile the callee
-    this.compileExpression(expr.callee);
+    if (expr.callee.type === 'MemberExpression') {
+      // `obj.m(...)` resolves `m` as a method rather than as a plain property.
+      // The two differ: `arr.length` is a number, but `arr.length()` calls a
+      // builtin, and builtins take precedence over an object's own properties.
+      // GET_METHOD centralises that so the VM matches the interpreter.
+      this.compileExpression(expr.callee.object);
+      const propIdx = this.current.chunk.addConstant(
+        createString(expr.callee.property)
+      );
+      this.emit(OpCode.GET_METHOD, line);
+      this.emit16(propIdx, line);
+    } else {
+      this.compileExpression(expr.callee);
+    }
 
     // Compile arguments
     for (const arg of expr.args) {
@@ -967,10 +1433,10 @@ export class Compiler {
 
   private compilePipeMethodExpression(expr: PipeMethodExpression): void {
     const line = expr.position.line;
-    // Compile as obj.method(args) - load obj, get property, call with args
+    // Compile as obj.method(args) - load obj, resolve the method, call with args
     this.compileExpression(expr.left);
     const nameIdx = this.current.chunk.addConstant(createString(expr.method));
-    this.emit(OpCode.GET_PROP, line);
+    this.emit(OpCode.GET_METHOD, line);
     this.emit16(nameIdx, line);
     // Push args
     for (const arg of expr.args) {

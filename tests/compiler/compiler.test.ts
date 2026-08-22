@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { Compiler, Chunk, OpCode, disassemble, optimize } from '../../src/compiler';
+import {
+  instructionSize,
+  hasAddressOperand,
+  opcodeName,
+} from '../../src/compiler/opcodes';
 import { VM } from '../../src/vm';
 import { Lexer } from '../../src/lexer';
 import { Parser } from '../../src/parser';
@@ -386,5 +391,172 @@ describe('TinyLang Compile API', () => {
     const result = tl.compileAndRun('print("hello world")');
     expect(result.success).toBe(true);
     expect(result.output).toEqual(['hello world']);
+  });
+});
+
+
+/**
+ * Structural invariants on emitted bytecode.
+ *
+ * Jump operands in TinyLang are *absolute* addresses, so any pass that adds or
+ * removes instructions has to remap them. The optimizer used to rewrite the
+ * byte array in place, which silently shifted every later address while leaving
+ * the jumps pointing at their old values. These checks catch that whole class of
+ * bug directly rather than waiting for a program to misbehave.
+ */
+describe('bytecode structural invariants', () => {
+  /** Offsets at which an instruction starts, plus the end-of-chunk offset. */
+  function instructionBoundaries(chunk: Chunk): Set<number> {
+    const boundaries = new Set<number>();
+    let offset = 0;
+    while (offset < chunk.code.length) {
+      boundaries.add(offset);
+      offset += instructionSize(chunk.code[offset]);
+    }
+    boundaries.add(chunk.code.length);
+    return boundaries;
+  }
+
+  /** Every address operand in this chunk and all nested function chunks. */
+  function badAddresses(chunk: Chunk, label: string): string[] {
+    const problems: string[] = [];
+    const boundaries = instructionBoundaries(chunk);
+
+    let offset = 0;
+    while (offset < chunk.code.length) {
+      const op = chunk.code[offset];
+      if (hasAddressOperand(op)) {
+        const target = chunk.read16(offset + 1);
+        if (!boundaries.has(target)) {
+          problems.push(
+            `${label}: ${opcodeName(op)} at ${offset} targets ${target}, which is not an instruction boundary`
+          );
+        }
+      }
+      offset += instructionSize(op);
+    }
+
+    for (const constant of chunk.constants) {
+      const fn = constant as { type?: string; name?: string; chunk?: Chunk };
+      if (fn && fn.type === 'compiled-function' && fn.chunk) {
+        problems.push(...badAddresses(fn.chunk, `${label} > ${fn.name}`));
+      }
+    }
+    return problems;
+  }
+
+  // Constructs that mix jumps with instructions the optimizer may remove.
+  const programs: Record<string, string> = {
+    'loop with break and continue': `
+      for i in 0..10 {
+        let v = i
+        if v == 3 { continue }
+        if v == 7 { break }
+        print(v)
+      }
+    `,
+    'while with break': `
+      let n = 0
+      while true { let s = n
+        n = n + 1
+        if s > 3 { break } }
+      print(n)
+    `,
+    'try/catch with a constant-folded body': `
+      try { let x = 2 + 3 * 4
+        throw "e" } catch e { print(1 + 1, e.message) }
+    `,
+    'function with defaults and branches': `
+      fn f(a, b = 2 + 3) {
+        if a > b { return a - b }
+        else { return b - a }
+      }
+      print(f(1), f(10))
+    `,
+    'match with folded patterns': `
+      fn m(v) { match v { when 1 => return "a"
+          when 2 => return "b"
+          else => return "c" } }
+      print(m(1), m(2), m(3))
+    `,
+    'nested closures and loops': `
+      fn outer() {
+        let acc = []
+        for i in 0..3 {
+          let j = i
+          push(acc, fn() { return j * 2 })
+        }
+        return acc
+      }
+      let fs = outer()
+      print(fs[0]() + fs[1]() + fs[2]())
+    `,
+    'logical operators and optional chaining': `
+      let o = null
+      print(o?.x ?? (1 < 2 and 3 > 2))
+    `,
+  };
+
+  for (const [name, source] of Object.entries(programs)) {
+    it(`keeps every jump target on an instruction boundary: ${name}`, () => {
+      const chunk = compileSource(source);
+      expect(badAddresses(chunk, 'compiled')).toEqual([]);
+      expect(badAddresses(optimize(chunk), 'optimized')).toEqual([]);
+    });
+  }
+
+  it('optimizes nested function bodies, not just the top level', () => {
+    const chunk = compileSource(`
+      fn work(n) {
+        let total = 0
+        for i in 0..n {
+          total = total + 2 * 3
+        }
+        return total
+      }
+      print(work(3))
+    `);
+
+    const fnBytes = (c: Chunk): number => {
+      let bytes = 0;
+      for (const constant of c.constants) {
+        const fn = constant as { type?: string; chunk?: Chunk };
+        if (fn && fn.type === 'compiled-function' && fn.chunk) {
+          bytes += fn.chunk.code.length + fnBytes(fn.chunk);
+        }
+      }
+      return bytes;
+    };
+
+    const before = fnBytes(chunk);
+    const optimized = optimize(chunk);
+    expect(before).toBeGreaterThan(0);
+    expect(fnBytes(optimized)).toBeLessThan(before);
+    // The input must be left untouched, or a caller holding the unoptimized
+    // chunk would see it change under them.
+    expect(fnBytes(chunk)).toBe(before);
+  });
+
+  it('produces the same output optimized or not', () => {
+    const source = `
+      fn fib(n) {
+        if n <= 1 { return n }
+        let a = 0
+        let b = 1
+        for i in 2..n + 1 {
+          let t = b
+          b = a + b
+          a = t
+        }
+        return b
+      }
+      for i in 0..8 { print(fib(i)) }
+    `;
+    const chunk = compileSource(source);
+    const plain: string[] = [];
+    new VM({ output: (m) => plain.push(m) }).run(chunk);
+    const opt: string[] = [];
+    new VM({ output: (m) => opt.push(m) }).run(optimize(chunk));
+    expect(opt).toEqual(plain);
   });
 });

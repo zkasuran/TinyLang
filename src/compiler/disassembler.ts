@@ -6,7 +6,7 @@
  */
 
 import { Chunk } from './chunk';
-import { OpCode, opcodeName } from './opcodes';
+import { OpCode, opcodeName, instructionSize } from './opcodes';
 import { stringify } from '../types/values';
 import { CompiledFunction } from './compiler';
 import type { ConstantValue } from './chunk';
@@ -62,6 +62,7 @@ function disassembleInstruction(
     // Simple instructions (no operands)
     case OpCode.POP:
     case OpCode.DUP:
+    case OpCode.DUP2:
     case OpCode.ADD:
     case OpCode.SUB:
     case OpCode.MUL:
@@ -79,9 +80,16 @@ function disassembleInstruction(
     case OpCode.AND:
     case OpCode.OR:
     case OpCode.INDEX:
+    case OpCode.INDEX_OPTIONAL:
     case OpCode.SET_INDEX:
     case OpCode.INHERIT:
     case OpCode.GET_THIS:
+    case OpCode.CHECK_ITERABLE:
+    case OpCode.ARRAY_APPEND:
+    case OpCode.ARRAY_SPREAD:
+    case OpCode.LOAD_ARGC:
+    case OpCode.TRY_END:
+    case OpCode.THROW:
     case OpCode.RETURN:
     case OpCode.HALT:
       return {
@@ -105,7 +113,10 @@ function disassembleInstruction(
     case OpCode.LOAD_LOCAL:
     case OpCode.STORE_LOCAL:
     case OpCode.LOAD_UPVALUE:
-    case OpCode.STORE_UPVALUE: {
+    case OpCode.STORE_UPVALUE:
+    case OpCode.DESTRUCT_ELEM:
+    case OpCode.ROT:
+    case OpCode.COMPOUND: {
       const slot = (chunk.code[offset + 1] << 8) | chunk.code[offset + 2];
       return {
         text: `${offsetStr} ${lineStr} ${opcodeName(op).padEnd(16)} ${slot}`,
@@ -129,7 +140,9 @@ function disassembleInstruction(
     case OpCode.JMP:
     case OpCode.JMP_IF_FALSE:
     case OpCode.JMP_IF_TRUE:
-    case OpCode.LOOP: {
+    case OpCode.JMP_IF_NULL:
+    case OpCode.LOOP:
+    case OpCode.TRY_BEGIN: {
       const target = (chunk.code[offset + 1] << 8) | chunk.code[offset + 2];
       return {
         text: `${offsetStr} ${lineStr} ${opcodeName(op).padEnd(16)} -> ${target}`,
@@ -165,7 +178,9 @@ function disassembleInstruction(
     case OpCode.CLASS:
     case OpCode.METHOD:
     case OpCode.GET_PROP:
-    case OpCode.SET_PROP: {
+    case OpCode.SET_PROP:
+    case OpCode.GET_METHOD:
+    case OpCode.DESTRUCT_PROP: {
       const idx = (chunk.code[offset + 1] << 8) | chunk.code[offset + 2];
       const name = chunk.constants[idx];
       const nameStr = name && name.type === 'string' ? name.value : String(idx);
@@ -177,9 +192,11 @@ function disassembleInstruction(
     }
 
     default:
+      // Advance by the real instruction width so an opcode that has not been
+      // given a formatter here cannot desync the rest of the listing.
       return {
         text: `${offsetStr} ${lineStr} UNKNOWN(0x${(op as number).toString(16)})`,
-        nextOffset: offset + 1,
+        nextOffset: offset + instructionSize(op),
         line,
       };
   }

@@ -5,10 +5,19 @@
  * - Constant folding: evaluate constant expressions at compile time
  * - Dead code elimination: remove unreachable code after RETURN/JMP
  * - Peephole optimizations: simplify instruction sequences
+ *
+ * Every pass here changes how many bytes the code occupies, and TinyLang jump
+ * operands are *absolute* addresses. So the passes never rewrite bytes in
+ * place: they decode the chunk into a list of instructions, transform that
+ * list, and re-encode it while remapping every address operand. Editing the
+ * byte array directly silently corrupted control flow, because removing or
+ * shortening an instruction shifted every later address while the jumps
+ * pointing at them kept their old values.
  */
 
 import { Chunk } from './chunk';
-import { OpCode } from './opcodes';
+import type { CompiledFunction } from './compiler';
+import { OpCode, instructionSize, hasAddressOperand } from './opcodes';
 import {
   RuntimeValue,
   NumberValue,
@@ -19,229 +28,269 @@ import {
   createBoolean,
 } from '../types/values';
 
+/** A decoded instruction. */
+interface Instruction {
+  /** Offset in the original chunk. Used to remap jump targets. */
+  offset: number;
+  op: number;
+  /** 16-bit operand, or undefined for operand-less opcodes. */
+  operand?: number;
+  line: number;
+}
+
 /**
  * Optimize a bytecode chunk, returning a new optimized chunk
  */
 export function optimize(chunk: Chunk): Chunk {
-  let result = constantFolding(chunk);
-  result = deadCodeElimination(result);
-  result = peepholeOptimize(result);
-  return result;
+  // Optimize nested function bodies too, into fresh CompiledFunction objects so
+  // the returned chunk shares no mutable state with the input. Previously the
+  // constant pool was copied by reference, which meant function and method
+  // bodies came out byte-identical: everything below the top level went
+  // unoptimized, and the two chunks aliased the same function objects.
+  const constants = chunk.constants.map((constant) => {
+    const fn = constant as CompiledFunction | undefined;
+    if (fn && fn.type === 'compiled-function') {
+      return { ...fn, chunk: optimize(fn.chunk) };
+    }
+    return constant;
+  });
+
+  let instructions = decode(chunk);
+
+  instructions = constantFolding(instructions, constants);
+  instructions = deadCodeElimination(instructions);
+  instructions = peepholeOptimize(instructions);
+
+  return encode(chunk.name, instructions, constants, chunk.code.length);
+}
+
+/**
+ * Decode a chunk into instructions, stepping by instruction rather than by
+ * byte so operand bytes are never mistaken for opcodes.
+ */
+function decode(chunk: Chunk): Instruction[] {
+  const instructions: Instruction[] = [];
+  let offset = 0;
+  while (offset < chunk.code.length) {
+    const op = chunk.code[offset];
+    const size = instructionSize(op);
+    instructions.push({
+      offset,
+      op,
+      operand: size === 3 ? chunk.read16(offset + 1) : undefined,
+      line: chunk.lines[offset],
+    });
+    offset += size;
+  }
+  return instructions;
+}
+
+/**
+ * Re-encode instructions, remapping every absolute address operand from old
+ * offsets to new ones.
+ *
+ * @param originalLength Length of the original code, so a jump to the very end
+ *   of the chunk still resolves.
+ */
+function encode(
+  name: string,
+  instructions: Instruction[],
+  constants: RuntimeValue[],
+  originalLength: number
+): Chunk {
+  // Where each surviving instruction will land.
+  const newOffsets = new Map<number, number>();
+  let cursor = 0;
+  for (const instr of instructions) {
+    newOffsets.set(instr.offset, cursor);
+    cursor += instructionSize(instr.op);
+  }
+
+  // An address may point at an instruction that was removed, or at the end of
+  // the chunk. Resolve it to the next surviving instruction, walking backwards
+  // so every old offset gets an answer.
+  const remap = new Map<number, number>();
+  let next = cursor;
+  for (let offset = originalLength; offset >= 0; offset--) {
+    if (newOffsets.has(offset)) {
+      next = newOffsets.get(offset)!;
+    }
+    remap.set(offset, next);
+  }
+
+  const chunk = new Chunk(name);
+  chunk.constants = constants;
+  for (const instr of instructions) {
+    chunk.write(instr.op, instr.line);
+    if (instr.operand !== undefined) {
+      const operand = hasAddressOperand(instr.op)
+        ? remap.get(instr.operand) ?? instr.operand
+        : instr.operand;
+      chunk.write16(operand, instr.line);
+    }
+  }
+  return chunk;
+}
+
+/** Offsets that some jump points at; these must not be folded away. */
+function jumpTargets(instructions: Instruction[]): Set<number> {
+  const targets = new Set<number>();
+  for (const instr of instructions) {
+    if (hasAddressOperand(instr.op) && instr.operand !== undefined) {
+      targets.add(instr.operand);
+    }
+  }
+  return targets;
 }
 
 /**
  * Constant folding: replace sequences like CONST a, CONST b, ADD
  * with a single CONST (a+b) when both operands are compile-time constants.
+ *
+ * The folded instruction keeps the first CONST's offset so jumps to it stay
+ * valid. A triple is left alone if anything jumps into the middle of it.
  */
-function constantFolding(chunk: Chunk): Chunk {
-  const newChunk = new Chunk(chunk.name);
-  newChunk.constants = [...chunk.constants];
+function constantFolding(
+  instructions: Instruction[],
+  constants: RuntimeValue[]
+): Instruction[] {
+  const targets = jumpTargets(instructions);
+  const result: Instruction[] = [];
 
   let i = 0;
-  while (i < chunk.code.length) {
-    // Look for pattern: CONST idx1, CONST idx2, <arithmetic op>
-    if (
-      i + 6 < chunk.code.length &&
-      chunk.code[i] === OpCode.CONST &&
-      chunk.code[i + 3] === OpCode.CONST
-    ) {
-      const idx1 = (chunk.code[i + 1] << 8) | chunk.code[i + 2];
-      const idx2 = (chunk.code[i + 4] << 8) | chunk.code[i + 5];
-      const op = chunk.code[i + 6];
-      const val1 = chunk.constants[idx1];
-      const val2 = chunk.constants[idx2];
+  while (i < instructions.length) {
+    const first = instructions[i];
+    const second = instructions[i + 1];
+    const third = instructions[i + 2];
 
-      const folded = tryFoldBinary(val1, val2, op);
+    // CONST, CONST, <binary op>
+    if (
+      second &&
+      third &&
+      first.op === OpCode.CONST &&
+      second.op === OpCode.CONST &&
+      !targets.has(second.offset) &&
+      !targets.has(third.offset)
+    ) {
+      const folded = tryFoldBinary(
+        constants[first.operand!],
+        constants[second.operand!],
+        third.op
+      );
       if (folded !== null) {
-        const newIdx = newChunk.constants.length;
-        newChunk.constants.push(folded);
-        const line = chunk.lines[i];
-        newChunk.write(OpCode.CONST, line);
-        newChunk.write16(newIdx, line);
-        i += 7; // Skip past CONST, CONST, OP
+        constants.push(folded);
+        result.push({
+          offset: first.offset,
+          op: OpCode.CONST,
+          operand: constants.length - 1,
+          line: first.line,
+        });
+        i += 3;
         continue;
       }
     }
 
-    // Look for pattern: CONST idx, NEGATE (for negative numbers)
+    // CONST, NEGATE / NOT
     if (
-      i + 3 < chunk.code.length &&
-      chunk.code[i] === OpCode.CONST &&
-      chunk.code[i + 3] === OpCode.NEGATE
+      second &&
+      first.op === OpCode.CONST &&
+      (second.op === OpCode.NEGATE || second.op === OpCode.NOT) &&
+      !targets.has(second.offset)
     ) {
-      const idx = (chunk.code[i + 1] << 8) | chunk.code[i + 2];
-      const val = chunk.constants[idx];
-      if (val && val.type === 'number') {
-        const newIdx = newChunk.constants.length;
-        newChunk.constants.push(createNumber(-val.value));
-        const line = chunk.lines[i];
-        newChunk.write(OpCode.CONST, line);
-        newChunk.write16(newIdx, line);
-        i += 4; // Skip CONST + NEGATE
+      const value = constants[first.operand!];
+      const folded = tryFoldUnary(value, second.op);
+      if (folded !== null) {
+        constants.push(folded);
+        result.push({
+          offset: first.offset,
+          op: OpCode.CONST,
+          operand: constants.length - 1,
+          line: first.line,
+        });
+        i += 2;
         continue;
       }
     }
 
-    // Look for pattern: CONST idx, NOT (for boolean negation)
-    if (
-      i + 3 < chunk.code.length &&
-      chunk.code[i] === OpCode.CONST &&
-      chunk.code[i + 3] === OpCode.NOT
-    ) {
-      const idx = (chunk.code[i + 1] << 8) | chunk.code[i + 2];
-      const val = chunk.constants[idx];
-      if (val && val.type === 'boolean') {
-        const newIdx = newChunk.constants.length;
-        newChunk.constants.push(createBoolean(!val.value));
-        const line = chunk.lines[i];
-        newChunk.write(OpCode.CONST, line);
-        newChunk.write16(newIdx, line);
-        i += 4; // Skip CONST + NOT
-        continue;
-      }
-    }
-
-    // No optimization possible, copy instruction
-    newChunk.write(chunk.code[i], chunk.lines[i]);
+    result.push(first);
     i++;
   }
 
-  return newChunk;
+  return result;
 }
 
 /**
  * Dead code elimination: remove code after unconditional RETURN or JMP
  * that is not a jump target.
  */
-function deadCodeElimination(chunk: Chunk): Chunk {
-  // First, collect all jump targets
-  const jumpTargets = new Set<number>();
-  let i = 0;
-  while (i < chunk.code.length) {
-    const op = chunk.code[i];
-    switch (op) {
-      case OpCode.JMP:
-      case OpCode.JMP_IF_FALSE:
-      case OpCode.JMP_IF_TRUE:
-      case OpCode.LOOP: {
-        const target = (chunk.code[i + 1] << 8) | chunk.code[i + 2];
-        jumpTargets.add(target);
-        i += 3;
-        break;
-      }
-      case OpCode.CONST:
-      case OpCode.LOAD_LOCAL:
-      case OpCode.STORE_LOCAL:
-      case OpCode.LOAD_GLOBAL:
-      case OpCode.STORE_GLOBAL:
-      case OpCode.LOAD_UPVALUE:
-      case OpCode.STORE_UPVALUE:
-      case OpCode.CALL:
-      case OpCode.CLOSURE:
-      case OpCode.ARRAY:
-      case OpCode.OBJECT:
-      case OpCode.PRINT:
-      case OpCode.NEW_INSTANCE:
-      case OpCode.CLASS:
-      case OpCode.METHOD:
-      case OpCode.GET_PROP:
-      case OpCode.SET_PROP:
-        i += 3;
-        break;
-      default:
-        i += 1;
-        break;
-    }
-  }
-
-  // Now eliminate dead code
-  const newChunk = new Chunk(chunk.name);
-  newChunk.constants = [...chunk.constants];
+function deadCodeElimination(instructions: Instruction[]): Instruction[] {
+  const targets = jumpTargets(instructions);
+  const result: Instruction[] = [];
 
   let dead = false;
-  i = 0;
-  while (i < chunk.code.length) {
-    // If this is a jump target, code is reachable again
-    if (jumpTargets.has(i)) {
+  for (const instr of instructions) {
+    // A jump target is reachable again.
+    if (targets.has(instr.offset)) {
       dead = false;
     }
 
     if (dead) {
-      // Skip this instruction
-      const op = chunk.code[i];
-      i += instructionSize(op);
       continue;
     }
 
-    const op = chunk.code[i];
+    result.push(instr);
 
-    // Copy instruction
-    const size = instructionSize(op);
-    for (let j = 0; j < size; j++) {
-      newChunk.write(chunk.code[i + j], chunk.lines[i + j]);
-    }
-
-    // After RETURN or unconditional JMP, mark as dead
-    if (op === OpCode.RETURN || op === OpCode.JMP) {
+    if (
+      instr.op === OpCode.RETURN ||
+      instr.op === OpCode.JMP ||
+      instr.op === OpCode.LOOP ||
+      instr.op === OpCode.THROW ||
+      instr.op === OpCode.HALT
+    ) {
       dead = true;
     }
-
-    i += size;
   }
 
-  return newChunk;
+  return result;
 }
 
 /**
  * Peephole optimizations: simplify short instruction sequences
  */
-function peepholeOptimize(chunk: Chunk): Chunk {
-  const newChunk = new Chunk(chunk.name);
-  newChunk.constants = [...chunk.constants];
+function peepholeOptimize(instructions: Instruction[]): Instruction[] {
+  const targets = jumpTargets(instructions);
+  const result: Instruction[] = [];
 
   let i = 0;
-  while (i < chunk.code.length) {
-    // Pattern: PUSH, POP -> remove both (if no side effects)
-    if (
-      i + 3 < chunk.code.length &&
-      chunk.code[i] === OpCode.CONST &&
-      chunk.code[i + 3] === OpCode.POP
-    ) {
-      i += 4; // Skip both
-      continue;
-    }
+  while (i < instructions.length) {
+    const first = instructions[i];
+    const second = instructions[i + 1];
 
-    // Pattern: DUP, POP -> nothing
+    // Pushing a constant and immediately discarding it has no effect.
+    // Skipped when either instruction is jumped to, so no address is lost.
     if (
-      i + 1 < chunk.code.length &&
-      chunk.code[i] === OpCode.DUP &&
-      chunk.code[i + 1] === OpCode.POP
+      second &&
+      second.op === OpCode.POP &&
+      (first.op === OpCode.CONST || first.op === OpCode.DUP) &&
+      !targets.has(first.offset) &&
+      !targets.has(second.offset)
     ) {
       i += 2;
       continue;
     }
 
-    // No optimization, copy instruction
-    const op = chunk.code[i];
-    const size = instructionSize(op);
-    for (let j = 0; j < size; j++) {
-      newChunk.write(chunk.code[i + j], chunk.lines[i + j]);
-    }
-    i += size;
+    result.push(first);
+    i++;
   }
 
-  return newChunk;
+  return result;
 }
 
 /**
  * Try to fold a binary operation on two constant values.
  *
- * Returns null (declining to fold) for anything it cannot prove safe.
- *
- * The caller scans raw bytecode for the byte pattern `CONST, CONST, <op>`
- * rather than stepping instruction-by-instruction, so it can land mid
- * instruction and decode operand bytes as an opcode. That yields out-of-range
- * constant indices, so the operands must be treated as possibly absent.
+ * Returns null (declining to fold) for anything it cannot prove safe, including
+ * operands that are absent from the constant pool.
  */
 function tryFoldBinary(
   a: RuntimeValue | undefined,
@@ -284,34 +333,19 @@ function tryFoldBinary(
   return null;
 }
 
-/**
- * Get the total byte size of an instruction (opcode + operands)
- */
-function instructionSize(op: number): number {
-  switch (op) {
-    case OpCode.CONST:
-    case OpCode.LOAD_LOCAL:
-    case OpCode.STORE_LOCAL:
-    case OpCode.LOAD_GLOBAL:
-    case OpCode.STORE_GLOBAL:
-    case OpCode.LOAD_UPVALUE:
-    case OpCode.STORE_UPVALUE:
-    case OpCode.JMP:
-    case OpCode.JMP_IF_FALSE:
-    case OpCode.JMP_IF_TRUE:
-    case OpCode.LOOP:
-    case OpCode.CALL:
-    case OpCode.CLOSURE:
-    case OpCode.ARRAY:
-    case OpCode.OBJECT:
-    case OpCode.PRINT:
-    case OpCode.NEW_INSTANCE:
-    case OpCode.CLASS:
-    case OpCode.METHOD:
-    case OpCode.GET_PROP:
-    case OpCode.SET_PROP:
-      return 3;
-    default:
-      return 1;
+/** Try to fold NEGATE or NOT applied to a constant. */
+function tryFoldUnary(
+  value: RuntimeValue | undefined,
+  op: number
+): RuntimeValue | null {
+  if (value === undefined) {
+    return null;
   }
+  if (op === OpCode.NEGATE && value.type === 'number') {
+    return createNumber(-(value as NumberValue).value);
+  }
+  if (op === OpCode.NOT && value.type === 'boolean') {
+    return createBoolean(!(value as BooleanValue).value);
+  }
+  return null;
 }

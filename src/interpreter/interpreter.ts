@@ -1272,6 +1272,9 @@ export class Interpreter {
           return obj.elements.pop() || createNull();
         case 'shift':
           return obj.elements.shift() || createNull();
+        case 'unshift':
+          obj.elements.unshift(...args);
+          return createNumber(obj.elements.length);
         case 'length':
           return createNumber(obj.elements.length);
         case 'map': {
