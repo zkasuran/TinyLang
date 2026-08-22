@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Playground Build",
+      "trigger": "PostFileSave",
+      "matcher": "playground/template\\.html$|src/.*\\.ts$",
+      "action": {
+        "type": "command",
+        "command": "cd /projects/sandbox/tinylang && node playground/build.js"
+      }
+    }
+  ]
+}

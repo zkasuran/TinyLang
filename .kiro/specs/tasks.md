@@ -1,6 +1,15 @@
-# TinyLang — Implementation Tasks
+# TinyLang - Implementation Tasks
 
-## Phase 1: Core Language Engine
+## Subsystem Task Lists
+
+Detailed task breakdowns for each major subsystem:
+
+- **[Compiler & VM Tasks](./compiler-vm/tasks.md)** - Opcode definition, compiler passes, VM implementation, optimizer, serialization
+- **[Debugger Tasks](./debugger/tasks.md)** - Debug hooks, breakpoints, stepping, inspection, CLI
+- **[Web IDE Tasks](./web-ide/tasks.md)** - Build system, editor, execution, panels, themes, sharing
+- **[Toolchain Tasks](./toolchain/tasks.md)** - Formatter, linter, test runner, module system
+
+## Phase 1: Core Language Engine ✅
 
 ### Task 1.1: Lexer Implementation ✅
 - [x] Define token types enum (TokenType)
@@ -15,117 +24,171 @@
 - [x] Implement meaningful newline handling (statement separators)
 - [x] Create LexerError with friendly messages and hints
 
-### Task 1.2: Parser Implementation
-- [ ] Implement recursive descent parser structure
-- [ ] Parse variable declarations (let, const)
-- [ ] Parse function declarations with parameters and defaults
-- [ ] Parse class declarations with methods and properties
-- [ ] Parse if/else if/else statements
-- [ ] Parse while loops
-- [ ] Parse for...in loops
-- [ ] Parse match/when statements
-- [ ] Parse return, break, continue statements
-- [ ] Parse print statement
-- [ ] Implement Pratt parsing for expressions with precedence
-- [ ] Parse literals (number, string, boolean, null, array, object)
-- [ ] Parse binary, unary, logical expressions
-- [ ] Parse call expressions
-- [ ] Parse member access (dot notation) and index access (brackets)
-- [ ] Parse arrow functions
-- [ ] Parse ternary expressions
-- [ ] Parse range expressions (0..10)
-- [ ] Create ParseError with friendly messages
-- [ ] Implement error recovery (synchronize to next statement)
+### Task 1.2: Parser Implementation ✅
+- [x] Implement recursive descent parser structure
+- [x] Parse variable declarations (let, const)
+- [x] Parse function declarations with parameters and defaults
+- [x] Parse class declarations with methods and properties
+- [x] Parse if/else if/else statements
+- [x] Parse while loops
+- [x] Parse for...in loops
+- [x] Parse match/when statements
+- [x] Parse return, break, continue statements
+- [x] Parse print statement
+- [x] Implement Pratt parsing for expressions with precedence
+- [x] Parse literals (number, string, boolean, null, array, object)
+- [x] Parse binary, unary, logical expressions
+- [x] Parse call expressions
+- [x] Parse member access (dot notation) and index access (brackets)
+- [x] Parse arrow functions
+- [x] Parse ternary expressions
+- [x] Parse range expressions (0..10)
+- [x] Create ParseError with friendly messages
+- [x] Implement error recovery (synchronize to next statement)
 
-### Task 1.3: Interpreter Implementation
-- [ ] Create Environment class with scoping (done in types)
-- [ ] Implement statement evaluation (all statement types)
-- [ ] Implement expression evaluation (all expression types)
-- [ ] Implement variable lookup and assignment with scope chains
-- [ ] Implement function calls with closures
-- [ ] Implement class instantiation and method dispatch
-- [ ] Implement control flow signals (Return, Break, Continue)
-- [ ] Implement inheritance and super method lookup
-- [ ] Create RuntimeError with source context
+### Task 1.3: Interpreter Implementation ✅
+- [x] Create Environment class with scoping (done in types)
+- [x] Implement statement evaluation (all statement types)
+- [x] Implement expression evaluation (all expression types)
+- [x] Implement variable lookup and assignment with scope chains
+- [x] Implement function calls with closures
+- [x] Implement class instantiation and method dispatch
+- [x] Implement control flow signals (Return, Break, Continue)
+- [x] Implement inheritance and super method lookup
+- [x] Create RuntimeError with source context
 
-### Task 1.4: Standard Library
-- [ ] Implement I/O functions (print, input)
-- [ ] Implement math functions (abs, floor, ceil, round, sqrt, random, min, max)
-- [ ] Implement string functions (len, split, join, upper, lower, trim, contains, replace)
-- [ ] Implement array functions (push, pop, shift, map, filter, reduce, sort, reverse, slice)
-- [ ] Implement type functions (type, str, num, bool)
-- [ ] Implement utility functions (range, keys, values, time)
-- [ ] Register all stdlib functions in global environment
+### Task 1.4: Standard Library ✅
+- [x] Implement I/O functions (print, input)
+- [x] Implement math functions (abs, floor, ceil, round, sqrt, random, min, max)
+- [x] Implement string functions (len, split, join, upper, lower, trim, contains, replace)
+- [x] Implement array functions (push, pop, shift, map, filter, reduce, sort, reverse, slice)
+- [x] Implement type functions (type, str, num, bool)
+- [x] Implement utility functions (range, keys, values, time)
+- [x] Register all stdlib functions in global environment
 
-## Phase 2: User Interfaces
+## Phase 2: User Interfaces ✅
 
-### Task 2.1: CLI Tool
-- [ ] Set up Commander.js with version and help
-- [ ] Implement `run` command (read file, execute, display output/errors)
-- [ ] Implement `repl` command (start interactive mode)
-- [ ] Implement `check` command (parse only, report errors)
-- [ ] Implement `format` command (pretty-print AST back to source)
-- [ ] Add colorized output with chalk
-- [ ] Handle file not found and permission errors gracefully
-- [ ] Add shebang support for `#!/usr/bin/env tinylang`
+### Task 2.1: CLI Tool ✅
+- [x] Set up CLI with version and help
+- [x] Implement `run` command (read file, execute, display output/errors)
+- [x] Implement `repl` command (start interactive mode)
+- [x] Implement `check` command (parse only, report errors)
+- [x] Implement `format` command (pretty-print AST back to source)
+- [x] Implement `lint` command (run linter rules)
+- [x] Implement `test` command (discover and run test blocks)
+- [x] Implement `compile` command (produce .tinyc bytecode)
+- [x] Implement `disassemble` command (show bytecode listing)
+- [x] Implement `debug` command (interactive debugger)
+- [x] Add colorized output with ANSI codes
+- [x] Handle file not found and permission errors gracefully
 
-### Task 2.2: REPL
-- [ ] Implement basic read-eval-print loop
-- [ ] Detect multi-line input (unclosed braces/parens)
-- [ ] Auto-print expression results
-- [ ] Implement dot commands (.help, .clear, .exit, .examples)
-- [ ] Colorize output (values in green, errors in red, hints in yellow)
-- [ ] Persist environment between lines
-- [ ] Show welcome banner with language version
+### Task 2.2: REPL ✅
+- [x] Implement basic read-eval-print loop
+- [x] Detect multi-line input (unclosed braces/parens)
+- [x] Auto-print expression results
+- [x] Implement dot commands (.help, .clear, .exit, .examples)
+- [x] Colorize output (values in green, errors in red, hints in yellow)
+- [x] Persist environment between lines
+- [x] Show welcome banner with language version
 
-### Task 2.3: Web Playground
-- [ ] Create single-page HTML application
-- [ ] Implement code editor with basic highlighting
-- [ ] Bundle interpreter for browser execution
-- [ ] Add Run button and Ctrl+Enter shortcut
-- [ ] Add output console panel
-- [ ] Add example program dropdown selector
-- [ ] Style with responsive CSS
-- [ ] Add share-via-URL feature (base64 encoding)
+### Task 2.3: Web IDE ✅
+- [x] Create build system (esbuild IIFE bundle)
+- [x] Implement CodeMirror 6 editor with TinyLang syntax
+- [x] Implement execution engine with output capture
+- [x] Implement file explorer with virtual filesystem
+- [x] Implement debugger panel with visual controls
+- [x] Implement AST viewer with collapsible tree
+- [x] Implement bytecode viewer with disassembly
+- [x] Add theme support (light/dark)
+- [x] Add code sharing via URL
+- [x] Add example program dropdown
+- [x] Responsive design
 
-## Phase 3: Quality & Polish
+## Phase 3: Quality & Polish ✅
 
-### Task 3.1: Test Suite
-- [ ] Lexer unit tests (all token types, edge cases, errors)
-- [ ] Parser unit tests (all statement/expression types)
-- [ ] Interpreter unit tests (evaluation correctness)
-- [ ] Stdlib unit tests (all built-in functions)
-- [ ] Integration tests (complete programs)
-- [ ] Error message tests (verify hints are helpful)
-- [ ] Edge case tests (empty programs, deeply nested, large inputs)
+### Task 3.1: Test Suite ✅
+- [x] Lexer unit tests (all token types, edge cases, errors)
+- [x] Parser unit tests (all statement/expression types)
+- [x] Interpreter unit tests (evaluation correctness)
+- [x] Compiler unit tests (instruction emission)
+- [x] VM unit tests (opcode execution)
+- [x] Optimizer unit tests (transform correctness)
+- [x] Debugger integration tests (session control)
+- [x] Formatter unit tests (idempotency)
+- [x] Linter unit tests (each rule)
+- [x] Test runner tests (discovery and execution)
+- [x] Stdlib unit tests (all built-in functions)
+- [x] Integration tests (complete programs)
+- [x] Error message tests (verify hints are helpful)
+- [x] Edge case tests (empty programs, deeply nested, large inputs)
 
-### Task 3.2: Example Programs
-- [ ] hello.tiny — Hello World
-- [ ] variables.tiny — Variable declarations and types
-- [ ] math.tiny — Arithmetic and math functions
-- [ ] strings.tiny — String operations
-- [ ] arrays.tiny — Array manipulation
-- [ ] functions.tiny — Function definitions and closures
-- [ ] loops.tiny — All loop types with break/continue
-- [ ] classes.tiny — OOP with inheritance
-- [ ] fibonacci.tiny — Classic algorithm
-- [ ] guess-game.tiny — Interactive number guessing game
-- [ ] todo-list.tiny — Data structure manipulation
-- [ ] sorting.tiny — Implement sorting algorithms
+### Task 3.2: Example Programs ✅
+- [x] 01-hello.tiny - Hello World
+- [x] 02-variables.tiny - Variable declarations and types
+- [x] 03-math.tiny - Arithmetic and math functions
+- [x] 04-strings.tiny - String operations
+- [x] 05-arrays.tiny - Array manipulation
+- [x] 06-functions.tiny - Function definitions and closures
+- [x] 07-fibonacci.tiny - Classic algorithm
+- [x] 08-classes.tiny - OOP with inheritance
+- [x] 09-closures.tiny - Closure demonstrations
+- [x] 10-stdlib.tiny - Standard library usage
 
-### Task 3.3: Documentation
-- [ ] Comprehensive README with badges, screenshots, architecture
-- [ ] Language Reference (complete syntax documentation)
-- [ ] Installation and setup instructions (< 3 steps)
-- [ ] "How Kiro Was Used" section with screenshots/descriptions
-- [ ] Contributing guide
-- [ ] Architecture diagram (text-based)
-- [ ] CHANGELOG
+### Task 3.3: Documentation ✅
+- [x] Comprehensive README with badges, architecture, features
+- [x] Documentation site with multiple pages
+- [x] Installation and setup instructions
+- [x] "How Kiro Was Used" section
+- [x] Contributing guide
+- [x] Architecture diagrams
 
-## Phase 4: Kiro Integration Showcase
+## Phase 4: Kiro Integration Showcase ✅
 
-### Task 4.1: Kiro Configuration
+### Task 4.1: Kiro Configuration ✅
 - [x] Steering files (coding standards, language spec, project overview)
-- [x] Feature specs (requirements, design, tasks)
-- [ ] Hooks (format on save, test on commit)
-- [ ] Document Kiro workflow in README
+- [x] Feature specs (requirements, design, tasks) for all subsystems
+- [x] Hooks (format on save, test on save, build check, lint, validate examples)
+- [x] Testing guide steering file
+- [x] Architecture decisions steering file
+- [x] Web IDE guide steering file
+
+## Phase 5: Compiler, VM & Advanced Features ✅
+
+### Task 5.1: Bytecode Compiler ✅
+- [x] Define 44 opcodes organized by category
+- [x] Implement single-pass AST-to-bytecode compilation
+- [x] Handle all language features (vars, functions, classes, control flow)
+- [x] Implement closure compilation with upvalues
+- [x] Implement class compilation with methods and inheritance
+
+### Task 5.2: Virtual Machine ✅
+- [x] Implement stack-based execution engine
+- [x] Implement all opcodes (arithmetic, control flow, functions, OOP)
+- [x] Implement call frame stack for function calls
+- [x] Stack overflow detection
+- [x] Native function integration
+
+### Task 5.3: Optimizer ✅
+- [x] Constant folding pass
+- [x] Dead code elimination pass
+- [x] Peephole optimization pass
+
+### Task 5.4: Serialization ✅
+- [x] Binary format with TINY magic bytes and versioning
+- [x] Type-tagged constant pool serialization
+- [x] Nested function chunk serialization
+- [x] Deserialization with format validation
+
+### Task 5.5: Debugger ✅
+- [x] Replay-based architecture
+- [x] Breakpoints (line-based and conditional)
+- [x] Step execution (step, over, out, continue)
+- [x] Variable inspection
+- [x] Watch expressions
+- [x] Call stack display
+
+### Task 5.6: Toolchain ✅
+- [x] AST-based formatter
+- [x] Rule-based linter (5 rules)
+- [x] Inline test runner with assertions
+- [x] Module system with caching and circular dependency detection

@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Documentation Link Check",
+      "trigger": "PostFileSave",
+      "matcher": "docs/.*\\.html$|README\\.md$|\\.kiro/.*\\.md$",
+      "action": {
+        "type": "command",
+        "command": "cd /projects/sandbox/tinylang && grep -rn '\\[.*\\](\\./[^)]*' --include='*.md' . | while read line; do file=$(echo \"$line\" | grep -oP '\\./[^)]+'); dir=$(dirname $(echo \"$line\" | cut -d: -f1)); [ -f \"$dir/$file\" ] || echo \"Broken link: $line\"; done 2>/dev/null || true"
+      }
+    }
+  ]
+}
