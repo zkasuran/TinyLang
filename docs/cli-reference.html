@@ -179,6 +179,10 @@ debug&gt; quit</code></pre>
         <h2><code>fmt</code></h2>
         <p>Format TinyLang source files with consistent style.</p>
 
+        <p>Every result is re-parsed and compared against the AST it was produced from. If anything
+        differs, the command reports the difference and exits 1 without writing, so <code>--write</code>
+        cannot replace a file with code that means something else.</p>
+
         <pre><code>tinylang fmt &lt;file.tiny&gt; [files...] [options]</code></pre>
 
         <h4>Options</h4>
@@ -350,6 +354,47 @@ VM is 3.00x faster than interpreter</code></pre>
         <pre><code>tinylang repl</code></pre>
 
         <p>The REPL maintains state between lines, so you can define variables and functions that persist throughout the session. Use <code>Ctrl+C</code> to exit.</p>
+
+        <!-- wasm -->
+        <h2><code>wasm</code></h2>
+        <p>Compile function declarations to WebAssembly Text Format (<code>.wat</code>).</p>
+
+        <pre><code>tinylang wasm &lt;file.tiny&gt; [options]</code></pre>
+
+        <h4>Options</h4>
+        <table>
+          <thead><tr><th>Flag</th><th>Short</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>--output</code></td><td><code>-o</code></td><td>Output <code>.wat</code> file path</td></tr>
+          </tbody>
+        </table>
+
+        <p>The target covers a deliberately narrow subset: integer functions, parameters, locals,
+        <code>if</code>/<code>else</code>, <code>while</code>, direct calls and recursion, arithmetic,
+        comparisons, and <code>and</code>/<code>or</code>. Every value is an <code>i32</code>.</p>
+
+        <p>A function that uses anything outside that subset is <strong>left out of the module
+        entirely</strong> and is not exported. That is reported as an <strong>error, not a
+        warning</strong>, and the command <strong>exits non-zero</strong>, because the export the caller
+        asked for does not exist in the output.</p>
+
+        <h4>Examples</h4>
+        <pre><code>$ tinylang wasm mixed.tiny
+1 function(s) could not be compiled to WASM:
+  - describe: unsupported expression type for WASM: StringLiteral
+  These functions are absent from the module and are not exported.
+Note: 1 top-level statement(s) were left out (the WASM target compiles function declarations only).
+Compiled to WebAssembly: mixed.wat (181 bytes)
+Compiled and exported: addUp
+Incomplete: 1 function(s) compiled, 1 could not be.
+$ echo $?
+1</code></pre>
+
+        <p>The <code>.wat</code> file is still written when at least one function compiled, so the
+        functions that did translate remain usable; if no function is expressible in the subset,
+        nothing is written at all. Top-level statements are not part of the WASM output and are
+        reported as a note rather than an error. The compiler never emits a stand-in for an operation
+        it cannot translate.</p>
 
         <!-- check -->
         <h2><code>check</code></h2>

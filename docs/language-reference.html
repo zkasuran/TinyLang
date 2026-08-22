@@ -182,6 +182,21 @@ x /= <span class="num">4</span>   <span class="cmt">// x = 6</span></code></pre>
           </tbody>
         </table>
 
+        <h3>Conditional (Ternary)</h3>
+        <p><code>cond ? whenTrue : whenFalse</code> is an expression, so it can appear anywhere a value can.
+        Only the arm that is selected is evaluated.</p>
+        <pre><code><span class="kw">let</span> n = <span class="num">5</span>
+<span class="kw">let</span> label = n > <span class="num">0</span> ? <span class="str">"positive"</span> : <span class="str">"not positive"</span>
+
+<span class="bi">print</span>(items.<span class="bi">length</span>() == <span class="num">0</span> ? <span class="str">"empty"</span> : <span class="str">"has items"</span>)
+
+<span class="kw">let</span> config = {retries: isProd ? <span class="num">5</span> : <span class="num">1</span>}</code></pre>
+
+        <p>It binds looser than every operator except assignment, so a comparison forms the condition
+        without parentheses, and it is right-associative, so a chain reads top to bottom:</p>
+        <pre><code><span class="kw">let</span> grade = score > <span class="num">90</span> ? <span class="str">"A"</span> : score > <span class="num">80</span> ? <span class="str">"B"</span> : <span class="str">"C"</span>
+<span class="cmt">// groups as: score > 90 ? "A" : (score > 80 ? "B" : "C")</span></code></pre>
+
         <!-- Control Flow -->
         <h2>Control Flow</h2>
 

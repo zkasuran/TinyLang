@@ -70,6 +70,10 @@ tinylang fmt --write <file.tiny>   # Overwrite in place
 
 AST-based formatting that produces consistent, readable code.
 
+Every result is re-parsed and compared against the AST it was produced from. If
+anything differs, the command reports the difference and exits 1 without writing,
+so `--write` cannot replace a file with code that means something else.
+
 ### `lint` -- Static Analysis
 
 ```bash
@@ -91,6 +95,42 @@ tinylang test <file.tiny>
 ```
 
 Discovers and executes all `test "..." { ... }` blocks in the file. Reports pass/fail with colored output.
+
+### `wasm` -- Compile to WebAssembly Text
+
+```bash
+tinylang wasm <file.tiny>
+tinylang wasm <file.tiny> -o out.wat   # Choose the output path
+```
+
+Compiles function declarations to WebAssembly Text Format (`.wat`). The target
+covers a deliberately narrow subset: integer functions, parameters, locals,
+`if`/`else`, `while`, direct calls and recursion, arithmetic, comparisons, and
+`and`/`or`. Every value is an `i32`.
+
+A function that uses anything outside that subset is **left out of the module
+entirely** and is not exported. That is reported as an **error, not a warning**,
+and the command **exits non-zero**, because the export the caller asked for does
+not exist in the output:
+
+```
+$ tinylang wasm mixed.tiny
+1 function(s) could not be compiled to WASM:
+  - describe: unsupported expression type for WASM: StringLiteral
+  These functions are absent from the module and are not exported.
+Note: 1 top-level statement(s) were left out (the WASM target compiles function declarations only).
+Compiled to WebAssembly: mixed.wat (181 bytes)
+Compiled and exported: addUp
+Incomplete: 1 function(s) compiled, 1 could not be.
+$ echo $?
+1
+```
+
+The `.wat` file is still written when at least one function compiled, so the
+functions that did translate remain usable; if no function is expressible in the
+subset, nothing is written at all. Top-level statements are not part of the WASM
+output and are reported as a note rather than an error. The compiler never emits
+a stand-in for an operation it cannot translate.
 
 ### `check` -- Syntax Verification
 
@@ -159,5 +199,5 @@ tinylang --version
 | Code | Meaning |
 |------|---------|
 | 0 | Success |
-| 1 | Runtime error, lint errors, or test failures |
+| 1 | Runtime error, lint errors, test failures, unformattable input, or a `wasm` compilation that left a function out |
 | 2 | Parse error (invalid syntax) |

@@ -78,6 +78,38 @@ const MAX_SIZE = 100
 | `*=` | `x = x * n` |
 | `/=` | `x = x / n` |
 
+Assigning to a `const` is an error in both engines:
+
+```
+const RATE = 3.14
+RATE = 99   // RuntimeError: Cannot reassign constant 'RATE'
+```
+
+The binding is what is constant, not the value it refers to: `const list = [1]`
+followed by `list[0] = 9` is allowed.
+
+### Conditional (Ternary)
+
+`cond ? whenTrue : whenFalse` is an expression, so it can appear anywhere a
+value can. Only the arm that is selected is evaluated.
+
+```
+let label = n > 0 ? "positive" : "not positive"
+
+print(items.length() == 0 ? "empty" : "has items")
+
+let config = {retries: isProd ? 5 : 1}
+```
+
+It binds looser than every operator except assignment, so a comparison forms
+the condition without parentheses, and it is right-associative, so a chain reads
+top to bottom:
+
+```
+let grade = score > 90 ? "A" : score > 80 ? "B" : "C"
+// groups as: score > 90 ? "A" : (score > 80 ? "B" : "C")
+```
+
 ---
 
 ## Control Flow
