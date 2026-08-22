@@ -222,6 +222,51 @@ export class Compiler {
     });
   }
 
+  /**
+   * Declare `name` as a local, rejecting a genuine redeclaration.
+   *
+   * The interpreter's Environment.define throws when the name already exists in
+   * the *same* environment. The compiler's scopes mirror those environments
+   * one-for-one (beginScope where the interpreter calls createChild), so "already
+   * a local at the current scopeDepth" is the same condition. Shadowing in a
+   * nested scope, and a loop body rebinding its own local on each iteration, both
+   * live at a deeper depth and are untouched.
+   *
+   * The error is emitted as a RAISE instruction rather than thrown here, because
+   * the interpreter reports it at the moment execution reaches the declaration:
+   * a redeclaration inside `if false { }` is never reported, and one inside `try`
+   * is caught. Failing compilation would change both.
+   */
+  private declareLocal(name: string, line: number): void {
+    if (this.isRedeclaredInCurrentScope(name)) {
+      this.emitRaise(`Variable '${name}' is already declared in this scope`, line);
+    }
+    this.addLocal(name);
+  }
+
+  private isRedeclaredInCurrentScope(name: string): boolean {
+    for (let i = this.current.locals.length - 1; i >= 0; i--) {
+      const local = this.current.locals[i];
+      if (local.depth < this.current.scopeDepth) return false;
+      if (local.name === name) return true;
+    }
+    return false;
+  }
+
+  /** Emit an instruction that raises `message` when reached. */
+  private emitRaise(message: string, line: number): void {
+    const msgIdx = this.current.chunk.addConstant(createString(message));
+    this.emit(OpCode.RAISE, line);
+    this.emit16(msgIdx, line);
+  }
+
+  /** Emit the store for a top-level declaration (not an assignment). */
+  private emitDeclareGlobal(name: string, line: number): void {
+    const nameIdx = this.current.chunk.addConstant(createString(name));
+    this.emit(OpCode.DECLARE_GLOBAL, line);
+    this.emit16(nameIdx, line);
+  }
+
   private resolveLocal(scope: CompilerScope, name: string): number {
     for (let i = scope.locals.length - 1; i >= 0; i--) {
       if (scope.locals[i].name === name) {
@@ -388,15 +433,7 @@ export class Compiler {
     const line = stmt.position.line;
     this.compileExpression(stmt.value);
 
-    if (this.current.scopeDepth > 0) {
-      // Local variable - value stays on stack as the local slot
-      this.addLocal(stmt.name);
-    } else {
-      // Global variable - STORE_GLOBAL pops the value
-      const nameIdx = this.current.chunk.addConstant(createString(stmt.name));
-      this.emit(OpCode.STORE_GLOBAL, line);
-      this.emit16(nameIdx, line);
-    }
+    this.addLocalOrStoreGlobal(stmt.name, line);
   }
 
   private compileFunctionDeclaration(stmt: FunctionDeclaration): void {
@@ -413,13 +450,7 @@ export class Compiler {
     // Upvalue info is embedded in the compiled function object
     // and will be read by the VM when creating the closure
 
-    if (this.current.scopeDepth > 0) {
-      this.addLocal(stmt.name);
-    } else {
-      const nameIdx = this.current.chunk.addConstant(createString(stmt.name));
-      this.emit(OpCode.STORE_GLOBAL, line);
-      this.emit16(nameIdx, line);
-    }
+    this.addLocalOrStoreGlobal(stmt.name, line);
   }
 
   private compileFunction(
@@ -435,7 +466,10 @@ export class Compiler {
     // Add params as locals
     let defaultParams = 0;
     for (const param of params) {
-      this.addLocal(param.name);
+      // `fn f(a, a)` is a redeclaration; the interpreter reports it while
+      // binding the second parameter, i.e. at call time, and so does the RAISE
+      // this emits into the function prologue.
+      this.declareLocal(param.name, line);
       if (param.defaultValue) {
         defaultParams++;
       }
@@ -500,12 +534,7 @@ export class Compiler {
     this.emit(OpCode.CLASS, line);
     this.emit16(nameIdx, line);
 
-    if (this.current.scopeDepth > 0) {
-      this.addLocal(stmt.name);
-    } else {
-      this.emit(OpCode.STORE_GLOBAL, line);
-      this.emit16(nameIdx, line);
-    }
+    this.addLocalOrStoreGlobal(stmt.name, line);
 
     // Handle inheritance
     if (stmt.superClass) {
@@ -687,7 +716,7 @@ export class Compiler {
     // slot, and without endScope() emitting matching POPs those slots leak on
     // every iteration, shifting all subsequent local indices.
     this.beginScope();
-    this.addLocal(stmt.variable);
+    this.declareLocal(stmt.variable, line);
 
     // Compile body
     for (const s of stmt.body) {
@@ -851,15 +880,13 @@ export class Compiler {
         this.emit(OpCode.LOAD_LOCAL, line);
         this.emit16(subjectSlot, line);
         this.emitDestructureExtract(isArray, names[i], i, line);
-        this.addLocal(names[i]);
+        this.declareLocal(names[i], line);
       }
     } else {
       for (let i = 0; i < names.length; i++) {
         this.emit(OpCode.DUP, line);
         this.emitDestructureExtract(isArray, names[i], i, line);
-        const nameIdx = this.current.chunk.addConstant(createString(names[i]));
-        this.emit(OpCode.STORE_GLOBAL, line);
-        this.emit16(nameIdx, line);
+        this.emitDeclareGlobal(names[i], line);
       }
       this.emit(OpCode.POP, line); // discard the subject
     }
@@ -897,16 +924,15 @@ export class Compiler {
   }
 
   /**
-   * Bind the value on top of the stack to `name`: as a local it simply stays on
-   * the stack in its slot, as a global it is stored and popped.
+   * Bind the value on top of the stack to `name` as a *declaration*: as a local
+   * it simply stays on the stack in its slot, as a global it is stored and
+   * popped. Either way a redeclaration in the same scope is rejected.
    */
   private addLocalOrStoreGlobal(name: string, line: number): void {
     if (this.current.scopeDepth > 0) {
-      this.addLocal(name);
+      this.declareLocal(name, line);
     } else {
-      const nameIdx = this.current.chunk.addConstant(createString(name));
-      this.emit(OpCode.STORE_GLOBAL, line);
-      this.emit16(nameIdx, line);
+      this.emitDeclareGlobal(name, line);
     }
   }
 

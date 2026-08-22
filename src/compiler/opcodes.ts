@@ -51,6 +51,7 @@ export enum OpCode {
   LOAD_UPVALUE = 0x54,
   STORE_UPVALUE = 0x55,
   LOAD_ARGC = 0x56,     // Push the number of arguments actually passed to this frame
+  DECLARE_GLOBAL = 0x57, // Like STORE_GLOBAL, but rejects a name already bound
 
   // Functions
   CALL = 0x60,
@@ -86,6 +87,7 @@ export enum OpCode {
   TRY_BEGIN = 0xA0,  // Install a catch handler at the given address
   TRY_END = 0xA1,    // Uninstall the innermost catch handler
   THROW = 0xA2,      // Throw the value on top of the stack as an error
+  RAISE = 0xA3,      // Raise a RuntimeError with the message at <const>
 
   // Control
   HALT = 0xFF,
@@ -125,6 +127,7 @@ const TWO_BYTE_OPERAND: ReadonlySet<number> = new Set<number>([
   OpCode.STORE_LOCAL,
   OpCode.LOAD_GLOBAL,
   OpCode.STORE_GLOBAL,
+  OpCode.DECLARE_GLOBAL,
   OpCode.LOAD_UPVALUE,
   OpCode.STORE_UPVALUE,
   OpCode.CALL,
@@ -141,6 +144,7 @@ const TWO_BYTE_OPERAND: ReadonlySet<number> = new Set<number>([
   OpCode.NEW_INSTANCE,
   OpCode.PRINT,
   OpCode.TRY_BEGIN,
+  OpCode.RAISE,
 ]);
 
 /**
@@ -202,6 +206,7 @@ export function opcodeName(op: OpCode): string {
     [OpCode.STORE_LOCAL]: 'STORE_LOCAL',
     [OpCode.LOAD_GLOBAL]: 'LOAD_GLOBAL',
     [OpCode.STORE_GLOBAL]: 'STORE_GLOBAL',
+    [OpCode.DECLARE_GLOBAL]: 'DECLARE_GLOBAL',
     [OpCode.LOAD_UPVALUE]: 'LOAD_UPVALUE',
     [OpCode.STORE_UPVALUE]: 'STORE_UPVALUE',
     [OpCode.LOAD_ARGC]: 'LOAD_ARGC',
@@ -230,6 +235,7 @@ export function opcodeName(op: OpCode): string {
     [OpCode.TRY_BEGIN]: 'TRY_BEGIN',
     [OpCode.TRY_END]: 'TRY_END',
     [OpCode.THROW]: 'THROW',
+    [OpCode.RAISE]: 'RAISE',
     [OpCode.HALT]: 'HALT',
   };
   return names[op] || `UNKNOWN(${op})`;

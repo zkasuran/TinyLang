@@ -126,7 +126,9 @@ function disassembleInstruction(
     }
 
     case OpCode.LOAD_GLOBAL:
-    case OpCode.STORE_GLOBAL: {
+    case OpCode.STORE_GLOBAL:
+    case OpCode.DECLARE_GLOBAL:
+    case OpCode.RAISE: {
       const idx = (chunk.code[offset + 1] << 8) | chunk.code[offset + 2];
       const name = chunk.constants[idx];
       const nameStr = name && name.type === 'string' ? name.value : String(idx);

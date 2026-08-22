@@ -616,6 +616,36 @@ export class VM {
           break;
         }
 
+        // A top-level `let`/`const`/`fn`/`class`/`enum`, as opposed to an
+        // assignment. Declaring a name that is already bound - including a
+        // stdlib name - is an error, exactly as Environment.define is in the
+        // interpreter. Both declaration and assignment used to compile to
+        // STORE_GLOBAL, so the VM silently overwrote.
+        case OpCode.DECLARE_GLOBAL: {
+          const nameIdx = this.read16();
+          const name = this.currentFrame.chunk.constants[nameIdx] as StringValue;
+          const value = this.pop();
+          if (this.globals.has(name.value)) {
+            throw new RuntimeError(
+              `Variable '${name.value}' is already declared in this scope`,
+              this.currentLine()
+            );
+          }
+          this.globals.set(name.value, value);
+          break;
+        }
+
+        // Raise a RuntimeError the compiler determined statically but which the
+        // interpreter only reports when execution reaches the offending
+        // statement. Emitting an instruction rather than failing compilation
+        // keeps the timing and catchability identical: `if false { ... }` never
+        // reports it, and a surrounding `catch` catches it.
+        case OpCode.RAISE: {
+          const msgIdx = this.read16();
+          const message = this.currentFrame.chunk.constants[msgIdx] as StringValue;
+          throw new RuntimeError(message.value, this.currentLine());
+        }
+
         case OpCode.LOAD_UPVALUE: {
           const idx = this.read16();
           const upvalue = this.currentFrame.upvalues[idx];
