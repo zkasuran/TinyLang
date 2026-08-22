@@ -22,6 +22,7 @@ export interface Program extends BaseNode {
 // ============ Statements ============
 export type Statement =
   | VariableDeclaration
+  | DestructuringDeclaration
   | FunctionDeclaration
   | ClassDeclaration
   | ReturnStatement
@@ -34,7 +35,9 @@ export type Statement =
   | PrintStatement
   | ImportStatement
   | MatchStatement
-  | TestDeclaration;
+  | TestDeclaration
+  | TryCatchStatement
+  | ThrowStatement;
 
 export interface VariableDeclaration extends BaseNode {
   type: 'VariableDeclaration';
@@ -42,6 +45,17 @@ export interface VariableDeclaration extends BaseNode {
   value: Expression;
   constant: boolean;
 }
+
+export interface DestructuringDeclaration extends BaseNode {
+  type: 'DestructuringDeclaration';
+  pattern: DestructurePattern;
+  value: Expression;
+  constant: boolean;
+}
+
+export type DestructurePattern =
+  | { kind: 'array'; names: string[] }
+  | { kind: 'object'; names: string[] };
 
 export interface FunctionDeclaration extends BaseNode {
   type: 'FunctionDeclaration';
@@ -131,10 +145,23 @@ export interface TestDeclaration extends BaseNode {
   body: Statement[];
 }
 
+export interface TryCatchStatement extends BaseNode {
+  type: 'TryCatchStatement';
+  tryBody: Statement[];
+  catchVariable: string;
+  catchBody: Statement[];
+}
+
+export interface ThrowStatement extends BaseNode {
+  type: 'ThrowStatement';
+  value: Expression;
+}
+
 // ============ Expressions ============
 export type Expression =
   | NumberLiteral
   | StringLiteral
+  | InterpolatedString
   | BooleanLiteral
   | NullLiteral
   | ArrayLiteral
@@ -164,6 +191,15 @@ export interface StringLiteral extends BaseNode {
   type: 'StringLiteral';
   value: string;
 }
+
+export interface InterpolatedString extends BaseNode {
+  type: 'InterpolatedString';
+  parts: InterpolatedPart[];
+}
+
+export type InterpolatedPart =
+  | { kind: 'literal'; value: string }
+  | { kind: 'expression'; expression: Expression };
 
 export interface BooleanLiteral extends BaseNode {
   type: 'BooleanLiteral';

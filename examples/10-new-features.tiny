@@ -1,0 +1,88 @@
+// Showcase of new TinyLang features
+
+// ============ String Interpolation (f-strings) ============
+print("--- F-Strings ---")
+let name = "TinyLang"
+let version = 1.0
+print(f"Welcome to {name} v{version}!")
+print(f"Math: 2 + 2 = {2 + 2}")
+
+let items = [1, 2, 3, 4, 5]
+print(f"Array has {items.length} items")
+
+// ============ Try/Catch Error Handling ============
+print("")
+print("--- Try/Catch ---")
+
+fn divide(a, b) {
+  if b == 0 {
+    throw "Cannot divide by zero"
+  }
+  return a / b
+}
+
+try {
+  let result = divide(10, 0)
+  print(f"Result: {result}")
+} catch err {
+  print(f"Caught error: {err.message}")
+}
+
+try {
+  let arr = [1, 2, 3]
+  let x = arr[99]
+} catch err {
+  print(f"Array error: {err.message}")
+}
+
+// ============ Spread Operator ============
+print("")
+print("--- Spread Operator ---")
+
+let first = [1, 2, 3]
+let second = [4, 5, 6]
+let combined = [...first, ...second]
+print(f"Combined: {combined}")
+
+let chars = [..."hello"]
+print(f"Chars: {chars}")
+
+let withExtra = [0, ...first, 99]
+print(f"With extra: {withExtra}")
+
+// ============ Destructuring ============
+print("")
+print("--- Destructuring ---")
+
+let [a, b, c] = [10, 20, 30]
+print(f"Array destructured: a={a}, b={b}, c={c}")
+
+let person = {pname: "Alice", age: 30, city: "NYC"}
+let {pname, age, city} = person
+print(f"Object destructured: {pname}, {age}, {city}")
+
+// Destructure function return
+fn getPoint() {
+  return [3, 4]
+}
+let [x, y] = getPoint()
+print(f"Point: ({x}, {y})")
+
+// ============ All together ============
+print("")
+print("--- Combined ---")
+
+fn safeDivide(a, b) {
+  try {
+    if b == 0 { throw "division by zero" }
+    return {result: a / b, error: null}
+  } catch err {
+    return {result: null, error: err.message}
+  }
+}
+
+let res1 = safeDivide(10, 3)
+print(f"10/3 = {res1.result} (error: {res1.error})")
+
+let res2 = safeDivide(10, 0)
+print(f"10/0 = {res2.result} (error: {res2.error})")

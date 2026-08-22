@@ -64,7 +64,15 @@ export class Lexer {
       case '[': this.addToken(TokenType.LBRACKET); break;
       case ']': this.addToken(TokenType.RBRACKET); break;
       case ',': this.addToken(TokenType.COMMA); break;
-      case '.': this.addToken(TokenType.DOT); break;
+      case '.':
+        if (!this.isAtEnd() && this.peek() === '.' && this.peekNext() === '.') {
+          this.advance(); // second dot
+          this.advance(); // third dot
+          this.addToken(TokenType.SPREAD);
+        } else {
+          this.addToken(TokenType.DOT);
+        }
+        break;
       case ':': this.addToken(TokenType.COLON); break;
       case ';': this.addToken(TokenType.SEMICOLON); break;
       case '%': this.addToken(TokenType.PERCENT); break;
@@ -144,7 +152,13 @@ export class Lexer {
         if (this.isDigit(char)) {
           this.number();
         } else if (this.isAlpha(char)) {
-          this.identifier();
+          // Check for f-string prefix: f"..." or f'...'
+          if (char === 'f' && !this.isAtEnd() && (this.peek() === '"' || this.peek() === "'")) {
+            const quote = this.advance();
+            this.fstring(quote);
+          } else {
+            this.identifier();
+          }
         } else {
           throw this.createError(
             `Unexpected character '${char}'`,
@@ -196,6 +210,81 @@ export class Lexer {
     // Consume closing quote
     this.advance();
     this.addTokenWithValue(TokenType.STRING, value);
+  }
+
+  /**
+   * Parse an f-string. The content between quotes is stored with {expr} markers.
+   * The raw text (with {expr} sections intact) is stored as the token value.
+   */
+  private fstring(quote: string): void {
+    let value = '';
+    const startPos = this.getPosition();
+
+    while (!this.isAtEnd() && this.peek() !== quote) {
+      if (this.peek() === '\n') {
+        this.line++;
+        this.column = 1;
+      }
+
+      if (this.peek() === '\\') {
+        this.advance(); // consume backslash
+        const escaped = this.advance();
+        switch (escaped) {
+          case 'n': value += '\n'; break;
+          case 't': value += '\t'; break;
+          case 'r': value += '\r'; break;
+          case '\\': value += '\\'; break;
+          case "'": value += "'"; break;
+          case '"': value += '"'; break;
+          case '{': value += '\\{'; break;
+          case '0': value += '\0'; break;
+          default:
+            value += escaped;
+        }
+      } else if (this.peek() === '{') {
+        value += this.advance(); // consume '{'
+        let depth = 1;
+        while (!this.isAtEnd() && depth > 0) {
+          const ch = this.peek();
+          if (ch === '{') depth++;
+          else if (ch === '}') {
+            depth--;
+            if (depth === 0) {
+              value += this.advance(); // consume closing '}'
+              break;
+            }
+          }
+          if (ch === '\n') {
+            this.line++;
+            this.column = 1;
+          }
+          if (depth > 0) {
+            value += this.advance();
+          }
+        }
+        if (depth > 0) {
+          throw new LexerError(
+            'Unterminated interpolation expression in f-string',
+            startPos,
+            'Make sure every { has a matching } in your f-string'
+          );
+        }
+      } else {
+        value += this.advance();
+      }
+    }
+
+    if (this.isAtEnd()) {
+      throw new LexerError(
+        'Unterminated f-string literal',
+        startPos,
+        `Did you forget the closing ${quote} quote?`
+      );
+    }
+
+    // Consume closing quote
+    this.advance();
+    this.addTokenWithValue(TokenType.FSTRING, value);
   }
 
   private number(): void {
@@ -269,6 +358,7 @@ export class Lexer {
         TokenType.IDENTIFIER,
         TokenType.NUMBER,
         TokenType.STRING,
+        TokenType.FSTRING,
         TokenType.BOOLEAN,
         TokenType.NULL,
         TokenType.RPAREN,

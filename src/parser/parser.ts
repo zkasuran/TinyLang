@@ -20,11 +20,13 @@
  */
 
 import { Token, TokenType } from '../types/tokens';
+import { Lexer } from '../lexer';
 import {
   Program,
   Statement,
   Expression,
   VariableDeclaration,
+  DestructuringDeclaration,
   FunctionDeclaration,
   ClassDeclaration,
   ReturnStatement,
@@ -41,6 +43,8 @@ import {
   Parameter,
   NumberLiteral,
   StringLiteral,
+  InterpolatedString,
+  InterpolatedPart,
   BooleanLiteral,
   NullLiteral,
   ArrayLiteral,
@@ -60,6 +64,9 @@ import {
   NewExpression,
   FunctionExpression,
   TestDeclaration,
+  TryCatchStatement,
+  ThrowStatement,
+  SpreadExpression,
 } from '../types/ast';
 import { ParseError } from './errors';
 
@@ -138,15 +145,27 @@ export class Parser {
         return this.parseMatchStatement();
       case TokenType.TEST:
         return this.parseTestDeclaration();
+      case TokenType.TRY:
+        return this.parseTryCatchStatement();
+      case TokenType.THROW:
+        return this.parseThrowStatement();
       default:
         return this.parseExpressionStatement();
     }
   }
 
-  private parseVariableDeclaration(): VariableDeclaration {
+  private parseVariableDeclaration(): VariableDeclaration | DestructuringDeclaration {
     const token = this.advance(); // consume let/const
     const constant = token.type === TokenType.CONST;
     const position = token.position;
+
+    // Check for destructuring patterns: let [a, b] = ... or let {x, y} = ...
+    if (this.check(TokenType.LBRACKET)) {
+      return this.parseArrayDestructuring(position, constant);
+    }
+    if (this.check(TokenType.LBRACE)) {
+      return this.parseObjectDestructuring(position, constant);
+    }
 
     const nameToken = this.expect(TokenType.IDENTIFIER,
       'a variable name',
@@ -163,6 +182,68 @@ export class Parser {
     return {
       type: 'VariableDeclaration',
       name: nameToken.value,
+      value,
+      constant,
+      position,
+    };
+  }
+
+  private parseArrayDestructuring(position: { line: number; column: number; offset: number }, constant: boolean): DestructuringDeclaration {
+    this.advance(); // consume '['
+    const names: string[] = [];
+
+    if (!this.check(TokenType.RBRACKET)) {
+      do {
+        const nameToken = this.expect(TokenType.IDENTIFIER, 'a variable name');
+        names.push(nameToken.value);
+      } while (this.match(TokenType.COMMA));
+    }
+
+    this.expect(TokenType.RBRACKET, "']'",
+      'Close the destructuring pattern with ]'
+    );
+
+    this.expect(TokenType.ASSIGN, "'='",
+      'Destructuring declarations must be initialized: let [a, b] = [1, 2]'
+    );
+
+    const value = this.parseExpression();
+    this.expectEndOfStatement();
+
+    return {
+      type: 'DestructuringDeclaration',
+      pattern: { kind: 'array', names },
+      value,
+      constant,
+      position,
+    };
+  }
+
+  private parseObjectDestructuring(position: { line: number; column: number; offset: number }, constant: boolean): DestructuringDeclaration {
+    this.advance(); // consume '{'
+    const names: string[] = [];
+
+    if (!this.check(TokenType.RBRACE)) {
+      do {
+        const nameToken = this.expect(TokenType.IDENTIFIER, 'a property name');
+        names.push(nameToken.value);
+      } while (this.match(TokenType.COMMA));
+    }
+
+    this.expect(TokenType.RBRACE, "'}'",
+      'Close the destructuring pattern with }'
+    );
+
+    this.expect(TokenType.ASSIGN, "'='",
+      'Destructuring declarations must be initialized: let {x, y} = obj'
+    );
+
+    const value = this.parseExpression();
+    this.expectEndOfStatement();
+
+    return {
+      type: 'DestructuringDeclaration',
+      pattern: { kind: 'object', names },
       value,
       constant,
       position,
@@ -250,7 +331,14 @@ export class Parser {
       if (this.check(TokenType.FN)) {
         methods.push(this.parseFunctionDeclaration());
       } else if (this.check(TokenType.LET) || this.check(TokenType.CONST)) {
-        properties.push(this.parseVariableDeclaration());
+        const decl = this.parseVariableDeclaration();
+        if (decl.type !== 'VariableDeclaration') {
+          throw ParseError.fromToken(this.peek(),
+            'Destructuring is not supported in class properties',
+            'Use simple property declarations: let name = value'
+          );
+        }
+        properties.push(decl);
       } else {
         throw ParseError.unexpected(this.peek(), "'fn' or 'let' for class members");
       }
@@ -495,6 +583,46 @@ export class Parser {
       type: 'TestDeclaration',
       description,
       body,
+      position,
+    };
+  }
+
+  private parseTryCatchStatement(): TryCatchStatement {
+    const token = this.advance(); // consume 'try'
+    const position = token.position;
+
+    const tryBody = this.parseBlock();
+
+    this.skipNewlines();
+    this.expect(TokenType.CATCH, "'catch'",
+      'A try block must be followed by catch: try { ... } catch err { ... }'
+    );
+
+    const errorVarToken = this.expect(TokenType.IDENTIFIER, 'an error variable name',
+      'After catch, provide a variable name: catch err { ... }'
+    );
+
+    const catchBody = this.parseBlock();
+
+    return {
+      type: 'TryCatchStatement',
+      tryBody,
+      catchVariable: errorVarToken.value,
+      catchBody,
+      position,
+    };
+  }
+
+  private parseThrowStatement(): ThrowStatement {
+    const token = this.advance(); // consume 'throw'
+    const position = token.position;
+
+    const value = this.parseExpression();
+    this.expectEndOfStatement();
+
+    return {
+      type: 'ThrowStatement',
+      value,
       position,
     };
   }
@@ -786,6 +914,8 @@ export class Parser {
         return this.parseNumberLiteral();
       case TokenType.STRING:
         return this.parseStringLiteral();
+      case TokenType.FSTRING:
+        return this.parseInterpolatedString();
       case TokenType.BOOLEAN:
         return this.parseBooleanLiteral();
       case TokenType.NULL:
@@ -804,6 +934,8 @@ export class Parser {
         return this.parseNew();
       case TokenType.FN:
         return this.parseFunctionExpression();
+      case TokenType.SPREAD:
+        return this.parseSpreadExpression();
       default:
         throw ParseError.unexpected(token, 'an expression');
     }
@@ -1022,6 +1154,72 @@ export class Parser {
     };
   }
 
+  private parseInterpolatedString(): InterpolatedString {
+    const token = this.advance(); // consume FSTRING token
+    const position = token.position;
+    const raw = token.value;
+
+    // Parse the raw f-string value into parts
+    const parts: InterpolatedPart[] = [];
+    let i = 0;
+    let currentLiteral = '';
+
+    while (i < raw.length) {
+      if (raw[i] === '\\' && i + 1 < raw.length && raw[i + 1] === '{') {
+        // Escaped brace - treat as literal
+        currentLiteral += '{';
+        i += 2;
+      } else if (raw[i] === '{') {
+        // Start of interpolation - find matching }
+        if (currentLiteral.length > 0) {
+          parts.push({ kind: 'literal', value: currentLiteral });
+          currentLiteral = '';
+        }
+        i++; // skip opening {
+        let depth = 1;
+        let exprSource = '';
+        while (i < raw.length && depth > 0) {
+          if (raw[i] === '{') depth++;
+          else if (raw[i] === '}') {
+            depth--;
+            if (depth === 0) { i++; break; }
+          }
+          exprSource += raw[i];
+          i++;
+        }
+        // Parse the expression source
+        const innerLexer = new Lexer(exprSource);
+        const innerTokens = innerLexer.tokenize();
+        const innerParser = new Parser(innerTokens);
+        const expr = innerParser.parseExpression();
+        parts.push({ kind: 'expression', expression: expr });
+      } else {
+        currentLiteral += raw[i];
+        i++;
+      }
+    }
+
+    if (currentLiteral.length > 0) {
+      parts.push({ kind: 'literal', value: currentLiteral });
+    }
+
+    return {
+      type: 'InterpolatedString',
+      parts,
+      position,
+    };
+  }
+
+  private parseSpreadExpression(): SpreadExpression {
+    const token = this.advance(); // consume '...'
+    const argument = this.parseExpression();
+    return {
+      type: 'SpreadExpression',
+      argument,
+      position: token.position,
+    };
+  }
+
   // ============ Block Parsing ============
 
   private parseBlock(): Statement[] {
@@ -1142,6 +1340,8 @@ export class Parser {
         case TokenType.PRINT:
         case TokenType.IMPORT:
         case TokenType.TEST:
+        case TokenType.TRY:
+        case TokenType.THROW:
           return;
       }
 

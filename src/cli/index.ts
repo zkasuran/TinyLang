@@ -824,6 +824,165 @@ function cmdCheck(filePath: string): void {
   }
 }
 
+function cmdAst(filePath: string): void {
+  const source = readFileChecked(filePath);
+
+  try {
+    const lexer = new Lexer(source);
+    const tokens = lexer.tokenize();
+    const parser = new Parser(tokens);
+    const program = parser.parse();
+
+    console.log(bold(`AST for ${path.basename(filePath)}`));
+    console.log('');
+    printAstNode(program, '', true);
+  } catch (e) {
+    showError(e instanceof Error ? e.message : String(e));
+    process.exit(1);
+  }
+}
+
+function printAstNode(node: unknown, prefix: string, isLast: boolean): void {
+  if (!node || typeof node !== 'object') return;
+
+  const record = node as Record<string, unknown>;
+  const connector = isLast ? '\u2514\u2500 ' : '\u251C\u2500 ';
+  const type = record['type'] as string || '';
+
+  // Format node type with key information
+  let label = cyan(type);
+  if (record['name']) label += ` ${yellow(String(record['name']))}`;
+  if (record['operator']) label += ` ${bold(String(record['operator']))}`;
+  if (record['value'] !== undefined && typeof record['value'] !== 'object') {
+    label += ` ${green(JSON.stringify(record['value']))}`;
+  }
+  if (record['constant']) label += ` ${dim('(const)')}`;
+
+  console.log(`${prefix}${connector}${label}`);
+
+  const childPrefix = prefix + (isLast ? '   ' : '\u2502  ');
+
+  // Get child nodes to print
+  const childKeys = Object.keys(record).filter(k =>
+    !['type', 'position', 'name', 'operator', 'value', 'constant', 'length'].includes(k)
+  );
+
+  const children: Array<{ key: string; value: unknown }> = [];
+  for (const key of childKeys) {
+    const val = record[key];
+    if (val === null || val === undefined) continue;
+    if (Array.isArray(val) && val.length === 0) continue;
+    if (typeof val === 'object') {
+      children.push({ key, value: val });
+    }
+  }
+
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    const childIsLast = i === children.length - 1;
+
+    if (Array.isArray(child.value)) {
+      const arr = child.value as unknown[];
+      console.log(`${childPrefix}${childIsLast ? '\u2514\u2500 ' : '\u251C\u2500 '}${dim(child.key + ':')}`);
+      const arrPrefix = childPrefix + (childIsLast ? '   ' : '\u2502  ');
+      for (let j = 0; j < arr.length; j++) {
+        printAstNode(arr[j], arrPrefix, j === arr.length - 1);
+      }
+    } else if (typeof child.value === 'object' && (child.value as Record<string, unknown>)['type']) {
+      console.log(`${childPrefix}${childIsLast ? '\u2514\u2500 ' : '\u251C\u2500 '}${dim(child.key + ':')}`);
+      const objPrefix = childPrefix + (childIsLast ? '   ' : '\u2502  ');
+      printAstNode(child.value, objPrefix, true);
+    }
+  }
+}
+
+function cmdProfile(filePath: string): void {
+  const source = readFileChecked(filePath);
+  const resolvedPath = path.resolve(filePath);
+
+  let outputLines = 0;
+
+  const startTime = performance.now();
+  const startMem = process.memoryUsage().heapUsed;
+
+  const tinylang = new TinyLang({
+    output: () => { outputLines++; },
+  });
+
+  // Set up module system
+  const loader = new ModuleLoader();
+  tinylang.setModuleContext(loader, resolvedPath);
+
+  // Use profiling wrapper
+  const origRun = tinylang.run.bind(tinylang);
+  const result = origRun(source);
+
+  const endTime = performance.now();
+  const endMem = process.memoryUsage().heapUsed;
+  const duration = endTime - startTime;
+
+  console.log(bold(`Profile: ${path.basename(filePath)}`));
+  console.log('');
+
+  if (!result.success && result.error) {
+    console.log(red(`Error: ${result.error.message}`));
+    console.log('');
+  }
+
+  // Timing
+  console.log(cyan('Timing:'));
+  console.log(`  Total execution: ${formatDuration(duration)}`);
+  console.log(`  Output lines:    ${outputLines}`);
+  console.log('');
+
+  // Memory
+  const memDiff = endMem - startMem;
+  console.log(cyan('Memory:'));
+  console.log(`  Heap before:  ${formatBytes(startMem)}`);
+  console.log(`  Heap after:   ${formatBytes(endMem)}`);
+  console.log(`  Difference:   ${memDiff >= 0 ? '+' : ''}${formatBytes(Math.abs(memDiff))}`);
+  console.log('');
+
+  // Parse stats
+  try {
+    const lexer = new Lexer(source);
+    const tokens = lexer.tokenize();
+    const parser = new Parser(tokens);
+    const program = parser.parse();
+
+    let fnCount = 0;
+    let classCount = 0;
+    let stmtCount = 0;
+
+    function countNodes(stmts: Array<{ type: string; methods?: Array<unknown>; body?: Array<unknown> }>): void {
+      for (const stmt of stmts) {
+        stmtCount++;
+        if (stmt.type === 'FunctionDeclaration') fnCount++;
+        if (stmt.type === 'ClassDeclaration') {
+          classCount++;
+          if (stmt.methods) fnCount += (stmt.methods as Array<unknown>).length;
+        }
+      }
+    }
+    countNodes(program.body as Array<{ type: string; methods?: Array<unknown>; body?: Array<unknown> }>);
+
+    console.log(cyan('Code Statistics:'));
+    console.log(`  Source lines:  ${source.split('\n').length}`);
+    console.log(`  Tokens:        ${tokens.length}`);
+    console.log(`  Statements:    ${stmtCount}`);
+    console.log(`  Functions:     ${fnCount}`);
+    console.log(`  Classes:       ${classCount}`);
+  } catch {
+    // If parsing fails, skip code stats
+  }
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function cmdVersion(): void {
   console.log(`TinyLang v${VERSION}`);
   console.log(`  Runtime: Node.js ${process.version}`);
@@ -850,6 +1009,8 @@ ${yellow('COMMANDS:')}
   ${cyan('bench')} <file.tiny>      Benchmark execution
   ${cyan('repl')}                   Start interactive REPL
   ${cyan('check')} <file.tiny>      Check syntax without executing
+  ${cyan('ast')} <file.tiny>        Pretty-print the AST as a tree
+  ${cyan('profile')} <file.tiny>    Profile execution (timing, memory, stats)
   ${cyan('version')}                Show version information
   ${cyan('help')}                   Show this help message
 
@@ -980,6 +1141,22 @@ function main(): void {
         process.exit(1);
       }
       cmdCheck(positional[0]);
+      break;
+
+    case 'ast':
+      if (!positional[0]) {
+        showError('Please provide a file', 'Usage: tinylang ast <file.tiny>');
+        process.exit(1);
+      }
+      cmdAst(positional[0]);
+      break;
+
+    case 'profile':
+      if (!positional[0]) {
+        showError('Please provide a file to profile', 'Usage: tinylang profile <file.tiny>');
+        process.exit(1);
+      }
+      cmdProfile(positional[0]);
       break;
 
     case 'version':

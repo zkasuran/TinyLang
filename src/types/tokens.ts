@@ -9,6 +9,7 @@ export enum TokenType {
   // Literals
   NUMBER = 'NUMBER',
   STRING = 'STRING',
+  FSTRING = 'FSTRING',
   BOOLEAN = 'BOOLEAN',
   NULL = 'NULL',
 
@@ -41,6 +42,9 @@ export enum TokenType {
   MATCH = 'MATCH',
   WHEN = 'WHEN',
   TEST = 'TEST',
+  TRY = 'TRY',
+  CATCH = 'CATCH',
+  THROW = 'THROW',
 
   // Operators
   PLUS = 'PLUS',             // +
@@ -76,6 +80,7 @@ export enum TokenType {
   SEMICOLON = 'SEMICOLON',   // ;
   ARROW = 'ARROW',           // =>
   PIPE = 'PIPE',             // |
+  SPREAD = 'SPREAD',         // ...
 
   // Special
   EOF = 'EOF',
@@ -126,4 +131,7 @@ export const KEYWORDS: Record<string, TokenType> = {
   'match': TokenType.MATCH,
   'when': TokenType.WHEN,
   'test': TokenType.TEST,
+  'try': TokenType.TRY,
+  'catch': TokenType.CATCH,
+  'throw': TokenType.THROW,
 };

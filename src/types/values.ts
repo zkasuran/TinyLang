@@ -119,7 +119,11 @@ export class Environment {
     if (this.parent) {
       return this.parent.assign(name, value);
     }
-    throw new RuntimeError(`Variable '${name}' is not defined. Did you forget to declare it with 'let' or 'const'?`);
+    const suggestion = this.findSimilar(name);
+    const hint = suggestion
+      ? `Did you mean '${suggestion}'?`
+      : `Did you forget to declare it with 'let' or 'const'?`;
+    throw new RuntimeError(`Variable '${name}' is not defined. ${hint}`);
   }
 
   /**
@@ -132,7 +136,12 @@ export class Environment {
     if (this.parent) {
       return this.parent.lookup(name);
     }
-    throw new RuntimeError(`Variable '${name}' is not defined. Did you forget to declare it with 'let' or 'const'?`);
+    // Generate "Did you mean?" suggestion
+    const suggestion = this.findSimilar(name);
+    const hint = suggestion
+      ? `Did you mean '${suggestion}'?`
+      : `Did you forget to declare it with 'let' or 'const'?`;
+    throw new RuntimeError(`Variable '${name}' is not defined. ${hint}`);
   }
 
   /**
@@ -157,6 +166,37 @@ export class Environment {
    */
   getAll(): Map<string, RuntimeValue> {
     return new Map(this.variables);
+  }
+
+  /**
+   * Collect all variable names from this scope and all parent scopes
+   */
+  private getAllNames(): string[] {
+    const names = Array.from(this.variables.keys());
+    if (this.parent) {
+      names.push(...this.parent.getAllNames());
+    }
+    return names;
+  }
+
+  /**
+   * Find the most similar variable name using Levenshtein distance.
+   * Returns null if no good match is found (distance > 3).
+   */
+  private findSimilar(name: string): string | null {
+    const allNames = this.getAllNames();
+    let bestMatch: string | null = null;
+    let bestDistance = Infinity;
+
+    for (const candidate of allNames) {
+      const dist = levenshteinDistance(name.toLowerCase(), candidate.toLowerCase());
+      if (dist < bestDistance && dist <= 3) {
+        bestDistance = dist;
+        bestMatch = candidate;
+      }
+    }
+
+    return bestMatch;
   }
 }
 
@@ -263,4 +303,34 @@ export function valueEquals(a: RuntimeValue, b: RuntimeValue): boolean {
     }
     default: return a === b; // Reference equality for objects, functions, etc.
   }
+}
+
+/**
+ * Compute the Levenshtein distance between two strings.
+ * Used for "Did you mean?" suggestions in error messages.
+ */
+function levenshteinDistance(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+
+  if (m === 0) return n;
+  if (n === 0) return m;
+
+  const dp: number[][] = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0) as number[]);
+
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return dp[m][n];
 }

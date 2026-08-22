@@ -37,6 +37,10 @@ import {
   RangeExpression,
   NewExpression,
   FunctionExpression,
+  TryCatchStatement,
+  ThrowStatement,
+  InterpolatedString,
+  DestructuringDeclaration,
 } from '../types/ast';
 import {
   RuntimeValue,
@@ -196,6 +200,8 @@ export class Interpreter {
     switch (stmt.type) {
       case 'VariableDeclaration':
         return this.evalVariableDeclaration(stmt, env);
+      case 'DestructuringDeclaration':
+        return this.evalDestructuringDeclaration(stmt as unknown as DestructuringDeclaration, env);
       case 'FunctionDeclaration':
         return this.evalFunctionDeclaration(stmt, env);
       case 'ClassDeclaration':
@@ -223,6 +229,10 @@ export class Interpreter {
         return createNull();
       case 'ImportStatement':
         return this.evalImportStatement(stmt, env);
+      case 'TryCatchStatement':
+        return this.evalTryCatchStatement(stmt as unknown as TryCatchStatement, env);
+      case 'ThrowStatement':
+        return this.evalThrowStatement(stmt as unknown as ThrowStatement, env);
       default:
         throw new RuntimeError(
           `Unknown statement type: ${(stmt as unknown as Statement).type}`,
@@ -235,6 +245,39 @@ export class Interpreter {
   private evalVariableDeclaration(stmt: VariableDeclaration, env: Environment): RuntimeValue {
     const value = this.evalExpression(stmt.value, env);
     env.define(stmt.name, value, stmt.constant);
+    return value;
+  }
+
+  private evalDestructuringDeclaration(stmt: DestructuringDeclaration, env: Environment): RuntimeValue {
+    const value = this.evalExpression(stmt.value, env);
+
+    if (stmt.pattern.kind === 'array') {
+      if (value.type !== 'array') {
+        throw new RuntimeError(
+          `Cannot destructure ${value.type} as an array. Right side must be an array.`,
+          stmt.position.line,
+          stmt.position.column
+        );
+      }
+      for (let i = 0; i < stmt.pattern.names.length; i++) {
+        const elementValue = i < value.elements.length ? value.elements[i] : createNull();
+        env.define(stmt.pattern.names[i], elementValue, stmt.constant);
+      }
+    } else {
+      // object destructuring
+      if (value.type !== 'object') {
+        throw new RuntimeError(
+          `Cannot destructure ${value.type} as an object. Right side must be an object.`,
+          stmt.position.line,
+          stmt.position.column
+        );
+      }
+      for (const name of stmt.pattern.names) {
+        const propValue = value.properties.get(name) || createNull();
+        env.define(name, propValue, stmt.constant);
+      }
+    }
+
     return value;
   }
 
@@ -466,6 +509,8 @@ export class Interpreter {
         return createNumber(expr.value);
       case 'StringLiteral':
         return createString(expr.value);
+      case 'InterpolatedString':
+        return this.evalInterpolatedString(expr as unknown as InterpolatedString, env);
       case 'BooleanLiteral':
         return createBoolean(expr.value);
       case 'NullLiteral':
@@ -518,7 +563,25 @@ export class Interpreter {
   }
 
   private evalArrayLiteral(expr: { elements: Expression[] }, env: Environment): ArrayValue {
-    const elements = expr.elements.map(el => this.evalExpression(el, env));
+    const elements: RuntimeValue[] = [];
+    for (const el of expr.elements) {
+      if (el.type === 'SpreadExpression') {
+        const spread = this.evalExpression(el.argument, env);
+        if (spread.type === 'array') {
+          elements.push(...spread.elements);
+        } else if (spread.type === 'string') {
+          elements.push(...spread.value.split('').map(createString));
+        } else {
+          throw new RuntimeError(
+            `Cannot spread ${spread.type}. Spread (...) works with arrays and strings.`,
+            el.position.line,
+            el.position.column
+          );
+        }
+      } else {
+        elements.push(this.evalExpression(el, env));
+      }
+    }
     return createArray(elements);
   }
 
@@ -1333,6 +1396,58 @@ export class Interpreter {
     }
 
     return undefined;
+  }
+
+  private evalTryCatchStatement(stmt: TryCatchStatement, env: Environment): RuntimeValue {
+    try {
+      const tryEnv = env.createChild();
+      return this.executeStatements(stmt.tryBody, tryEnv);
+    } catch (error) {
+      const catchEnv = env.createChild();
+      // Create an error object with .message property
+      if (error instanceof RuntimeError) {
+        const errProps = new Map<string, RuntimeValue>();
+        errProps.set('message', createString(error.message));
+        errProps.set('line', error.line ? createNumber(error.line) : createNull());
+        catchEnv.define(stmt.catchVariable, { type: 'object', properties: errProps });
+      } else if (error instanceof Error) {
+        const errProps = new Map<string, RuntimeValue>();
+        errProps.set('message', createString(error.message));
+        catchEnv.define(stmt.catchVariable, { type: 'object', properties: errProps });
+      } else {
+        const errProps = new Map<string, RuntimeValue>();
+        errProps.set('message', createString(String(error)));
+        catchEnv.define(stmt.catchVariable, { type: 'object', properties: errProps });
+      }
+      return this.executeStatements(stmt.catchBody, catchEnv);
+    }
+  }
+
+  private evalThrowStatement(stmt: ThrowStatement, env: Environment): RuntimeValue {
+    const value = this.evalExpression(stmt.value, env);
+    let message: string;
+    if (value.type === 'string') {
+      message = value.value;
+    } else if (value.type === 'object' && value.properties.has('message')) {
+      const msgVal = value.properties.get('message')!;
+      message = msgVal.type === 'string' ? msgVal.value : stringify(msgVal);
+    } else {
+      message = stringify(value);
+    }
+    throw new RuntimeError(message, stmt.position.line, stmt.position.column);
+  }
+
+  private evalInterpolatedString(expr: InterpolatedString, env: Environment): RuntimeValue {
+    let result = '';
+    for (const part of expr.parts) {
+      if (part.kind === 'literal') {
+        result += part.value;
+      } else {
+        const value = this.evalExpression(part.expression, env);
+        result += stringify(value);
+      }
+    }
+    return createString(result);
   }
 
   private checkStepLimit(): void {
