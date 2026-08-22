@@ -21,7 +21,7 @@ import {
 } from '../compiler';
 import { VM } from '../vm';
 import { Debugger, getHelpText } from '../debugger';
-import { Formatter } from '../formatter';
+import { Formatter, FormatterError } from '../formatter';
 import { Linter } from '../linter';
 import { TestRunner, formatTestResults } from '../testing';
 import { ModuleLoader } from '../modules/loader';
@@ -358,6 +358,9 @@ function cmdFmt(files: string[], flags: Record<string, string | boolean>): void 
     const source = readFileChecked(filePath);
 
     try {
+      // Formatter.format verifies that its output parses back to the same AST
+      // and throws a FormatterError otherwise, so nothing below can write a
+      // file whose meaning changed: the write is only reached on success.
       const formatted = formatter.format(source);
 
       if (flags['check']) {
@@ -377,7 +380,13 @@ function cmdFmt(files: string[], flags: Record<string, string | boolean>): void 
         process.stdout.write(formatted);
       }
     } catch (e) {
-      showError(`Failed to format ${filePath}: ${e instanceof Error ? e.message : String(e)}`);
+      const message = e instanceof Error ? e.message : String(e);
+      showError(
+        `Failed to format ${filePath}: ${message}`,
+        e instanceof FormatterError && flags['write']
+          ? `${filePath} was left untouched. Please report this file as a formatter bug.`
+          : undefined
+      );
       process.exit(1);
     }
   }

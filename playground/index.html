@@ -10488,7 +10488,86 @@ var TinyLangBundle = (() => {
     insertFinalNewline: true
   };
 
+  // src/formatter/errors.ts
+  var FormatterError = class extends Error {
+    constructor(message, line) {
+      super(message);
+      __publicField(this, "line", line);
+      this.name = "FormatterError";
+    }
+  };
+
+  // src/formatter/equivalence.ts
+  var IGNORED_KEYS = /* @__PURE__ */ new Set(["position"]);
+  var MAX_SNIPPET = 220;
+  function isPlainObject(value) {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+  }
+  function significantKeys(node) {
+    return Object.keys(node).filter((k) => !IGNORED_KEYS.has(k) && node[k] !== void 0).sort();
+  }
+  function snippet(value) {
+    const text = JSON.stringify(
+      value,
+      (key, v) => IGNORED_KEYS.has(key) ? void 0 : v
+    );
+    if (text === void 0) return String(value);
+    return text.length > MAX_SNIPPET ? text.slice(0, MAX_SNIPPET) + "\u2026" : text;
+  }
+  function astDifference(expected, actual, path = "$") {
+    if (Array.isArray(expected) || Array.isArray(actual)) {
+      if (!Array.isArray(expected) || !Array.isArray(actual)) {
+        return `${path}: expected ${snippet(expected)}, got ${snippet(actual)}`;
+      }
+      if (expected.length !== actual.length) {
+        return `${path}: expected ${expected.length} item(s), got ${actual.length}
+  before: ${snippet(expected)}
+  after:  ${snippet(actual)}`;
+      }
+      for (let i = 0; i < expected.length; i++) {
+        const diff = astDifference(expected[i], actual[i], `${path}[${i}]`);
+        if (diff) return diff;
+      }
+      return null;
+    }
+    if (isPlainObject(expected) || isPlainObject(actual)) {
+      if (!isPlainObject(expected) || !isPlainObject(actual)) {
+        return `${path}: expected ${snippet(expected)}, got ${snippet(actual)}`;
+      }
+      const expectedKeys = significantKeys(expected);
+      const actualKeys = significantKeys(actual);
+      if (expectedKeys.join(",") !== actualKeys.join(",")) {
+        return `${path}: property set differs
+  before: ${expectedKeys.join(", ")}
+  after:  ${actualKeys.join(", ")}`;
+      }
+      for (const key of expectedKeys) {
+        const diff = astDifference(expected[key], actual[key], `${path}.${key}`);
+        if (diff) return diff;
+      }
+      return null;
+    }
+    if (expected !== actual) {
+      return `${path}: expected ${snippet(expected)}, got ${snippet(actual)}`;
+    }
+    return null;
+  }
+
   // src/formatter/formatter.ts
+  var BINARY_PRECEDENCE = {
+    "==": 7 /* Equality */,
+    "!=": 7 /* Equality */,
+    "<": 8 /* Comparison */,
+    "<=": 8 /* Comparison */,
+    ">": 8 /* Comparison */,
+    ">=": 8 /* Comparison */,
+    "+": 10 /* Additive */,
+    "-": 10 /* Additive */,
+    "*": 11 /* Multiplicative */,
+    "/": 11 /* Multiplicative */,
+    "%": 11 /* Multiplicative */,
+    "**": 12 /* Power */
+  };
   var Formatter = class {
     constructor(options) {
       __publicField(this, "options");
@@ -10497,6 +10576,9 @@ var TinyLangBundle = (() => {
     }
     /**
      * Format a TinyLang source string.
+     *
+     * @throws FormatterError if the result cannot be shown to be equivalent to the
+     * input. Callers may rely on this: output that is returned has been verified.
      */
     format(source, options) {
       const opts = options ? { ...this.options, ...options } : this.options;
@@ -10504,14 +10586,39 @@ var TinyLangBundle = (() => {
       this.options = opts;
       this.indentLevel = 0;
       try {
-        const lexer = new Lexer(source);
-        const tokens = lexer.tokenize();
-        const parser = new Parser(tokens);
-        const program = parser.parse();
-        const result = this.formatProgram(program);
-        return opts.insertFinalNewline ? result + "\n" : result;
+        const program = parseSource(source);
+        const body = this.formatProgram(program);
+        const result = opts.insertFinalNewline ? body + "\n" : body;
+        this.verifyRoundTrip(program, result);
+        return result;
       } finally {
         this.options = prevOptions;
+      }
+    }
+    /**
+     * Prove that `output` parses back to the AST it was rendered from.
+     *
+     * Exhaustive switches catch node types the formatter has never heard of. This
+     * catches everything else: a missing pair of parentheses, a dropped escape, a
+     * construct whose printed form the parser reads back differently. Without it
+     * the formatter can only promise to handle the mistakes someone anticipated.
+     */
+    verifyRoundTrip(program, output) {
+      let reparsed;
+      try {
+        reparsed = parseSource(output);
+      } catch (e) {
+        throw new FormatterError(
+          `Internal formatter error: the formatted output does not parse. Refusing to return it, because it would corrupt the file.
+Parse error: ${e instanceof Error ? e.message : String(e)}`
+        );
+      }
+      const difference = astDifference(program, reparsed);
+      if (difference !== null) {
+        throw new FormatterError(
+          `Internal formatter error: formatting would change the meaning of this code. Refusing to return the result.
+First difference at ${difference}`
+        );
       }
     }
     formatProgram(program) {
@@ -10519,7 +10626,7 @@ var TinyLangBundle = (() => {
       let prevWasDeclaration = false;
       for (let i = 0; i < program.body.length; i++) {
         const stmt = program.body[i];
-        const isDeclaration = stmt.type === "FunctionDeclaration" || stmt.type === "ClassDeclaration" || stmt.type === "TestDeclaration";
+        const isDeclaration = stmt.type === "FunctionDeclaration" || stmt.type === "ClassDeclaration" || stmt.type === "TestDeclaration" || stmt.type === "EnumDeclaration";
         if (i > 0 && (isDeclaration || prevWasDeclaration)) {
           parts.push("");
         }
@@ -10528,14 +10635,19 @@ var TinyLangBundle = (() => {
       }
       return parts.join("\n");
     }
+    // ============ Statements ============
     formatStatement(stmt) {
       switch (stmt.type) {
         case "VariableDeclaration":
           return this.formatVariableDeclaration(stmt);
+        case "DestructuringDeclaration":
+          return this.formatDestructuringDeclaration(stmt);
         case "FunctionDeclaration":
           return this.formatFunctionDeclaration(stmt);
         case "ClassDeclaration":
           return this.formatClassDeclaration(stmt);
+        case "EnumDeclaration":
+          return this.formatEnumDeclaration(stmt);
         case "ReturnStatement":
           return this.formatReturnStatement(stmt);
         case "IfStatement":
@@ -10558,14 +10670,30 @@ var TinyLangBundle = (() => {
           return this.formatMatchStatement(stmt);
         case "TestDeclaration":
           return this.formatTestDeclaration(stmt);
-        default:
-          return "";
+        case "TryCatchStatement":
+          return this.formatTryCatchStatement(stmt);
+        case "ThrowStatement":
+          return this.formatThrowStatement(stmt);
+        default: {
+          const unhandled = stmt;
+          throw new FormatterError(
+            `Unsupported statement type: ${unhandled.type}`,
+            unhandled.position?.line
+          );
+        }
       }
     }
     formatVariableDeclaration(stmt) {
       const keyword = stmt.constant ? "const" : "let";
       const value = this.formatExpression(stmt.value);
       return this.indent(`${keyword} ${stmt.name} = ${value}`);
+    }
+    formatDestructuringDeclaration(stmt) {
+      const keyword = stmt.constant ? "const" : "let";
+      const names = stmt.pattern.names.join(", ");
+      const pattern = stmt.pattern.kind === "array" ? `[${names}]` : `{${names}}`;
+      const value = this.formatExpression(stmt.value);
+      return this.indent(`${keyword} ${pattern} = ${value}`);
     }
     formatFunctionDeclaration(stmt) {
       const params = this.formatParams(stmt.params);
@@ -10598,6 +10726,23 @@ ${close}`;
       lines.push(this.indent("}"));
       return lines.join("\n");
     }
+    /**
+     * Enum variants are newline-separated, not comma-separated: the parser reads
+     * a bare list of identifiers, so a comma is a syntax error.
+     */
+    formatEnumDeclaration(stmt) {
+      if (stmt.variants.length === 0) {
+        return this.indent(`enum ${stmt.name} {}`);
+      }
+      const lines = [this.indent(`enum ${stmt.name} {`)];
+      this.indentLevel++;
+      for (const variant of stmt.variants) {
+        lines.push(this.indent(variant));
+      }
+      this.indentLevel--;
+      lines.push(this.indent("}"));
+      return lines.join("\n");
+    }
     formatReturnStatement(stmt) {
       if (stmt.value) {
         return this.indent(`return ${this.formatExpression(stmt.value)}`);
@@ -10605,26 +10750,7 @@ ${close}`;
       return this.indent("return");
     }
     formatIfStatement(stmt) {
-      const condition = this.formatExpression(stmt.condition);
-      const header = this.indent(`if ${condition} {`);
-      const body = this.formatBlock(stmt.consequent);
-      let result = `${header}
-${body}
-`;
-      if (stmt.alternate) {
-        if (Array.isArray(stmt.alternate)) {
-          const elseBody = this.formatBlock(stmt.alternate);
-          result += `${this.indent("} else {")}
-${elseBody}
-${this.indent("}")}`;
-        } else {
-          const elseIfStr = this.formatIfStatementInline(stmt.alternate);
-          result += `${this.indent("} else ")}${elseIfStr}`;
-        }
-      } else {
-        result += this.indent("}");
-      }
-      return result;
+      return this.indentStr() + this.formatIfStatementInline(stmt);
     }
     formatIfStatementInline(stmt) {
       const condition = this.formatExpression(stmt.condition);
@@ -10640,8 +10766,7 @@ ${body}
 ${elseBody}
 ${this.indent("}")}`;
         } else {
-          const elseIfStr = this.formatIfStatementInline(stmt.alternate);
-          result += `${this.indent("} else ")}${elseIfStr}`;
+          result += `${this.indent("} else ")}${this.formatIfStatementInline(stmt.alternate)}`;
         }
       } else {
         result += this.indent("}");
@@ -10666,8 +10791,16 @@ ${close}`;
 ${body}
 ${close}`;
     }
+    /**
+     * An expression statement whose leftmost token is `fn` has to be
+     * parenthesised: at statement position the parser reads `fn` as a function
+     * *declaration* and demands a name. `(fn(x) { ... })(1)` is the only spelling
+     * that survives a round trip.
+     */
     formatExpressionStatement(stmt) {
-      return this.indent(this.formatExpression(stmt.expression));
+      const text = this.formatExpression(stmt.expression);
+      const needsParens = leftmostExpression(stmt.expression).type === "FunctionExpression";
+      return this.indent(needsParens ? `(${text})` : text);
     }
     formatPrintStatement(stmt) {
       const exprs = stmt.expressions.map((e) => this.formatExpression(e)).join(", ");
@@ -10675,7 +10808,7 @@ ${close}`;
     }
     formatImportStatement(stmt) {
       const names = stmt.names.join(", ");
-      return this.indent(`import {${names}} from "${stmt.source}"`);
+      return this.indent(`import {${names}} from "${this.escapeString(stmt.source)}"`);
     }
     formatMatchStatement(stmt) {
       const subject = this.formatExpression(stmt.subject);
@@ -10683,30 +10816,23 @@ ${close}`;
       this.indentLevel++;
       for (const c of stmt.cases) {
         const pattern = this.formatExpression(c.pattern);
-        if (c.body.length === 1) {
-          const bodyStr = this.formatStatementInline(c.body[0]);
-          lines.push(this.indent(`when ${pattern} => ${bodyStr}`));
-        } else {
-          lines.push(this.indent(`when ${pattern} => {`));
-          const body = this.formatBlock(c.body);
-          lines.push(body);
-          lines.push(this.indent("}"));
-        }
+        lines.push(...this.formatCaseBody(`when ${pattern} => `, c.body));
       }
       if (stmt.defaultCase) {
-        if (stmt.defaultCase.length === 1) {
-          const bodyStr = this.formatStatementInline(stmt.defaultCase[0]);
-          lines.push(this.indent(`else => ${bodyStr}`));
-        } else {
-          lines.push(this.indent("else => {"));
-          const body = this.formatBlock(stmt.defaultCase);
-          lines.push(body);
-          lines.push(this.indent("}"));
-        }
+        lines.push(...this.formatCaseBody("else => ", stmt.defaultCase));
       }
       this.indentLevel--;
       lines.push(this.indent("}"));
       return lines.join("\n");
+    }
+    formatCaseBody(header, body) {
+      if (body.length === 1) {
+        return [this.indent(header + this.formatStatementInline(body[0]))];
+      }
+      const lines = [this.indent(header + "{")];
+      lines.push(this.formatBlock(body));
+      lines.push(this.indent("}"));
+      return lines;
     }
     formatTestDeclaration(stmt) {
       const desc = this.formatExpression(stmt.description);
@@ -10717,19 +10843,45 @@ ${close}`;
 ${body}
 ${close}`;
     }
-    formatStatementInline(stmt) {
-      const prevLevel = this.indentLevel;
-      this.indentLevel = 0;
-      const result = this.formatStatement(stmt);
-      this.indentLevel = prevLevel;
-      return result;
+    formatTryCatchStatement(stmt) {
+      const tryBody = this.formatBlock(stmt.tryBody);
+      const catchBody = this.formatBlock(stmt.catchBody);
+      return `${this.indent("try {")}
+${tryBody}
+${this.indent(`} catch ${stmt.catchVariable} {`)}
+${catchBody}
+` + this.indent("}");
     }
-    formatExpression(expr) {
+    formatThrowStatement(stmt) {
+      return this.indent(`throw ${this.formatExpression(stmt.value)}`);
+    }
+    /**
+     * Format a statement for use after `when ... =>`, keeping the current
+     * indentation for any continuation lines but dropping it from the first line,
+     * which follows the arrow on a line that is already indented.
+     */
+    formatStatementInline(stmt) {
+      const rendered = this.formatStatement(stmt);
+      const prefix = this.indentStr();
+      return rendered.startsWith(prefix) ? rendered.slice(prefix.length) : rendered;
+    }
+    // ============ Expressions ============
+    /**
+     * Render `expr`, parenthesising it when its position requires tighter binding
+     * than the expression itself has.
+     */
+    formatExpression(expr, minPrec = 0 /* Lowest */) {
+      const text = this.renderExpression(expr);
+      return precedenceOf(expr) < minPrec ? `(${text})` : text;
+    }
+    renderExpression(expr) {
       switch (expr.type) {
         case "NumberLiteral":
-          return String(expr.value);
+          return formatNumber(expr.value);
         case "StringLiteral":
           return `"${this.escapeString(expr.value)}"`;
+        case "InterpolatedString":
+          return this.formatInterpolatedString(expr);
         case "BooleanLiteral":
           return String(expr.value);
         case "NullLiteral":
@@ -10754,6 +10906,12 @@ ${close}`;
           return this.formatMemberExpression(expr);
         case "IndexExpression":
           return this.formatIndexExpression(expr);
+        case "OptionalMemberExpression":
+          return this.formatOptionalMemberExpression(expr);
+        case "OptionalIndexExpression":
+          return this.formatOptionalIndexExpression(expr);
+        case "NullishCoalesceExpression":
+          return this.formatNullishCoalesceExpression(expr);
         case "ArrowFunction":
           return this.formatArrowFunction(expr);
         case "FunctionExpression":
@@ -10768,15 +10926,24 @@ ${close}`;
           return this.formatTernaryExpression(expr);
         case "RangeExpression":
           return this.formatRangeExpression(expr);
-        default:
-          return "";
+        case "PipeExpression":
+          return this.formatPipeExpression(expr);
+        case "PipeMethodExpression":
+          return this.formatPipeMethodExpression(expr);
+        default: {
+          const unhandled = expr;
+          throw new FormatterError(
+            `Unsupported expression type: ${unhandled.type}`,
+            unhandled.position?.line
+          );
+        }
       }
     }
     formatArrayLiteral(expr) {
       if (expr.elements.length === 0) return "[]";
       const inner = expr.elements.map((e) => this.formatExpression(e)).join(", ");
       const singleLine = `[${inner}]`;
-      if (this.currentLineWidth(singleLine) <= this.options.maxLineWidth) {
+      if (!singleLine.includes("\n") && this.currentLineWidth(singleLine) <= this.options.maxLineWidth) {
         return singleLine;
       }
       const lines = ["["];
@@ -10793,7 +10960,7 @@ ${close}`;
       if (expr.properties.length === 0) return "{}";
       const inner = expr.properties.map((p) => `${p.key}: ${this.formatExpression(p.value)}`).join(", ");
       const singleLine = `{${inner}}`;
-      if (this.currentLineWidth(singleLine) <= this.options.maxLineWidth) {
+      if (!singleLine.includes("\n") && this.currentLineWidth(singleLine) <= this.options.maxLineWidth) {
         return singleLine;
       }
       const lines = ["{"];
@@ -10807,47 +10974,79 @@ ${close}`;
       lines.push(this.indentStr() + "}");
       return lines.join("\n");
     }
+    /**
+     * `a - b - c` and `a ** b ** c` group differently, so the two operands of a
+     * binary expression are not interchangeable: the associative side accepts the
+     * same precedence, the other side needs one level tighter. `**` is the only
+     * right-associative operator, and its left operand is parsed as a unary
+     * expression, which is why it is treated separately.
+     */
     formatBinaryExpression(expr) {
-      const left = this.formatExpression(expr.left);
-      const right = this.formatExpression(expr.right);
+      const prec = BINARY_PRECEDENCE[expr.operator];
+      if (prec === void 0) {
+        throw new FormatterError(
+          `Unknown binary operator: ${expr.operator}`,
+          expr.position?.line
+        );
+      }
+      if (expr.operator === "**") {
+        const left2 = this.formatExpression(expr.left, 13 /* Unary */);
+        const right2 = this.formatExpression(expr.right, 12 /* Power */);
+        return `${left2} ** ${right2}`;
+      }
+      const left = this.formatExpression(expr.left, prec);
+      const right = this.formatExpression(expr.right, prec + 1);
       return `${left} ${expr.operator} ${right}`;
     }
     formatUnaryExpression(expr) {
-      const operand = this.formatExpression(expr.operand);
+      const operand = this.formatExpression(expr.operand, 13 /* Unary */);
       if (expr.operator === "not") {
         return `not ${operand}`;
+      }
+      if (operand.startsWith("-")) {
+        return `${expr.operator}(${operand})`;
       }
       return `${expr.operator}${operand}`;
     }
     formatLogicalExpression(expr) {
-      const left = this.formatExpression(expr.left);
-      const right = this.formatExpression(expr.right);
+      const prec = expr.operator === "or" ? 5 /* Or */ : 6 /* And */;
+      const left = this.formatExpression(expr.left, prec);
+      const right = this.formatExpression(expr.right, prec + 1);
       return `${left} ${expr.operator} ${right}`;
     }
     formatAssignmentExpression(expr) {
-      const target = this.formatExpression(expr.target);
-      const value = this.formatExpression(expr.value);
+      const target = this.formatExpression(expr.target, 14 /* Postfix */);
+      const value = this.formatExpression(expr.value, 1 /* Assignment */);
       return `${target} ${expr.operator} ${value}`;
     }
     formatCallExpression(expr) {
-      const callee = this.formatExpression(expr.callee);
+      const callee = this.formatExpression(expr.callee, 14 /* Postfix */);
       const args = expr.args.map((a) => this.formatExpression(a)).join(", ");
       return `${callee}(${args})`;
     }
     formatMemberExpression(expr) {
-      const obj = this.formatExpression(expr.object);
-      return `${obj}.${expr.property}`;
+      return `${this.formatExpression(expr.object, 14 /* Postfix */)}.${expr.property}`;
     }
     formatIndexExpression(expr) {
-      const obj = this.formatExpression(expr.object);
-      const index = this.formatExpression(expr.index);
-      return `${obj}[${index}]`;
+      const obj = this.formatExpression(expr.object, 14 /* Postfix */);
+      return `${obj}[${this.formatExpression(expr.index)}]`;
+    }
+    formatOptionalMemberExpression(expr) {
+      return `${this.formatExpression(expr.object, 14 /* Postfix */)}?.${expr.property}`;
+    }
+    formatOptionalIndexExpression(expr) {
+      const obj = this.formatExpression(expr.object, 14 /* Postfix */);
+      return `${obj}?.[${this.formatExpression(expr.index)}]`;
+    }
+    formatNullishCoalesceExpression(expr) {
+      const left = this.formatExpression(expr.left, 4 /* Nullish */);
+      const right = this.formatExpression(expr.right, 5 /* Or */);
+      return `${left} ?? ${right}`;
     }
     formatArrowFunction(expr) {
       const params = this.formatParams(expr.params);
       if (Array.isArray(expr.body)) {
-        const header = `(${params}) => {`;
-        const lines = [header];
+        const lines = [`(${params}) => {`];
         this.indentLevel++;
         for (const s of expr.body) {
           lines.push(this.formatStatement(s));
@@ -10855,15 +11054,14 @@ ${close}`;
         this.indentLevel--;
         lines.push(this.indentStr() + "}");
         return lines.join("\n");
-      } else {
-        const body = this.formatExpression(expr.body);
-        return `(${params}) => ${body}`;
       }
+      const body = this.formatExpression(expr.body);
+      const wrap = leftmostExpression(expr.body).type === "ObjectLiteral";
+      return `(${params}) => ${wrap ? `(${body})` : body}`;
     }
     formatFunctionExpression(expr) {
       const params = this.formatParams(expr.params);
-      const header = `fn(${params}) {`;
-      const lines = [header];
+      const lines = [`fn(${params}) {`];
       this.indentLevel++;
       for (const s of expr.body) {
         lines.push(this.formatStatement(s));
@@ -10872,8 +11070,13 @@ ${close}`;
       lines.push(this.indentStr() + "}");
       return lines.join("\n");
     }
+    /**
+     * `new` takes a *primary* callee: the parser reads `new a.B()` as
+     * `(new a).B()`, so a callee that is anything more than a primary has to be
+     * parenthesised to keep its meaning.
+     */
     formatNewExpression(expr) {
-      const callee = this.formatExpression(expr.callee);
+      const callee = this.formatExpression(expr.callee, 15 /* Primary */);
       const args = expr.args.map((a) => this.formatExpression(a)).join(", ");
       return `new ${callee}(${args})`;
     }
@@ -10881,17 +11084,43 @@ ${close}`;
       return `...${this.formatExpression(expr.argument)}`;
     }
     formatTernaryExpression(expr) {
-      const condition = this.formatExpression(expr.condition);
-      const consequent = this.formatExpression(expr.consequent);
-      const alternate = this.formatExpression(expr.alternate);
+      const condition = this.formatExpression(expr.condition, 3 /* Pipe */);
+      const consequent = this.formatExpression(expr.consequent, 1 /* Assignment */);
+      const alternate = this.formatExpression(expr.alternate, 1 /* Assignment */);
       return `${condition} ? ${consequent} : ${alternate}`;
     }
     formatRangeExpression(expr) {
-      const start = this.formatExpression(expr.start);
-      const end = this.formatExpression(expr.end);
-      const op = expr.inclusive ? "..=" : "..";
-      return `${start}${op}${end}`;
+      const start = this.formatExpression(expr.start, 10 /* Additive */);
+      const end = this.formatExpression(expr.end, 10 /* Additive */);
+      return `${start}${expr.inclusive ? "..=" : ".."}${end}`;
     }
+    formatPipeExpression(expr) {
+      const left = this.formatExpression(expr.left, 3 /* Pipe */);
+      const right = this.formatExpression(expr.right, 4 /* Nullish */);
+      return `${left} |> ${right}`;
+    }
+    formatPipeMethodExpression(expr) {
+      const left = this.formatExpression(expr.left, 3 /* Pipe */);
+      const args = expr.args.map((a) => this.formatExpression(a)).join(", ");
+      return `${left} |> .${expr.method}(${args})`;
+    }
+    /**
+     * f-strings. Literal text is escaped for the *lexer* (quotes, newlines) and
+     * then for the f-string scanner: a literal `{` has to be written `\{` or it
+     * would be read back as the start of an interpolation.
+     */
+    formatInterpolatedString(expr) {
+      let out = 'f"';
+      for (const part of expr.parts) {
+        if (part.kind === "literal") {
+          out += this.escapeString(part.value).replace(/\{/g, "\\{");
+        } else {
+          out += `{${this.formatExpression(part.expression)}}`;
+        }
+      }
+      return out + '"';
+    }
+    // ============ Shared helpers ============
     formatParams(params) {
       return params.map((p) => {
         if (p.defaultValue) {
@@ -10916,9 +11145,91 @@ ${close}`;
       return this.indentLevel * this.options.indentSize + text.length;
     }
     escapeString(str) {
-      return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\t/g, "\\t").replace(/\r/g, "\\r");
+      return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\t/g, "\\t").replace(/\r/g, "\\r").replace(/\0/g, "\\0");
     }
   };
+  function parseSource(source) {
+    return new Parser(new Lexer(source).tokenize()).parse();
+  }
+  function precedenceOf(expr) {
+    switch (expr.type) {
+      case "AssignmentExpression":
+        return 1 /* Assignment */;
+      // An arrow function's body swallows a whole expression, and a spread's
+      // argument does too, so both bind as loosely as an assignment: anywhere
+      // tighter they need parentheses, as in `((x) => x)(1)`.
+      case "ArrowFunction":
+      case "SpreadExpression":
+        return 1 /* Assignment */;
+      case "TernaryExpression":
+        return 2 /* Ternary */;
+      case "PipeExpression":
+      case "PipeMethodExpression":
+        return 3 /* Pipe */;
+      case "NullishCoalesceExpression":
+        return 4 /* Nullish */;
+      case "LogicalExpression":
+        return expr.operator === "or" ? 5 /* Or */ : 6 /* And */;
+      case "BinaryExpression":
+        return BINARY_PRECEDENCE[expr.operator] ?? 0 /* Lowest */;
+      case "RangeExpression":
+        return 9 /* Range */;
+      case "UnaryExpression":
+        return 13 /* Unary */;
+      case "CallExpression":
+      case "MemberExpression":
+      case "IndexExpression":
+      case "OptionalMemberExpression":
+      case "OptionalIndexExpression":
+        return 14 /* Postfix */;
+      default:
+        return 15 /* Primary */;
+    }
+  }
+  function leftmostExpression(expr) {
+    switch (expr.type) {
+      case "BinaryExpression":
+      case "LogicalExpression":
+      case "PipeExpression":
+      case "NullishCoalesceExpression":
+        return leftmostExpression(expr.left);
+      case "PipeMethodExpression":
+        return leftmostExpression(expr.left);
+      case "AssignmentExpression":
+        return leftmostExpression(expr.target);
+      case "TernaryExpression":
+        return leftmostExpression(expr.condition);
+      case "RangeExpression":
+        return leftmostExpression(expr.start);
+      case "CallExpression":
+        return leftmostExpression(expr.callee);
+      case "MemberExpression":
+      case "IndexExpression":
+      case "OptionalMemberExpression":
+      case "OptionalIndexExpression":
+        return leftmostExpression(expr.object);
+      default:
+        return expr;
+    }
+  }
+  function formatNumber(value) {
+    const text = String(value);
+    if (!/e/i.test(text)) return text;
+    const match = /^(-?)(\d+)(?:\.(\d+))?e([+-]?\d+)$/i.exec(text);
+    if (!match) {
+      throw new FormatterError(`Cannot format the number ${text} as a literal`);
+    }
+    const [, sign, intPart, fracPart = "", exponent] = match;
+    const digits = intPart + fracPart;
+    const pointPosition = intPart.length + Number(exponent);
+    if (pointPosition <= 0) {
+      return `${sign}0.${"0".repeat(-pointPosition)}${digits}`;
+    }
+    if (pointPosition >= digits.length) {
+      return `${sign}${digits}${"0".repeat(pointPosition - digits.length)}`;
+    }
+    return `${sign}${digits.slice(0, pointPosition)}.${digits.slice(pointPosition)}`;
+  }
 
   // src/linter/rules/unused-variables.ts
   function unusedVariablesRule(program, _source) {
