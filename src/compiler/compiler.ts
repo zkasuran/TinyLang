@@ -51,6 +51,7 @@ import {
 } from '../types/values';
 import { OpCode, CompoundOp } from './opcodes';
 import { Chunk } from './chunk';
+import { CompilerError } from './errors';
 
 /**
  * Represents a local variable in compile-time scope
@@ -121,12 +122,7 @@ export interface CompiledFunction {
   defaultParams: number;
 }
 
-export class CompilerError extends Error {
-  constructor(message: string, public line?: number) {
-    super(message);
-    this.name = 'CompilerError';
-  }
-}
+export { CompilerError } from './errors';
 
 export class Compiler {
   private current: CompilerScope;

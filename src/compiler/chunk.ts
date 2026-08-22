@@ -7,12 +7,23 @@
  */
 
 import { RuntimeValue } from '../types/values';
+import { CompilerError } from './errors';
 
 /** Magic bytes for the .tinyc binary format: 'TINY' */
 const MAGIC_BYTES = [0x54, 0x49, 0x4E, 0x59];
 
 /** Current version of the bytecode format */
 const FORMAT_VERSION = 1;
+
+/**
+ * Largest value a 16-bit operand can hold.
+ *
+ * Every operand in this bytecode is 16 bits: jump and loop targets are absolute
+ * code addresses, and constant-pool and local indices are direct indices. So a
+ * chunk cannot exceed 65535 bytes of code, hold more than 65536 constants, or
+ * address more than 65536 locals.
+ */
+const MAX_16BIT_OPERAND = 0xFFFF;
 
 /** Type for constant pool entries - can be RuntimeValues or CompiledFunctions */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -47,10 +58,32 @@ export class Chunk {
    * Write a 16-bit value as two bytes (big-endian)
    */
   write16(value: number, line: number): void {
+    this.checkOperand(value, line);
     this.code.push((value >> 8) & 0xFF);
     this.lines.push(line);
     this.code.push(value & 0xFF);
     this.lines.push(line);
+  }
+
+  /**
+   * Reject an operand that does not fit in 16 bits.
+   *
+   * Both write16 and patch16 used to mask with `& 0xFF` and no bounds check, so
+   * a program compiling to more than 64KB of bytecode kept compiling: jump
+   * targets silently wrapped and the VM jumped to an address 65536 bytes short
+   * of the intended one, producing arbitrary misbehaviour with no diagnostic.
+   * A clear failure at compile time is the only honest answer.
+   */
+  private checkOperand(value: number, line?: number): void {
+    if (!Number.isInteger(value) || value < 0 || value > MAX_16BIT_OPERAND) {
+      throw new CompilerError(
+        `Bytecode operand ${value} does not fit in the 16 bits this format ` +
+          `allows (0..${MAX_16BIT_OPERAND}). A single chunk cannot exceed ` +
+          `${MAX_16BIT_OPERAND} bytes of code, ${MAX_16BIT_OPERAND + 1} constants ` +
+          `or ${MAX_16BIT_OPERAND + 1} locals. Split the program into smaller functions.`,
+        line
+      );
+    }
   }
 
   /**
@@ -72,6 +105,7 @@ export class Chunk {
    * Patch a 16-bit value at a given offset (for backpatching jumps)
    */
   patch16(offset: number, value: number): void {
+    this.checkOperand(value, this.lines[offset]);
     this.code[offset] = (value >> 8) & 0xFF;
     this.code[offset + 1] = value & 0xFF;
   }

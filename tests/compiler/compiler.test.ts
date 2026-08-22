@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Compiler, Chunk, OpCode, disassemble, optimize } from '../../src/compiler';
+import { Compiler, Chunk, OpCode, disassemble, optimize, CompilerError } from '../../src/compiler';
 import {
   instructionSize,
   hasAddressOperand,
@@ -558,5 +558,61 @@ describe('bytecode structural invariants', () => {
     const opt: string[] = [];
     new VM({ output: (m) => opt.push(m) }).run(optimize(chunk));
     expect(opt).toEqual(plain);
+  });
+});
+
+
+describe('16-bit operand limit', () => {
+  it('rejects a write16 operand that does not fit in 16 bits', () => {
+    const chunk = new Chunk();
+    expect(() => chunk.write16(0xFFFF, 1)).not.toThrow();
+    expect(() => chunk.write16(0x10000, 1)).toThrow(CompilerError);
+    expect(() => chunk.write16(0x10000, 1)).toThrow(/does not fit in the 16 bits/);
+    expect(() => chunk.write16(-1, 1)).toThrow(CompilerError);
+  });
+
+  it('rejects a patch16 operand that does not fit in 16 bits', () => {
+    const chunk = new Chunk();
+    chunk.write16(0, 1);
+    expect(() => chunk.patch16(0, 0xFFFF)).not.toThrow();
+    expect(() => chunk.patch16(0, 0x10000)).toThrow(CompilerError);
+  });
+
+  it('names the limit in the message rather than truncating silently', () => {
+    const chunk = new Chunk();
+    let message = '';
+    try {
+      chunk.write16(70000, 1);
+    } catch (e) {
+      message = (e as Error).message;
+    }
+    expect(message).toContain('65535');
+    expect(message).toContain('70000');
+  });
+
+  it('fails to compile a jump that would span more than 64KB instead of wrapping', () => {
+    // A chunk larger than 64KB used to keep compiling: `& 0xFF` silently
+    // wrapped the jump target and the VM jumped 65536 bytes short of where the
+    // compiler intended.
+    const body: string[] = [];
+    for (let i = 0; i < 20000; i++) {
+      body.push(`let v${i} = ${i % 7}`);
+    }
+    const source = `if true {\n${body.join('\n')}\n}\nprint("after")`;
+    expect(() => compileSource(source)).toThrow(CompilerError);
+    expect(() => compileSource(source)).toThrow(/16 bits/);
+  });
+
+  it('still compiles a chunk that fits, right up to the limit', () => {
+    const body: string[] = [];
+    for (let i = 0; i < 500; i++) {
+      body.push(`let v${i} = ${i % 7}`);
+    }
+    const source = `if true {\n${body.join('\n')}\n}\nprint("after")`;
+    const chunk = compileSource(source);
+    expect(chunk.code.length).toBeLessThan(0xFFFF);
+    const out: string[] = [];
+    new VM({ output: (m) => out.push(m) }).run(chunk);
+    expect(out).toEqual(['after']);
   });
 });
