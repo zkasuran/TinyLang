@@ -30,6 +30,8 @@ import {
   FunctionExpression,
   NewExpression,
   RangeExpression,
+  PipeExpression,
+  PipeMethodExpression,
   Parameter,
 } from '../types/ast';
 import {
@@ -658,6 +660,12 @@ export class Compiler {
       case 'RangeExpression':
         this.compileRangeExpression(expr);
         break;
+      case 'PipeExpression':
+        this.compilePipeExpression(expr);
+        break;
+      case 'PipeMethodExpression':
+        this.compilePipeMethodExpression(expr);
+        break;
     }
   }
 
@@ -930,6 +938,43 @@ export class Compiler {
     this.emitConstant(createBoolean(expr.inclusive), line);
     this.emit(OpCode.CALL, line);
     this.emit16(3, line);
+  }
+
+  private compilePipeExpression(expr: PipeExpression): void {
+    const line = expr.position.line;
+
+    // If right is a CallExpression, prepend left as the first argument
+    if (expr.right.type === 'CallExpression') {
+      const callExpr = expr.right as CallExpression;
+      this.compileExpression(callExpr.callee);
+      this.compileExpression(expr.left);
+      for (const arg of callExpr.args) {
+        this.compileExpression(arg);
+      }
+      this.emit(OpCode.CALL, line);
+      this.emit16(callExpr.args.length + 1, line);
+    } else {
+      // Right is a function reference - call it with left as the argument
+      this.compileExpression(expr.right);
+      this.compileExpression(expr.left);
+      this.emit(OpCode.CALL, line);
+      this.emit16(1, line);
+    }
+  }
+
+  private compilePipeMethodExpression(expr: PipeMethodExpression): void {
+    const line = expr.position.line;
+    // Compile as obj.method(args) - load obj, get property, call with args
+    this.compileExpression(expr.left);
+    const nameIdx = this.current.chunk.addConstant(createString(expr.method));
+    this.emit(OpCode.GET_PROP, line);
+    this.emit16(nameIdx, line);
+    // Push args
+    for (const arg of expr.args) {
+      this.compileExpression(arg);
+    }
+    this.emit(OpCode.CALL, line);
+    this.emit16(expr.args.length, line);
   }
 }
 

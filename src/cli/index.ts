@@ -11,7 +11,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { TinyLang } from '../tinylang';
 import { Repl } from '../repl';
-import { Compiler, Chunk, disassemble, optimize } from '../compiler';
+import { Compiler, Chunk, disassemble, optimize, WasmCompiler } from '../compiler';
 import { VM } from '../vm';
 import { Debugger, getHelpText } from '../debugger';
 import { Formatter } from '../formatter';
@@ -983,6 +983,36 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function cmdWasm(filePath: string, flags: Record<string, string | boolean>): void {
+  const source = readFileChecked(filePath);
+  const outputPath = typeof flags['output'] === 'string'
+    ? flags['output']
+    : filePath.replace(/\.tiny$/, '.wat');
+
+  try {
+    const compiler = new WasmCompiler();
+    const result = compiler.compile(source);
+
+    if (result.errors.length > 0) {
+      console.log(yellow('Warnings:'));
+      for (const err of result.errors) {
+        console.log(yellow(`  - ${err}`));
+      }
+      console.log('');
+    }
+
+    fs.writeFileSync(outputPath, result.wat);
+    const bytes = Buffer.byteLength(result.wat, 'utf-8');
+    console.log(green(`Compiled to WebAssembly: ${outputPath} (${bytes} bytes)`));
+    if (result.exports.length > 0) {
+      console.log(dim(`Exports: ${result.exports.join(', ')}`));
+    }
+  } catch (e) {
+    showError(e instanceof Error ? e.message : String(e));
+    process.exit(1);
+  }
+}
+
 function cmdVersion(): void {
   console.log(`TinyLang v${VERSION}`);
   console.log(`  Runtime: Node.js ${process.version}`);
@@ -1011,6 +1041,7 @@ ${yellow('COMMANDS:')}
   ${cyan('check')} <file.tiny>      Check syntax without executing
   ${cyan('ast')} <file.tiny>        Pretty-print the AST as a tree
   ${cyan('profile')} <file.tiny>    Profile execution (timing, memory, stats)
+  ${cyan('wasm')} <file.tiny>       Compile to WebAssembly Text Format (.wat)
   ${cyan('version')}                Show version information
   ${cyan('help')}                   Show this help message
 
@@ -1024,6 +1055,7 @@ ${yellow('OPTIONS:')}
   ${dim('bench:')}    --iterations/-n <N>  Number of iterations (default: 100)
              --compare            Compare interpreter vs VM
   ${dim('doc:')}      --output/-o <path>   Write to file instead of stdout
+  ${dim('wasm:')}     --output/-o <path>   Output .wat file path
 
 ${yellow('EXAMPLES:')}
   tinylang run hello.tiny
@@ -1157,6 +1189,14 @@ function main(): void {
         process.exit(1);
       }
       cmdProfile(positional[0]);
+      break;
+
+    case 'wasm':
+      if (!positional[0]) {
+        showError('Please provide a file to compile', 'Usage: tinylang wasm <file.tiny>');
+        process.exit(1);
+      }
+      cmdWasm(positional[0], flags);
       break;
 
     case 'version':

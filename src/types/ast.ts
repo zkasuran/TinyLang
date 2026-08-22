@@ -189,6 +189,7 @@ export type Expression =
   | TernaryExpression
   | RangeExpression
   | PipeExpression
+  | PipeMethodExpression
   | OptionalMemberExpression
   | OptionalIndexExpression
   | NullishCoalesceExpression;
@@ -331,6 +332,13 @@ export interface PipeExpression extends BaseNode {
   type: 'PipeExpression';
   left: Expression;
   right: Expression;
+}
+
+export interface PipeMethodExpression extends BaseNode {
+  type: 'PipeMethodExpression';
+  left: Expression;
+  method: string;
+  args: Expression[];
 }
 
 export interface OptionalMemberExpression extends BaseNode {

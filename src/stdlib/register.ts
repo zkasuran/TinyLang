@@ -12,6 +12,9 @@ import { stringFunctions } from './strings';
 import { arrayFunctions } from './arrays';
 import { typeFunctions } from './types';
 import { utilFunctions } from './utils';
+import { jsonFunctions } from './json';
+import { cryptoFunctions } from './crypto';
+import { collectionsFunctions } from './collections';
 
 type OutputHandler = (message: string) => void;
 type InputHandler = (prompt: string) => string;
@@ -61,6 +64,21 @@ export function registerStdlib(env: Environment, options: StdlibOptions = {}): v
 
   // Register utility functions
   for (const fn of utilFunctions) {
+    env.define(fn.name, fn);
+  }
+
+  // Register JSON functions
+  for (const fn of jsonFunctions) {
+    env.define(fn.name, fn);
+  }
+
+  // Register crypto functions
+  for (const fn of cryptoFunctions) {
+    env.define(fn.name, fn);
+  }
+
+  // Register collections functions
+  for (const fn of collectionsFunctions) {
     env.define(fn.name, fn);
   }
 }

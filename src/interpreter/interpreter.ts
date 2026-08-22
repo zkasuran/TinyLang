@@ -43,6 +43,7 @@ import {
   DestructuringDeclaration,
   EnumDeclaration,
   PipeExpression,
+  PipeMethodExpression,
   OptionalMemberExpression,
   OptionalIndexExpression,
   NullishCoalesceExpression,
@@ -563,6 +564,8 @@ export class Interpreter {
         );
       case 'PipeExpression':
         return this.evalPipeExpression(expr as unknown as PipeExpression, env);
+      case 'PipeMethodExpression':
+        return this.evalPipeMethodExpression(expr as unknown as PipeMethodExpression, env);
       case 'OptionalMemberExpression':
         return this.evalOptionalMemberExpression(expr as unknown as OptionalMemberExpression, env);
       case 'OptionalIndexExpression':
@@ -1487,6 +1490,18 @@ export class Interpreter {
       return this.callFunction(callee, args, null, expr.right, env);
     }
 
+    // If right is an ArrowFunction or FunctionExpression, call it with left as the argument
+    if (expr.right.type === 'ArrowFunction' || expr.right.type === 'FunctionExpression') {
+      const fn = this.evalExpression(expr.right, env);
+      const syntheticCall = {
+        type: 'CallExpression' as const,
+        callee: expr.right,
+        args: [],
+        position: expr.position,
+      };
+      return this.callFunction(fn, [left], null, syntheticCall, env);
+    }
+
     // If right is an identifier or member expression, call it with left as the only argument
     const callee = this.evalExpression(expr.right, env);
     if (callee.type === 'function' || callee.type === 'native-function') {
@@ -1502,6 +1517,52 @@ export class Interpreter {
 
     throw new RuntimeError(
       `Right side of pipe operator (|>) must be a function or function call`,
+      expr.position.line,
+      expr.position.column
+    );
+  }
+
+  private evalPipeMethodExpression(expr: PipeMethodExpression, env: Environment): RuntimeValue {
+    const obj = this.evalExpression(expr.left, env);
+    const args = expr.args.map(arg => this.evalExpression(arg, env));
+
+    // Create a synthetic CallExpression for tryBuiltinMethod
+    const syntheticCall: CallExpression = {
+      type: 'CallExpression',
+      callee: {
+        type: 'MemberExpression',
+        object: expr.left,
+        property: expr.method,
+        position: expr.position,
+      } as Expression,
+      args: expr.args,
+      position: expr.position,
+    };
+
+    // Try built-in methods (array.sort, string.trim, etc.)
+    const builtinResult = this.tryBuiltinMethod(obj, expr.method, syntheticCall, env);
+    if (builtinResult !== undefined) {
+      return builtinResult;
+    }
+
+    // Try instance methods
+    if (obj.type === 'instance') {
+      const method = this.findMethod(obj.classRef, expr.method);
+      if (method) {
+        return this.callFunction(method, args, obj, syntheticCall, env);
+      }
+    }
+
+    // Try object function properties
+    if (obj.type === 'object') {
+      const prop = obj.properties.get(expr.method);
+      if (prop && (prop.type === 'function' || prop.type === 'native-function')) {
+        return this.callFunction(prop, args, obj, syntheticCall, env);
+      }
+    }
+
+    throw new RuntimeError(
+      `Cannot call method '${expr.method}' on ${obj.type}`,
       expr.position.line,
       expr.position.column
     );

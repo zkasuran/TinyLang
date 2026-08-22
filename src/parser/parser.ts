@@ -69,6 +69,7 @@ import {
   ThrowStatement,
   SpreadExpression,
   PipeExpression,
+  PipeMethodExpression,
   OptionalMemberExpression,
   OptionalIndexExpression,
   NullishCoalesceExpression,
@@ -714,13 +715,39 @@ export class Parser {
     let left = this.parseNullishCoalesce();
 
     while (this.match(TokenType.PIPE_ARROW)) {
-      const right = this.parseNullishCoalesce();
-      left = {
-        type: 'PipeExpression',
-        left,
-        right,
-        position: left.position,
-      } as PipeExpression;
+      // Check for .method() syntax: pipe into method call on left value
+      if (this.check(TokenType.DOT)) {
+        this.advance(); // consume the dot
+        const methodToken = this.expect(TokenType.IDENTIFIER, 'a method name',
+          'After |> . provide a method name to call on the piped value'
+        );
+        const args: Expression[] = [];
+        if (this.match(TokenType.LPAREN)) {
+          if (!this.check(TokenType.RPAREN)) {
+            args.push(this.parseExpression());
+            while (this.match(TokenType.COMMA)) {
+              args.push(this.parseExpression());
+            }
+          }
+          this.expect(TokenType.RPAREN, "')'", 'Close method call with )');
+        }
+        left = {
+          type: 'PipeMethodExpression',
+          left,
+          method: methodToken.value,
+          args,
+          position: left.position,
+        } as PipeMethodExpression;
+      } else {
+        // Check for arrow function: (params) => body
+        const right = this.parseNullishCoalesce();
+        left = {
+          type: 'PipeExpression',
+          left,
+          right,
+          position: left.position,
+        } as PipeExpression;
+      }
     }
 
     return left;
