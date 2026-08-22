@@ -40,3 +40,6 @@ export type { Diagnostic } from './linter';
 // Testing
 export { TestRunner, formatTestResults, AssertionError } from './testing';
 export type { TestResult } from './testing';
+
+// Module System
+export { ModuleResolver, ModuleLoader, STDLIB_PREFIX } from './modules';

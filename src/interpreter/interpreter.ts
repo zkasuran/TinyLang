@@ -24,6 +24,7 @@ import {
   WhileStatement,
   ForStatement,
   PrintStatement,
+  ImportStatement,
   MatchStatement,
   BinaryExpression,
   UnaryExpression,
@@ -62,6 +63,14 @@ import { DebugFrame, DebugAction } from '../debugger/types';
 
 export type OutputHandler = (message: string) => void;
 
+export interface ModuleLoaderInterface {
+  loadModule(filePath: string): Environment;
+}
+
+export interface ModuleResolverInterface {
+  resolve(importSource: string, fromFile: string): string;
+}
+
 export interface InterpreterOptions {
   /** Custom output handler (default: console.log) */
   output?: OutputHandler;
@@ -78,6 +87,11 @@ export class Interpreter {
   private globalEnv: Environment;
   private outputBuffer: string[] = [];
 
+  /** Module system support */
+  private moduleLoader: ModuleLoaderInterface | null = null;
+  private moduleResolver: ModuleResolverInterface | null = null;
+  private currentFile: string | null = null;
+
   /** Optional debug hook called before each statement */
   public debugHook?: (stmt: Statement, env: Environment, callStack: DebugFrame[]) => DebugAction;
 
@@ -88,6 +102,17 @@ export class Interpreter {
     this.output = options.output || ((msg: string) => console.log(msg));
     this.maxSteps = options.maxSteps || 1_000_000;
     this.globalEnv = new Environment();
+  }
+
+  /**
+   * Set the module loader and resolver for import statement support.
+   */
+  setModuleLoader(loader: ModuleLoaderInterface, currentFile: string, resolver?: ModuleResolverInterface): void {
+    this.moduleLoader = loader;
+    this.currentFile = currentFile;
+    if (resolver) {
+      this.moduleResolver = resolver;
+    }
   }
 
   /**
@@ -197,8 +222,7 @@ export class Interpreter {
         // Tests are only run by the test runner, not during normal execution
         return createNull();
       case 'ImportStatement':
-        // Import is handled at a higher level; for now just acknowledge
-        return createNull();
+        return this.evalImportStatement(stmt, env);
       default:
         throw new RuntimeError(
           `Unknown statement type: ${(stmt as unknown as Statement).type}`,
@@ -382,6 +406,51 @@ export class Interpreter {
     if (stmt.defaultCase) {
       const blockEnv = env.createChild();
       return this.executeStatements(stmt.defaultCase, blockEnv);
+    }
+
+    return createNull();
+  }
+
+  private evalImportStatement(stmt: ImportStatement, env: Environment): RuntimeValue {
+    if (!this.moduleLoader || !this.currentFile) {
+      // No module system configured - silently ignore (for REPL/playground mode)
+      return createNull();
+    }
+
+    try {
+      // Use the module resolver interface if available, otherwise use loader directly
+      let resolvedPath: string;
+      if (this.moduleResolver) {
+        resolvedPath = this.moduleResolver.resolve(stmt.source, this.currentFile);
+      } else {
+        // Fallback: treat source as path relative to current file
+        const dir = stmt.source.startsWith('./') || stmt.source.startsWith('../')
+          ? require('path').dirname(this.currentFile)
+          : require('path').dirname(this.currentFile);
+        resolvedPath = require('path').resolve(dir, stmt.source.endsWith('.tiny') ? stmt.source : stmt.source + '.tiny');
+      }
+      const moduleEnv = this.moduleLoader.loadModule(resolvedPath);
+
+      // Extract named imports from the module environment
+      for (const name of stmt.names) {
+        try {
+          const value = moduleEnv.lookup(name);
+          env.define(name, value);
+        } catch {
+          throw new RuntimeError(
+            `'${name}' is not exported from module '${stmt.source}'`,
+            stmt.position.line,
+            stmt.position.column
+          );
+        }
+      }
+    } catch (e) {
+      if (e instanceof RuntimeError) throw e;
+      throw new RuntimeError(
+        e instanceof Error ? e.message : String(e),
+        stmt.position.line,
+        stmt.position.column
+      );
     }
 
     return createNull();

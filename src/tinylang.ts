@@ -17,6 +17,8 @@ import { RuntimeError } from './types/values';
 import { Compiler } from './compiler/compiler';
 import { Chunk } from './compiler/chunk';
 import { VM } from './vm/vm';
+import { ModuleLoader } from './modules/loader';
+import { ModuleResolver } from './modules/resolver';
 
 export interface RunResult {
   success: boolean;
@@ -66,6 +68,14 @@ export class TinyLang {
   }
 
   /**
+   * Set up module system for file-based execution.
+   */
+  setModuleContext(loader: ModuleLoader, filePath: string): void {
+    const resolver = new ModuleResolver();
+    this.interpreter.setModuleLoader(loader, filePath, resolver);
+  }
+
+  /**
    * Run a TinyLang source string and return the result
    */
   run(source: string): RunResult {
@@ -94,9 +104,13 @@ export class TinyLang {
   }
 
   /**
-   * Run a file (source string with file context for error messages)
+   * Run a file (source string with file context for module resolution)
    */
-  runFile(source: string, _filename?: string): RunResult {
+  runFile(source: string, filename?: string): RunResult {
+    if (filename) {
+      const loader = new ModuleLoader();
+      this.setModuleContext(loader, filename);
+    }
     return this.run(source);
   }
 
