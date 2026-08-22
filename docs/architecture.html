@@ -189,7 +189,7 @@
 }</code></pre>
 
         <h3>Opcode Reference</h3>
-        <p>TinyLang uses 44 bytecode instructions organized into categories:</p>
+        <p>TinyLang uses 63 bytecode instructions organized into categories:</p>
 
         <h4>Stack Operations</h4>
         <table>
@@ -198,6 +198,8 @@
             <tr><td><code>CONST</code></td><td><code>0x01</code></td><td>Push a constant from the constant pool</td></tr>
             <tr><td><code>POP</code></td><td><code>0x02</code></td><td>Pop the top of stack</td></tr>
             <tr><td><code>DUP</code></td><td><code>0x03</code></td><td>Duplicate the top of stack</td></tr>
+            <tr><td><code>DUP2</code></td><td><code>0x04</code></td><td>Duplicate the top two values, preserving their order</td></tr>
+            <tr><td><code>ROT</code></td><td><code>0x05</code></td><td>Move the deepest of the top N values to the top</td></tr>
           </tbody>
         </table>
 
@@ -212,6 +214,7 @@
             <tr><td><code>MOD</code></td><td><code>0x14</code></td><td>Modulo</td></tr>
             <tr><td><code>POW</code></td><td><code>0x15</code></td><td>Exponentiation</td></tr>
             <tr><td><code>NEGATE</code></td><td><code>0x16</code></td><td>Unary negation</td></tr>
+            <tr><td><code>COMPOUND</code></td><td><code>0x17</code></td><td>Apply a compound-assignment operator</td></tr>
           </tbody>
         </table>
 
@@ -246,6 +249,7 @@
             <tr><td><code>JMP_IF_FALSE</code></td><td><code>0x41</code></td><td>Jump if top of stack is falsy</td></tr>
             <tr><td><code>JMP_IF_TRUE</code></td><td><code>0x42</code></td><td>Jump if top of stack is truthy</td></tr>
             <tr><td><code>LOOP</code></td><td><code>0x43</code></td><td>Jump backwards (loop back)</td></tr>
+            <tr><td><code>JMP_IF_NULL</code></td><td><code>0x44</code></td><td>Jump if top of stack is null (used by ?. and ??)</td></tr>
           </tbody>
         </table>
 
@@ -259,6 +263,9 @@
             <tr><td><code>STORE_GLOBAL</code></td><td><code>0x53</code></td><td>Store top of stack in global</td></tr>
             <tr><td><code>LOAD_UPVALUE</code></td><td><code>0x54</code></td><td>Load captured closure variable</td></tr>
             <tr><td><code>STORE_UPVALUE</code></td><td><code>0x55</code></td><td>Store into captured closure variable</td></tr>
+            <tr><td><code>LOAD_ARGC</code></td><td><code>0x56</code></td><td>Push the number of arguments passed to this frame</td></tr>
+            <tr><td><code>DECLARE_GLOBAL</code></td><td><code>0x57</code></td><td>Bind a new global, rejecting a name already bound</td></tr>
+            <tr><td><code>DECLARE_CONST_GLOBAL</code></td><td><code>0x58</code></td><td>Declare a global that may never be reassigned</td></tr>
           </tbody>
         </table>
 
@@ -282,6 +289,13 @@
             <tr><td><code>SET_INDEX</code></td><td><code>0x73</code></td><td>Set value at index/key</td></tr>
             <tr><td><code>GET_PROP</code></td><td><code>0x74</code></td><td>Get object property</td></tr>
             <tr><td><code>SET_PROP</code></td><td><code>0x75</code></td><td>Set object property</td></tr>
+            <tr><td><code>ARRAY_APPEND</code></td><td><code>0x76</code></td><td>Append top of stack to the array beneath it</td></tr>
+            <tr><td><code>ARRAY_SPREAD</code></td><td><code>0x77</code></td><td>Spread an array/string into the array beneath it</td></tr>
+            <tr><td><code>DESTRUCT_ELEM</code></td><td><code>0x78</code></td><td>Extract element N from the array on top (null if absent)</td></tr>
+            <tr><td><code>DESTRUCT_PROP</code></td><td><code>0x79</code></td><td>Extract a property from the object on top (null if absent)</td></tr>
+            <tr><td><code>INDEX_OPTIONAL</code></td><td><code>0x7A</code></td><td>Index but yield null instead of throwing when out of range</td></tr>
+            <tr><td><code>GET_METHOD</code></td><td><code>0x7B</code></td><td>Resolve a property as a callable method</td></tr>
+            <tr><td><code>CHECK_ITERABLE</code></td><td><code>0x7C</code></td><td>Verify the top of stack can be iterated by a for loop</td></tr>
           </tbody>
         </table>
 
@@ -294,6 +308,17 @@
             <tr><td><code>INHERIT</code></td><td><code>0x82</code></td><td>Set up inheritance</td></tr>
             <tr><td><code>NEW_INSTANCE</code></td><td><code>0x83</code></td><td>Create new class instance</td></tr>
             <tr><td><code>GET_THIS</code></td><td><code>0x84</code></td><td>Push this reference onto stack</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Error Handling</h4>
+        <table>
+          <thead><tr><th>Opcode</th><th>Hex</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>TRY_BEGIN</code></td><td><code>0xA0</code></td><td>Install a catch handler at the given address</td></tr>
+            <tr><td><code>TRY_END</code></td><td><code>0xA1</code></td><td>Uninstall the innermost catch handler</td></tr>
+            <tr><td><code>THROW</code></td><td><code>0xA2</code></td><td>Throw the value on top of the stack as an error</td></tr>
+            <tr><td><code>RAISE</code></td><td><code>0xA3</code></td><td>Raise a runtime error with the given message</td></tr>
           </tbody>
         </table>
 
@@ -393,7 +418,7 @@ HALT            <span class="cmt">// Stop</span></code></pre>
   cli/          <span class="cmt">- Command-line interface</span>
   types/        <span class="cmt">- AST nodes, tokens, runtime values</span>
 tests/          <span class="cmt">- Mirrors src/ structure</span>
-examples/       <span class="cmt">- 10 example programs</span>
+examples/       <span class="cmt">- 18 example programs</span>
 playground/     <span class="cmt">- Web IDE (CodeMirror + bundled TinyLang)</span>
 docs/           <span class="cmt">- Documentation site</span></code></pre>
 

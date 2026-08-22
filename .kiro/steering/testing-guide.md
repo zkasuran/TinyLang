@@ -2,7 +2,7 @@
 
 ## Overview
 
-TinyLang uses **Vitest** as its test framework with 338+ tests covering all subsystems. Tests are organized to mirror the source directory structure.
+TinyLang uses **Vitest** as its test framework with 1003 tests covering all subsystems. Tests are organized to mirror the source directory structure.
 
 ## Directory Structure
 

@@ -36,7 +36,7 @@ node dist/cli/index.js run examples/01-hello.tiny
 # Build TypeScript (required after changes)
 npm run build
 
-# Run all 399 tests
+# Run all 1003 tests
 npx vitest run
 
 # Watch mode for tests during development
@@ -84,7 +84,7 @@ Source Code (.tiny)
 | `src/lexer/` | Tokenizer with position tracking and error recovery |
 | `src/parser/` | Recursive descent parser with Pratt expression parsing |
 | `src/interpreter/` | Tree-walk evaluator with environment scoping |
-| `src/compiler/` | Bytecode compiler (44 opcodes) and optimizer |
+| `src/compiler/` | Bytecode compiler (63 opcodes) and optimizer |
 | `src/vm/` | Stack-based virtual machine |
 | `src/debugger/` | Replay-based interactive debugger |
 | `src/formatter/` | AST-based code formatter |
@@ -217,7 +217,7 @@ describe('Interpreter - functions', () => {
 
 1. Fork the repository and create a feature branch
 2. Follow the coding standards above
-3. Ensure all 399+ tests pass (`npx vitest run`)
+3. Ensure all 1003 tests pass (`npx vitest run`)
 4. Add tests for any new functionality
 5. Update documentation if adding user-facing features
 6. Use conventional commit messages:

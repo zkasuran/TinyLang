@@ -62,7 +62,7 @@
 
 Detailed designs for each major subsystem:
 
-- **[Compiler & VM](./compiler-vm/design.md)** - 44 opcodes, stack-based execution, constant pool, serialization
+- **[Compiler & VM](./compiler-vm/design.md)** - 63 opcodes, stack-based execution, constant pool, serialization
 - **[Debugger](./debugger/design.md)** - Replay-based architecture, debug hooks, variable inspection
 - **[Web IDE](./web-ide/design.md)** - Panel layout, CodeMirror integration, esbuild bundling
 - **[Toolchain](./toolchain/design.md)** - AST-based formatting, rule-based linting, test discovery
@@ -124,7 +124,7 @@ class Lexer {
 
 **Key Decisions:**
 - Single-pass compilation (no IR)
-- 44 opcodes covering all language features
+- 63 opcodes covering all language features
 - Upvalue-based closure implementation
 - Three optimizer passes (constant folding, DCE, peephole)
 - Binary serialization format with magic bytes and versioning
@@ -278,4 +278,4 @@ Error propagation:
 | CLI | Integration | Command execution |
 | End-to-End | Integration | Full example programs |
 
-Total: 338+ automated tests via Vitest.
+Total: 1003 automated tests via Vitest.

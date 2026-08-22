@@ -178,7 +178,7 @@ As a developer, I want to write and run tests for my TinyLang programs.
 - 90%+ test coverage on core modules (lexer, parser, interpreter)
 - No `any` types in TypeScript (strict mode)
 - All public APIs documented with JSDoc
-- 338+ automated tests passing
+- 1003 automated tests passing
 
 ### NFR-4: Usability
 - Installation via `npm install` + `npm run build`

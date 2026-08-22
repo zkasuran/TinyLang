@@ -215,8 +215,8 @@ TinyLang ships **17 CLI commands** — a complete development environment:
 
 ```bash
 $ tinylang compile examples/07-fibonacci.tiny
-Compiled: 354 instructions, 59 constants, optimized 0 bytes
-Output: examples/07-fibonacci.tinyc (6334 bytes)
+Compiled: 356 instructions, 59 constants, optimized 0 bytes
+Output: examples/07-fibonacci.tinyc (6269 bytes)
 
 $ tinylang exec examples/07-fibonacci.tinyc
 === Recursive Fibonacci ===
@@ -226,7 +226,7 @@ fib(1) = 1
 fib(10) = 55
 ```
 
-The compiler and VM produce **byte-identical output** to the interpreter on every program, verified by a 191-test differential suite that cross-validates both backends.
+The compiler and VM produce **byte-identical output** to the interpreter on every example program in the suite, verified by a 191-test differential suite that cross-validates both backends. (The VM treats module `import` as a no-op, so imports are not executed under `compile`/`exec`.)
 
 ### Interactive Debugger
 
@@ -378,7 +378,7 @@ The `.kiro/hooks/` directory automates quality with **10 hooks**:
 
 ### Development Story
 
-The project was built across **48 commits**, with Kiro driving the workflow:
+The project was built across **50+ commits**, with Kiro driving the workflow:
 
 1. **Spec phase** — Requirements and design written first, before any code
 2. **Implementation** — Each component built following its task list
@@ -457,7 +457,7 @@ tinylang/
 │   │   └── round-trip.test.ts    # AST + comment preservation proofs
 │   └── ...                       # Lexer, parser, VM, debugger, linter
 ├── examples/                   # 18 educational programs (.tiny)
-├── docs/                       # 17-file documentation site (HTML + MD)
+├── docs/                       # Full reference site (HTML + MD)
 ├── playground/                 # 480KB self-contained Web IDE
 │   ├── index.html              # The built bundle (open in browser)
 │   ├── template.html           # Source template
@@ -484,10 +484,11 @@ tinylang/
 ```
 1003 tests across 21 files
   191 differential (interpreter ↔ VM ↔ optimized VM, zero exclusions)
-   96 formatter round-trip (AST equivalence + comment preservation)
+  149 formatter round-trip (AST equivalence)
+   98 formatter comment preservation
    34 WASM end-to-end (assemble + validate + instantiate + call)
    18 example programs (both backends, via CLI)
-   ...and 664 more across lexer, parser, VM, compiler, debugger, linter, testing
+   ...and 513 more across lexer, parser, VM, compiler, debugger, linter, testing
 ```
 
 The core insight: **asserting a program ran is not asserting it is correct.** The VM passed 42 hand-written tests while `fibonacci(20)` returned `53`. What caught it was cross-validating the two backends against each other over the same programs, asserting byte-identical stdout.
@@ -498,7 +499,7 @@ The differential suite has **zero exclusions**. Every example program, every fea
 
 ## Documentation
 
-The `docs/` directory contains a complete reference (17 files):
+The `docs/` directory contains a full reference site (HTML + MD):
 
 - **Getting Started** — Installation, first program, REPL
 - **Language Reference** — Every feature, every operator, every keyword
@@ -522,7 +523,7 @@ Specific suites:
 ```bash
 npx vitest run tests/integration/differential.test.ts   # 191 cross-validation tests
 npx vitest run tests/compiler/wasm-execution.test.ts    # 34 WASM end-to-end tests
-npx vitest run tests/formatter/round-trip.test.ts       # 96 formatter safety tests
+npx vitest run tests/formatter/round-trip.test.ts       # 149 formatter safety tests
 ```
 
 ---
@@ -543,6 +544,7 @@ The `examples/` directory contains **18 progressively complex programs**, each w
 | `08-sorting.tiny` | Bubble, selection, insertion sort |
 | `09-functional.tiny` | Composition, currying, pipelines |
 | `10-match.tiny` | Pattern matching, FizzBuzz |
+| `10-new-features.tiny` | Newer language features |
 | `11-error-handling.tiny` | Try/catch, throw, error propagation |
 | `12-advanced.tiny` | F-strings, destructuring, spread |
 | `13-algorithms.tiny` | Binary search, quicksort, sieve |

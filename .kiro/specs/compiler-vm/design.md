@@ -47,20 +47,21 @@ Global Scope (load/store via name index in constant pool)
 
 ### 2. Opcodes (`src/compiler/opcodes.ts`)
 
-All 44 bytecode instructions organized by category:
+All 63 bytecode instructions organized by category:
 
 | Category | Opcodes | Hex Range |
 |----------|---------|-----------|
-| Stack | CONST, POP, DUP | 0x01-0x03 |
-| Arithmetic | ADD, SUB, MUL, DIV, MOD, POW, NEGATE | 0x10-0x16 |
+| Stack | CONST, POP, DUP, DUP2, ROT | 0x01-0x05 |
+| Arithmetic | ADD, SUB, MUL, DIV, MOD, POW, NEGATE, COMPOUND | 0x10-0x17 |
 | Comparison | EQ, NEQ, LT, LTE, GT, GTE | 0x20-0x25 |
 | Logical | NOT, AND, OR | 0x30-0x32 |
-| Control Flow | JMP, JMP_IF_FALSE, JMP_IF_TRUE, LOOP | 0x40-0x43 |
-| Variables | LOAD_LOCAL, STORE_LOCAL, LOAD_GLOBAL, STORE_GLOBAL, LOAD_UPVALUE, STORE_UPVALUE | 0x50-0x55 |
+| Control Flow | JMP, JMP_IF_FALSE, JMP_IF_TRUE, LOOP, JMP_IF_NULL | 0x40-0x44 |
+| Variables | LOAD_LOCAL, STORE_LOCAL, LOAD_GLOBAL, STORE_GLOBAL, LOAD_UPVALUE, STORE_UPVALUE, LOAD_ARGC, DECLARE_GLOBAL, DECLARE_CONST_GLOBAL | 0x50-0x58 |
 | Functions | CALL, RETURN, CLOSURE | 0x60-0x62 |
-| Data Structures | ARRAY, OBJECT, INDEX, SET_INDEX, GET_PROP, SET_PROP | 0x70-0x75 |
+| Data Structures | ARRAY, OBJECT, INDEX, SET_INDEX, GET_PROP, SET_PROP, ARRAY_APPEND, ARRAY_SPREAD, DESTRUCT_ELEM, DESTRUCT_PROP, INDEX_OPTIONAL, GET_METHOD, CHECK_ITERABLE | 0x70-0x7C |
 | OOP | CLASS, METHOD, INHERIT, NEW_INSTANCE, GET_THIS | 0x80-0x84 |
 | I/O | PRINT | 0x90 |
+| Error Handling | TRY_BEGIN, TRY_END, THROW, RAISE | 0xA0-0xA3 |
 | Control | HALT | 0xFF |
 
 **Instruction Encoding:**

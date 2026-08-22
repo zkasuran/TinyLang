@@ -125,14 +125,15 @@ Detailed task breakdowns for each major subsystem:
 ### Task 3.2: Example Programs ✅
 - [x] 01-hello.tiny - Hello World
 - [x] 02-variables.tiny - Variable declarations and types
-- [x] 03-math.tiny - Arithmetic and math functions
-- [x] 04-strings.tiny - String operations
-- [x] 05-arrays.tiny - Array manipulation
-- [x] 06-functions.tiny - Function definitions and closures
+- [x] 03-functions.tiny - Function definitions and closures
+- [x] 04-arrays.tiny - Array manipulation
+- [x] 05-loops.tiny - Loops, ranges, break/continue
+- [x] 06-classes.tiny - OOP with inheritance
 - [x] 07-fibonacci.tiny - Classic algorithm
-- [x] 08-classes.tiny - OOP with inheritance
-- [x] 09-closures.tiny - Closure demonstrations
-- [x] 10-stdlib.tiny - Standard library usage
+- [x] 08-sorting.tiny - Sorting algorithms
+- [x] 09-functional.tiny - Functional composition and pipelines
+- [x] 10-match.tiny - Pattern matching
+- [x] 10-new-features.tiny - Newer language features
 
 ### Task 3.3: Documentation ✅
 - [x] Comprehensive README with badges, architecture, features
@@ -155,7 +156,7 @@ Detailed task breakdowns for each major subsystem:
 ## Phase 5: Compiler, VM & Advanced Features ✅
 
 ### Task 5.1: Bytecode Compiler ✅
-- [x] Define 44 opcodes organized by category
+- [x] Define 63 opcodes organized by category
 - [x] Implement single-pass AST-to-bytecode compilation
 - [x] Handle all language features (vars, functions, classes, control flow)
 - [x] Implement closure compilation with upvalues

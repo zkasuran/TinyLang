@@ -11,7 +11,7 @@ The project follows a dual execution pipeline with comprehensive tooling:
 1. **Lexer** (`src/lexer/`) - Tokenizes source code into a stream of tokens
 2. **Parser** (`src/parser/`) - Builds an Abstract Syntax Tree (AST) from tokens
 3. **Interpreter** (`src/interpreter/`) - Tree-walk evaluator that executes AST nodes
-4. **Compiler** (`src/compiler/`) - Compiles AST to bytecode (44 opcodes)
+4. **Compiler** (`src/compiler/`) - Compiles AST to bytecode (63 opcodes)
 5. **VM** (`src/vm/`) - Stack-based virtual machine that executes bytecode
 6. **Standard Library** (`src/stdlib/`) - Built-in functions and modules
 
@@ -23,14 +23,14 @@ The project follows a dual execution pipeline with comprehensive tooling:
 11. **Module System** (`src/modules/`) - File-based imports with caching
 
 ### User Interfaces
-12. **CLI** (`src/cli/`) - Command-line interface with 10 subcommands
+12. **CLI** (`src/cli/`) - Command-line interface with 17 subcommands
 13. **REPL** (`src/repl/`) - Interactive read-eval-print loop
 14. **Web IDE** (`playground/`) - Full browser-based development environment
 
 ## Tech Stack
 - **Language**: TypeScript (strict mode)
 - **Runtime**: Node.js >= 18
-- **Testing**: Vitest (338+ tests)
+- **Testing**: Vitest (1003 tests)
 - **Build**: TypeScript compiler (tsc) + esbuild (playground bundling)
 - **Package Manager**: npm
 - **Editor**: CodeMirror 6 (Web IDE)
@@ -54,7 +54,7 @@ See [Architecture Decisions](./architecture-decisions.md) for full ADRs.
 ## File Conventions
 - All source in `src/` with barrel exports via `index.ts`
 - Tests mirror source structure in `tests/`
-- Examples in `examples/` directory with `.tiny` extension (10 programs)
+- Examples in `examples/` directory with `.tiny` extension (18 programs)
 - Documentation inline via JSDoc comments
 - Specs organized by subsystem in `.kiro/specs/`
 
