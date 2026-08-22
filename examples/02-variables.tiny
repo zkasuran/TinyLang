@@ -15,7 +15,7 @@ print("Negative:", negative)
 
 // Strings
 let greeting = "Hello"
-let name = 'World'
+let name = "World"
 let message = greeting + ", " + name + "!"
 print(message)
 

@@ -12,12 +12,12 @@ class Stack {
     this.items = []
     this.size = 0
   }
-  
+
   fn push(item) {
     push(this.items, item)
     this.size = this.size + 1
   }
-  
+
   fn pop() {
     if this.size == 0 {
       throw "Stack underflow: cannot pop from empty stack"
@@ -25,14 +25,14 @@ class Stack {
     this.size = this.size - 1
     return pop(this.items)
   }
-  
+
   fn peek() {
     if this.size == 0 {
       return null
     }
     return this.items[this.size - 1]
   }
-  
+
   fn isEmpty() {
     return this.size == 0
   }
@@ -56,12 +56,12 @@ class Queue {
     this.items = []
     this.size = 0
   }
-  
+
   fn enqueue(item) {
     push(this.items, item)
     this.size = this.size + 1
   }
-  
+
   fn dequeue() {
     if this.size == 0 {
       throw "Queue underflow: cannot dequeue from empty queue"
@@ -69,14 +69,14 @@ class Queue {
     this.size = this.size - 1
     return shift(this.items)
   }
-  
+
   fn front() {
     if this.size == 0 {
       return null
     }
     return this.items[0]
   }
-  
+
   fn isEmpty() {
     return this.size == 0
   }
@@ -107,14 +107,14 @@ class LinkedList {
     this.head = null
     this.size = 0
   }
-  
+
   fn prepend(value) {
     let node = new Node(value)
     node.next = this.head
     this.head = node
     this.size = this.size + 1
   }
-  
+
   fn append(value) {
     let node = new Node(value)
     if this.head == null {
@@ -128,7 +128,7 @@ class LinkedList {
     }
     this.size = this.size + 1
   }
-  
+
   fn toArray() {
     let result = []
     let current = this.head
@@ -138,7 +138,7 @@ class LinkedList {
     }
     return result
   }
-  
+
   fn contains(value) {
     let current = this.head
     while current != null {
@@ -149,7 +149,7 @@ class LinkedList {
     }
     return false
   }
-  
+
   fn removeFirst() {
     if this.head == null {
       throw "Cannot remove from empty list"
@@ -189,11 +189,11 @@ class BST {
   fn init() {
     this.root = null
   }
-  
+
   fn insert(value) {
     this.root = this._insertNode(this.root, value)
   }
-  
+
   fn _insertNode(node, value) {
     if node == null {
       return new TreeNode(value)
@@ -205,28 +205,34 @@ class BST {
     }
     return node
   }
-  
+
   fn contains(value) {
     return this._search(this.root, value)
   }
-  
+
   fn _search(node, value) {
-    if node == null { return false }
-    if value == node.value { return true }
+    if node == null {
+      return false
+    }
+    if value == node.value {
+      return true
+    }
     if value < node.value {
       return this._search(node.left, value)
     }
     return this._search(node.right, value)
   }
-  
+
   fn inorder() {
     let result = []
     this._inorder(this.root, result)
     return result
   }
-  
+
   fn _inorder(node, result) {
-    if node == null { return null }
+    if node == null {
+      return null
+    }
     this._inorder(node.left, result)
     push(result, node.value)
     this._inorder(node.right, result)
@@ -253,7 +259,7 @@ class HashMap {
     this.mapValues = []
     this.size = 0
   }
-  
+
   fn set(key, value) {
     // Check if key already exists
     for i in 0..len(this.mapKeys) {
@@ -266,7 +272,7 @@ class HashMap {
     push(this.mapValues, value)
     this.size = this.size + 1
   }
-  
+
   fn get(key) {
     for i in 0..len(this.mapKeys) {
       if this.mapKeys[i] == key {
@@ -275,7 +281,7 @@ class HashMap {
     }
     return null
   }
-  
+
   fn has(key) {
     return includes(this.mapKeys, key)
   }
@@ -285,9 +291,9 @@ let map = new HashMap()
 map.set("name", "TinyLang")
 map.set("version", "1.0")
 map.set("type", "language")
-print(f"name: {map.get('name')}")
-print(f"version: {map.get('version')}")
-print(f"has 'type': {map.has('type')}")
+print(f"name: {map.get("name")}")
+print(f"version: {map.get("version")}")
+print(f"has 'type': {map.has("type")}")
 print(f"size: {map.size}")
 
 print("")

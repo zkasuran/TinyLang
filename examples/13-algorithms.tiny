@@ -10,7 +10,7 @@ print("=== Binary Search ===")
 fn binarySearch(arr, target) {
   let low = 0
   let high = len(arr) - 1
-  
+
   while low <= high {
     let mid = floor((low + high) / 2)
     if arr[mid] == target {
@@ -39,11 +39,11 @@ fn quicksort(arr) {
   if len(arr) <= 1 {
     return arr
   }
-  
+
   let pivot = arr[0]
   let left = []
   let right = []
-  
+
   for i in 1..len(arr) {
     if arr[i] < pivot {
       push(left, arr[i])
@@ -51,7 +51,7 @@ fn quicksort(arr) {
       push(right, arr[i])
     }
   }
-  
+
   let sortedLeft = quicksort(left)
   let sortedRight = quicksort(right)
   return [...sortedLeft, pivot, ...sortedRight]
@@ -73,7 +73,7 @@ fn sieve(limit) {
   }
   isPrime[0] = false
   isPrime[1] = false
-  
+
   let i = 2
   while i * i <= limit {
     if isPrime[i] {
@@ -85,7 +85,7 @@ fn sieve(limit) {
     }
     i = i + 1
   }
-  
+
   let primes = []
   for i in 2..limit + 1 {
     if isPrime[i] {
@@ -113,7 +113,7 @@ fn gcd(a, b) {
 }
 
 fn lcm(a, b) {
-  return (a * b) / gcd(a, b)
+  return a * b / gcd(a, b)
 }
 
 print(f"GCD(48, 18) = {gcd(48, 18)}")
@@ -130,7 +130,7 @@ fn matMul(a, b) {
   let cols = len(b[0])
   let inner = len(b)
   let result = []
-  
+
   for i in 0..rows {
     let row = []
     for j in 0..cols {

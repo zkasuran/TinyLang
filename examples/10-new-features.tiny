@@ -65,6 +65,7 @@ print(f"Object destructured: {pname}, {age}, {city}")
 fn getPoint() {
   return [3, 4]
 }
+
 let [x, y] = getPoint()
 print(f"Point: ({x}, {y})")
 
@@ -74,7 +75,9 @@ print("--- Combined ---")
 
 fn safeDivide(a, b) {
   try {
-    if b == 0 { throw "division by zero" }
+    if b == 0 {
+      throw "division by zero"
+    }
     return {result: a / b, error: null}
   } catch err {
     return {result: null, error: err.message}

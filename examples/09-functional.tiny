@@ -74,10 +74,7 @@ let people = [
 ]
 
 // Get names of people in NYC over 28
-let nycPeople = people
-  .filter((p) => p.city == "NYC")
-  .filter((p) => p.age > 28)
-  .map((p) => p.name)
+let nycPeople = people.filter((p) => p.city == "NYC").filter((p) => p.age > 28).map((p) => p.name)
 
 print("NYC people over 28:", nycPeople)
 

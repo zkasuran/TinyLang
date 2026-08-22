@@ -35,6 +35,13 @@ const IGNORED_KEYS: ReadonlySet<string> = new Set([
   'variantComments',
   'defaultComments',
   'blankBefore',
+  // A number literal's written form. `value` -- the float the program actually
+  // uses -- is still compared, so this cannot hide a changed number: emitting
+  // `2.0` where the input said `1.0` differs in `value` and is caught. What it
+  // permits is a node with no `raw` (one built by hand rather than parsed)
+  // round-tripping to a node that has one, which is a difference in spelling
+  // only.
+  'raw',
 ]);
 
 const MAX_SNIPPET = 220;

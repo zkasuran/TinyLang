@@ -1524,6 +1524,9 @@ export class Parser {
     return {
       type: 'NumberLiteral',
       value: Number(token.value),
+      // The token's value is the exact source slice, so this is the literal as
+      // written. Kept so the formatter need not reconstruct it from the float.
+      raw: token.value,
       position: token.position,
     };
   }

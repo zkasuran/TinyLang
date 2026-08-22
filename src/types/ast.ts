@@ -278,6 +278,16 @@ export type Expression =
 export interface NumberLiteral extends BaseNode {
   type: 'NumberLiteral';
   value: number;
+  /**
+   * The literal exactly as written, when this node came from source.
+   *
+   * `value` is the semantics and is all either engine looks at. `raw` exists so
+   * the formatter can reprint what the author typed: `1.0` and `1` are the same
+   * float64, so rendering from `value` alone silently rewrote `let version = 1.0`
+   * to `let version = 1`. Absent on a node built by hand, in which case the
+   * formatter falls back to rendering `value`.
+   */
+  raw?: string;
 }
 
 export interface StringLiteral extends BaseNode {

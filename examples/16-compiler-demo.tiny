@@ -45,6 +45,7 @@ print(f"Counter: {counter()}")
 fn makeAdder(x) {
   return (y) => x + y
 }
+
 let add5 = makeAdder(5)
 let add10 = makeAdder(10)
 print(f"add5(3) = {add5(3)}")
@@ -55,7 +56,9 @@ print("")
 print("--- Recursion ---")
 
 fn factorial(n) {
-  if n <= 1 { return 1 }
+  if n <= 1 {
+    return 1
+  }
   return n * factorial(n - 1)
 }
 
@@ -98,6 +101,7 @@ class Shape {
   fn init(name) {
     this.name = name
   }
+
   fn describe() {
     return f"I am a {this.name}"
   }
@@ -108,9 +112,11 @@ class Circle extends Shape {
     this.name = "Circle"
     this.radius = radius
   }
+
   fn area() {
     return PI * this.radius * this.radius
   }
+
   fn circumference() {
     return 2 * PI * this.radius
   }
@@ -122,9 +128,11 @@ class Rectangle extends Shape {
     this.width = width
     this.height = height
   }
+
   fn area() {
     return this.width * this.height
   }
+
   fn perimeter() {
     return 2 * (this.width + this.height)
   }
@@ -216,7 +224,9 @@ print("")
 print("--- Performance: Fibonacci ---")
 
 fn fib(n) {
-  if n <= 1 { return n }
+  if n <= 1 {
+    return n
+  }
   let a = 0
   let b = 1
   for i in 2..n + 1 {

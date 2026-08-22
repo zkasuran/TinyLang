@@ -10,7 +10,7 @@ fn bubbleSort(arr) {
   let n = len(arr)
   let sorted = slice(arr, 0, n)
   let swaps = 0
-  
+
   for i in 0..n {
     for j in 0..n - i - 1 {
       if sorted[j] > sorted[j + 1] {
@@ -21,7 +21,7 @@ fn bubbleSort(arr) {
       }
     }
   }
-  
+
   print("  (Swaps: " + str(swaps) + ")")
   return sorted
 }
@@ -32,7 +32,7 @@ fn selectionSort(arr) {
   let n = len(arr)
   let sorted = slice(arr, 0, n)
   let comparisons = 0
-  
+
   for i in 0..n {
     let minIdx = i
     for j in i + 1..n {
@@ -47,7 +47,7 @@ fn selectionSort(arr) {
       sorted[minIdx] = temp
     }
   }
-  
+
   print("  (Comparisons: " + str(comparisons) + ")")
   return sorted
 }
@@ -57,7 +57,7 @@ fn insertionSort(arr) {
   let n = len(arr)
   let sorted = slice(arr, 0, n)
   let shifts = 0
-  
+
   for i in 1..n {
     let key = sorted[i]
     let j = i - 1
@@ -68,7 +68,7 @@ fn insertionSort(arr) {
     }
     sorted[j + 1] = key
   }
-  
+
   print("  (Shifts: " + str(shifts) + ")")
   return sorted
 }

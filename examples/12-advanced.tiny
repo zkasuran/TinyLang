@@ -26,6 +26,7 @@ print(f"Array has {len(items)} items, first is {items[0]}")
 fn greet(name, time) {
   return f"Good {time}, {name}! Welcome back."
 }
+
 print(greet("Alice", "morning"))
 
 // --- Destructuring ---
@@ -43,8 +44,12 @@ fn getMinMax(arr) {
   let lo = arr[0]
   let hi = arr[0]
   for val in arr {
-    if val < lo { lo = val }
-    if val > hi { hi = val }
+    if val < lo {
+      lo = val
+    }
+    if val > hi {
+      hi = val
+    }
   }
   return [lo, hi]
 }
@@ -111,13 +116,7 @@ fn analyzeData(data) {
   }
   let avg = total / len(data)
   let [lo, hi] = getMinMax(data)
-  return {
-    count: len(data),
-    sum: total,
-    average: avg,
-    min: lo,
-    max: hi
-  }
+  return {count: len(data), sum: total, average: avg, min: lo, max: hi}
 }
 
 let dataset = [23, 45, 12, 67, 34, 89, 11, 56]

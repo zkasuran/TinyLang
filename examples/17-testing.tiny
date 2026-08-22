@@ -7,12 +7,16 @@
 // --- Helper functions to test ---
 
 fn factorial(n) {
-  if n <= 1 { return 1 }
+  if n <= 1 {
+    return 1
+  }
   return n * factorial(n - 1)
 }
 
 fn fibonacci(n) {
-  if n <= 1 { return n }
+  if n <= 1 {
+    return n
+  }
   let a = 0
   let b = 1
   for i in 2..n + 1 {
@@ -24,14 +28,18 @@ fn fibonacci(n) {
 }
 
 fn isPalindrome(s) {
-  let chars = [... s]
+  let chars = [...s]
   let reversed = reverse(chars)
   return join(chars, "") == join(reversed, "")
 }
 
 fn clamp(val, lo, hi) {
-  if val < lo { return lo }
-  if val > hi { return hi }
+  if val < lo {
+    return lo
+  }
+  if val > hi {
+    return hi
+  }
   return val
 }
 
@@ -72,7 +80,7 @@ test "clamp keeps value in range" {
 test "array operations" {
   let arr = [3, 1, 4, 1, 5, 9]
   expectToBe(len(arr), 6)
-  
+
   let sorted = sort([...arr])
   expectToBe(sorted[0], 1)
   expectToBe(sorted[5], 9)

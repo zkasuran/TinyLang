@@ -3025,6 +3025,9 @@ var TinyLangBundle = (() => {
       return {
         type: "NumberLiteral",
         value: Number(token.value),
+        // The token's value is the exact source slice, so this is the literal as
+        // written. Kept so the formatter need not reconstruct it from the float.
+        raw: token.value,
         position: token.position
       };
     }
@@ -11047,7 +11050,14 @@ var TinyLangBundle = (() => {
     "danglingComments",
     "variantComments",
     "defaultComments",
-    "blankBefore"
+    "blankBefore",
+    // A number literal's written form. `value` -- the float the program actually
+    // uses -- is still compared, so this cannot hide a changed number: emitting
+    // `2.0` where the input said `1.0` differs in `value` and is caught. What it
+    // permits is a node with no `raw` (one built by hand rather than parsed)
+    // round-tripping to a node that has one, which is a difference in spelling
+    // only.
+    "raw"
   ]);
   var MAX_SNIPPET = 220;
   function isPlainObject(value) {
@@ -11654,7 +11664,7 @@ ${catchBody}
     renderExpression(expr) {
       switch (expr.type) {
         case "NumberLiteral":
-          return formatNumber(expr.value);
+          return renderNumberLiteral(expr);
         case "StringLiteral":
           return `"${this.escapeString(expr.value)}"`;
         case "InterpolatedString":
@@ -12057,6 +12067,12 @@ ${catchBody}
         );
       }
     }
+  }
+  function renderNumberLiteral(expr) {
+    if (expr.raw !== void 0 && Number(expr.raw) === expr.value) {
+      return expr.raw;
+    }
+    return formatNumber(expr.value);
   }
   function formatNumber(value) {
     const text = String(value);

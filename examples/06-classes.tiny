@@ -79,9 +79,10 @@ whiskers.purr()
 
 // Another class example
 print("\n=== Shapes ===")
+
 class Shape {
   let name = "Shape"
-  
+
   fn area() {
     return 0
   }

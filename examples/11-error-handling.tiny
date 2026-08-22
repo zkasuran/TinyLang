@@ -88,7 +88,9 @@ print("=== Safe Wrapper Pattern ===")
 
 fn safeDivide(a, b) {
   try {
-    if b == 0 { throw "division by zero" }
+    if b == 0 {
+      throw "division by zero"
+    }
     return {value: a / b, error: null}
   } catch err {
     return {value: null, error: err.message}

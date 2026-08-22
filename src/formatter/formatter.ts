@@ -692,7 +692,7 @@ export class Formatter {
   private renderExpression(expr: Expression): string {
     switch (expr.type) {
       case 'NumberLiteral':
-        return formatNumber(expr.value);
+        return renderNumberLiteral(expr);
       case 'StringLiteral':
         return `"${this.escapeString(expr.value)}"`;
       case 'InterpolatedString':
@@ -1217,6 +1217,25 @@ function leftmostExpression(expr: Expression): Expression {
  * the exponent notation JavaScript uses for very large and very small values
  * (`1e-7`, `1e+21`) has to be expanded.
  */
+/**
+ * Print a number literal as the author wrote it.
+ *
+ * Rendering from the parsed float instead threw away the written form: `1.0` and
+ * `1` are the same float64, so `let version = 1.0` came back as `let version = 1`
+ * in three of the example programs. The trailing zero is the author's, and in a
+ * language whose examples teach the language it is saying something.
+ *
+ * `raw` is only trusted when it parses back to the same value, so a hand-built or
+ * rewritten node cannot make the formatter emit a literal that means something
+ * else; anything suspect falls back to rendering `value`.
+ */
+function renderNumberLiteral(expr: { value: number; raw?: string }): string {
+  if (expr.raw !== undefined && Number(expr.raw) === expr.value) {
+    return expr.raw;
+  }
+  return formatNumber(expr.value);
+}
+
 function formatNumber(value: number): string {
   const text = String(value);
   if (!/e/i.test(text)) return text;

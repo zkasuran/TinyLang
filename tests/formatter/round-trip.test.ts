@@ -114,6 +114,16 @@ describe('Formatter round-trip safety', () => {
           expect(formatter.format(once)).toBe(once);
         });
 
+        it('is already formatted, so `fmt --check` reports nothing', () => {
+          // `fmt --check` flagged all 18 of these, so the one command a
+          // contributor would run to see whether their change is formatted was
+          // useless: it failed on files nobody had touched. Now that the
+          // formatter no longer strips the commentary, the examples are stored in
+          // the exact shape it produces, and any file drifting out of that shape
+          // fails here rather than being discovered as noise in --check.
+          expect(formatter.format(source)).toBe(source);
+        });
+
         it('still produces identical output when run', () => {
           const expected = run(source);
           expect(run(formatter.format(source)), `formatted ${file} behaves differently`).toEqual(

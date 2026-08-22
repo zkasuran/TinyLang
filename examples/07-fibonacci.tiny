@@ -6,13 +6,17 @@
 
 // Approach 1: Recursive (elegant but slow)
 fn fib_recursive(n) {
-  if n <= 1 { return n }
+  if n <= 1 {
+    return n
+  }
   return fib_recursive(n - 1) + fib_recursive(n - 2)
 }
 
 // Approach 2: Iterative (fast!)
 fn fib_iterative(n) {
-  if n <= 1 { return n }
+  if n <= 1 {
+    return n
+  }
   let a = 0
   let b = 1
   for i in 2..n + 1 {
