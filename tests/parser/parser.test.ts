@@ -259,4 +259,64 @@ describe('Parser', () => {
       expect(() => parse('fn foo() {')).toThrow();
     });
   });
+
+  describe('Ternary Expressions', () => {
+    function exprOf(source: string) {
+      const stmt = firstStmt(source) as { expression?: unknown; value?: unknown };
+      return (stmt.expression ?? stmt.value) as Record<string, unknown>;
+    }
+
+    it('parses cond ? a : b as a TernaryExpression', () => {
+      const expr = exprOf('let x = c ? a : b');
+      expect(expr.type).toBe('TernaryExpression');
+      expect((expr.condition as { name: string }).name).toBe('c');
+      expect((expr.consequent as { name: string }).name).toBe('a');
+      expect((expr.alternate as { name: string }).name).toBe('b');
+    });
+
+    it('is right-associative', () => {
+      // a ? b : c ? d : e  ==  a ? b : (c ? d : e)
+      const expr = exprOf('let x = a ? b : c ? d : e');
+      expect(expr.type).toBe('TernaryExpression');
+      const alt = expr.alternate as Record<string, unknown>;
+      expect(alt.type).toBe('TernaryExpression');
+      expect((alt.condition as { name: string }).name).toBe('c');
+    });
+
+    it('binds looser than assignment, so the whole ternary is the value', () => {
+      const stmt = firstStmt('x = a ? b : c') as Record<string, unknown>;
+      const assign = stmt.expression as Record<string, unknown>;
+      expect(assign.type).toBe('AssignmentExpression');
+      expect((assign.value as Record<string, unknown>).type).toBe('TernaryExpression');
+    });
+
+    it('binds tighter than nothing else: ?? forms the condition', () => {
+      const expr = exprOf('let x = a ?? b ? c : d');
+      expect(expr.type).toBe('TernaryExpression');
+      expect((expr.condition as Record<string, unknown>).type).toBe(
+        'NullishCoalesceExpression'
+      );
+    });
+
+    it('takes a comparison as its condition', () => {
+      const expr = exprOf('let x = a > b ? a : b');
+      expect(expr.type).toBe('TernaryExpression');
+      expect((expr.condition as Record<string, unknown>).type).toBe('BinaryExpression');
+    });
+
+    it('reports a missing colon', () => {
+      expect(() => parse('let x = a ? b')).toThrow(ParseError);
+      expect(() => parse('let x = a ? b')).toThrow(/Expected ':'/);
+      try {
+        parse('let x = a ? b');
+      } catch (e) {
+        expect((e as ParseError).hint).toContain('cond ? whenTrue : whenFalse');
+      }
+    });
+
+    it('does not disturb ?? or ?.', () => {
+      expect(exprOf('let x = a ?? b').type).toBe('NullishCoalesceExpression');
+      expect(exprOf('let x = a?.b').type).toBe('OptionalMemberExpression');
+    });
+  });
 });

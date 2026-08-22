@@ -83,6 +83,7 @@ export enum TokenType {
   PIPE = 'PIPE',             // |
   PIPE_ARROW = 'PIPE_ARROW', // |>
   SPREAD = 'SPREAD',         // ...
+  QUESTION = 'QUESTION',                 // ?  (ternary)
   QUESTION_DOT = 'QUESTION_DOT',         // ?.
   NULLISH_COALESCE = 'NULLISH_COALESCE', // ??
 

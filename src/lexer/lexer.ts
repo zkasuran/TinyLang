@@ -77,14 +77,12 @@ export class Lexer {
       case ';': this.addToken(TokenType.SEMICOLON); break;
       case '%': this.addToken(TokenType.PERCENT); break;
       case '?':
+        // Disambiguate by lookahead: '?.' is optional chaining, '??' is nullish
+        // coalescing, and a bare '?' opens a ternary. The bare token used to be
+        // a lex error, which is why TernaryExpression was unreachable.
         if (this.match('.')) this.addToken(TokenType.QUESTION_DOT);
         else if (this.match('?')) this.addToken(TokenType.NULLISH_COALESCE);
-        else {
-          throw this.createError(
-            `Unexpected character '?'`,
-            `Use '?.' for optional chaining or '??' for nullish coalescing`
-          );
-        }
+        else this.addToken(TokenType.QUESTION);
         break;
       case '|':
         if (this.match('>')) this.addToken(TokenType.PIPE_ARROW);

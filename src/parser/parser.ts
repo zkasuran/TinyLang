@@ -6,17 +6,19 @@
  * 
  * Operator Precedence (low to high):
  * 1. Assignment (=, +=, -=, *=, /=)
- * 2. Ternary (?:)
- * 3. Logical OR (or)
- * 4. Logical AND (and)
- * 5. Equality (==, !=)
- * 6. Comparison (<, >, <=, >=)
- * 7. Range (..)
- * 8. Addition (+, -)
- * 9. Multiplication (*, /, %)
- * 10. Power (**)
- * 11. Unary (not, -)
- * 12. Call, Member Access, Index
+ * 2. Ternary (?:) - right-associative
+ * 3. Pipe (|>)
+ * 4. Nullish coalescing (??)
+ * 5. Logical OR (or)
+ * 6. Logical AND (and)
+ * 7. Equality (==, !=)
+ * 8. Comparison (<, >, <=, >=)
+ * 9. Range (..)
+ * 10. Addition (+, -)
+ * 11. Multiplication (*, /, %)
+ * 12. Power (**)
+ * 13. Unary (not, -)
+ * 14. Call, Member Access, Index
  */
 
 import { Token, TokenType } from '../types/tokens';
@@ -73,6 +75,7 @@ import {
   OptionalMemberExpression,
   OptionalIndexExpression,
   NullishCoalesceExpression,
+  TernaryExpression,
 } from '../types/ast';
 import { ParseError } from './errors';
 
@@ -689,7 +692,7 @@ export class Parser {
   }
 
   private parseAssignment(): Expression {
-    const expr = this.parsePipe();
+    const expr = this.parseTernary();
 
     if (this.check(TokenType.ASSIGN) ||
         this.check(TokenType.PLUS_ASSIGN) ||
@@ -754,10 +757,10 @@ export class Parser {
   }
 
   private parseNullishCoalesce(): Expression {
-    let left = this.parseTernary();
+    let left = this.parseOr();
 
     while (this.match(TokenType.NULLISH_COALESCE)) {
-      const right = this.parseTernary();
+      const right = this.parseOr();
       left = {
         type: 'NullishCoalesceExpression',
         left,
@@ -769,9 +772,41 @@ export class Parser {
     return left;
   }
 
+  /**
+   * `cond ? whenTrue : whenFalse`.
+   *
+   * Sits just above assignment and below everything else, so `??`, `|>` and the
+   * binary operators all bind tighter and form the condition. Both arms parse an
+   * assignment expression, which makes the operator right-associative:
+   * `a ? b : c ? d : e` groups as `a ? b : (c ? d : e)`.
+   *
+   * This used to return parseOr() unchanged with a comment saying the language
+   * had no `? :`, which left TernaryExpression - and the interpreter's
+   * evalTernaryExpression and the compiler's compileTernaryExpression - as
+   * unreachable dead code.
+   */
   private parseTernary(): Expression {
-    // We don't have ? : but we can support ternary through if-else expressions later
-    return this.parseOr();
+    const condition = this.parsePipe();
+
+    if (!this.match(TokenType.QUESTION)) {
+      return condition;
+    }
+
+    const consequent = this.parseAssignment();
+    this.expect(
+      TokenType.COLON,
+      "':'",
+      'A conditional expression looks like: cond ? whenTrue : whenFalse'
+    );
+    const alternate = this.parseAssignment();
+
+    return {
+      type: 'TernaryExpression',
+      condition,
+      consequent,
+      alternate,
+      position: condition.position,
+    } as TernaryExpression;
   }
 
   private parseOr(): Expression {

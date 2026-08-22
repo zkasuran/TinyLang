@@ -217,4 +217,51 @@ describe('Lexer', () => {
       expect(tokens.length).toBeGreaterThan(10);
     });
   });
+
+  describe("'?' disambiguation", () => {
+    it('lexes a bare ? as QUESTION', () => {
+      // This used to be a lex error, which is why the ternary was unreachable.
+      expect(tokenTypes('a ? b : c')).toEqual([
+        TokenType.IDENTIFIER,
+        TokenType.QUESTION,
+        TokenType.IDENTIFIER,
+        TokenType.COLON,
+        TokenType.IDENTIFIER,
+        TokenType.EOF,
+      ]);
+    });
+
+    it('still lexes ?? as NULLISH_COALESCE', () => {
+      expect(tokenTypes('a ?? b')).toEqual([
+        TokenType.IDENTIFIER,
+        TokenType.NULLISH_COALESCE,
+        TokenType.IDENTIFIER,
+        TokenType.EOF,
+      ]);
+    });
+
+    it('still lexes ?. as QUESTION_DOT', () => {
+      expect(tokenTypes('a?.b')).toEqual([
+        TokenType.IDENTIFIER,
+        TokenType.QUESTION_DOT,
+        TokenType.IDENTIFIER,
+        TokenType.EOF,
+      ]);
+    });
+
+    it('lexes a ternary whose condition uses ?. and ??', () => {
+      expect(tokenTypes('a?.b ?? c ? d : e')).toEqual([
+        TokenType.IDENTIFIER,
+        TokenType.QUESTION_DOT,
+        TokenType.IDENTIFIER,
+        TokenType.NULLISH_COALESCE,
+        TokenType.IDENTIFIER,
+        TokenType.QUESTION,
+        TokenType.IDENTIFIER,
+        TokenType.COLON,
+        TokenType.IDENTIFIER,
+        TokenType.EOF,
+      ]);
+    });
+  });
 });
