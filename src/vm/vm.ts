@@ -748,6 +748,22 @@ export class VM {
           const nameIdx = this.read16();
           const name = this.currentFrame.chunk.constants[nameIdx] as StringValue;
           const value = this.pop(); // Consume the value
+          // STORE_GLOBAL is assignment, never declaration -- a top-level `let`,
+          // `const`, `fn`, `class` or `enum` compiles to DECLARE_GLOBAL or
+          // DECLARE_CONST_GLOBAL. So a name that is not already bound is a
+          // mistake, and the interpreter's Environment.assign says so. This used
+          // to create the global instead, which turned a typo into a new
+          // variable: `cont = 0` for `count = 0` did nothing and reported
+          // nothing, and the loop it was meant to reset ran with a stale count.
+          //
+          // Checked before constness for the same reason assign() does: an
+          // unbound name is not a constant, it is simply absent.
+          if (!this.globals.has(name.value)) {
+            throw new RuntimeError(
+              undefinedVariableMessage(name.value, this.globals.keys()),
+              this.currentLine()
+            );
+          }
           // `const` was entirely unenforced here: the interpreter's
           // Environment.assign refuses to overwrite a constant, while the VM
           // happily let `const RATE = 3.14` be followed by `RATE = 99`.

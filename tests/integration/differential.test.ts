@@ -2068,4 +2068,116 @@ describe('Differential: engine agreement audit', () => {
       ).toEqual(['100', '101', '102']);
     });
   });
+
+  /**
+   * OpCode.STORE_GLOBAL is assignment; a top-level declaration compiles to
+   * DECLARE_GLOBAL or DECLARE_CONST_GLOBAL. STORE_GLOBAL nevertheless did a
+   * plain `globals.set`, so assigning to a name that had never been declared
+   * created it:
+   *
+   *     x = 5
+   *     print(x)      // interpreter: not defined, VM: 5
+   *
+   * which means a misspelling silently became a second variable. `cont = 0` for
+   * `count = 0` reported nothing and left `count` alone. The reference
+   * implementation's Environment.assign walks the scope chain and throws when it
+   * finds nothing, so STORE_GLOBAL now rejects an unbound name using the shared
+   * undefinedVariableMessage() and the suggestion comes out identical.
+   */
+  describe('assignment to an undeclared global (VM created it silently)', () => {
+    const NOT_DEFINED = (name: string, suggestion: string): string =>
+      `Variable '${name}' is not defined. Did you mean '${suggestion}'?`;
+
+    it('agrees that assigning to an undeclared name is an error', () => {
+      expectSameError(`x = 5\nprint(x)`, NOT_DEFINED('x', 'E'));
+    });
+
+    it('agrees on the suggestion when the name is a near-miss for a real one', () => {
+      expectSameError(`let count = 0\ncont = 5\nprint(count)`, NOT_DEFINED('cont', 'count'));
+    });
+
+    it('agrees that compound assignment to an undeclared name is an error', () => {
+      expectSameError(`x += 1\nprint(x)`, NOT_DEFINED('x', 'E'));
+    });
+
+    it('agrees on a different compound operator too', () => {
+      expectSameError(`total *= 2`, NOT_DEFINED('total', 'tan'));
+    });
+
+    it('agrees that assigning to an undeclared name inside a function is an error', () => {
+      expectSameError(`fn f() {\n  y = 3\n}\nf()`, NOT_DEFINED('y', 'E'));
+    });
+
+    it('agrees that a closure assigning to an undeclared name is an error', () => {
+      expectSameError(`fn f() {\n  fn g() { hhh = 2 }\n  g()\n}\nf()`, NOT_DEFINED('hhh', 'hash'));
+    });
+
+    it('agrees the error is reported only when execution reaches it', () => {
+      expect(
+        expectAgreement(`
+          if false {
+            zzz = 1
+          }
+          print("ok")
+        `)
+      ).toEqual(['ok']);
+    });
+
+    it('agrees the error is catchable, with the same message in the catch', () => {
+      expect(
+        expectAgreement(`try { qqq = 1 } catch e { print(e.message) }`)
+      ).toEqual([NOT_DEFINED('qqq', 'abs')]);
+    });
+
+    it('declared globals are still freely assignable', () => {
+      expect(expectAgreement(`let a = 1\na = 2\nprint(a)`)).toEqual(['2']);
+    });
+
+    it('declared globals still accept compound assignment', () => {
+      expect(expectAgreement(`let a = 1\na += 5\na *= 2\nprint(a)`)).toEqual(['12']);
+    });
+
+    it('a global declared as a function or class is still assignable', () => {
+      expect(expectAgreement(`fn g() { return 1 }\ng = 5\nprint(g)`)).toEqual(['5']);
+      expect(
+        expectAgreement(`class K { fn init() {} }\nK = 3\nprint(K)`)
+      ).toEqual(['3']);
+    });
+
+    it('a destructured global is still assignable', () => {
+      expect(expectAgreement(`let [a, b] = [1, 2]\na = 9\nprint(a + b)`)).toEqual(['11']);
+    });
+
+    it('locals are still freely assignable', () => {
+      expect(
+        expectAgreement(`fn f() {\n  let n = 1\n  n = 2\n  return n\n}\nprint(f())`)
+      ).toEqual(['2']);
+    });
+
+    it('a shadowing local is assignable without touching the outer binding', () => {
+      expect(
+        expectAgreement(`let v = 1\nif true {\n  let v = 2\n  v = 3\n  print(v)\n}\nprint(v)`)
+      ).toEqual(['3', '1']);
+    });
+
+    it('a loop variable is still bound on every iteration', () => {
+      expect(expectAgreement(`for i in 0..3 {\n  print(i)\n}`)).toEqual(['0', '1', '2']);
+      expect(
+        expectAgreement(`let xs = [1, 2]\nfor v in xs { print(v) }\nfor v in xs { print(v) }`)
+      ).toEqual(['1', '2', '1', '2']);
+    });
+
+    it('a global written through a closure is still assignable', () => {
+      expect(expectAgreement(`let g = 1\nfn f() { g = 2 }\nf()\nprint(g)`)).toEqual(['2']);
+    });
+
+    it('element and property assignment are unaffected', () => {
+      expect(expectAgreement(`let a = [1, 2]\na[0] = 9\nprint(a[0])`)).toEqual(['9']);
+      expect(expectAgreement(`let o = {k: 1}\no.k = 5\nprint(o.k)`)).toEqual(['5']);
+    });
+
+    it('reassigning a const global is still the const error, not the undefined one', () => {
+      expectSameError(`const C = 1\nC = 2`, `Cannot reassign constant 'C'`);
+    });
+  });
 });

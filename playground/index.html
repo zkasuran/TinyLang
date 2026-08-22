@@ -8654,6 +8654,12 @@ var TinyLangBundle = (() => {
             const nameIdx = this.read16();
             const name = this.currentFrame.chunk.constants[nameIdx];
             const value = this.pop();
+            if (!this.globals.has(name.value)) {
+              throw new RuntimeError(
+                undefinedVariableMessage(name.value, this.globals.keys()),
+                this.currentLine()
+              );
+            }
             if (this.constGlobals.has(name.value)) {
               throw new RuntimeError(
                 `Cannot reassign constant '${name.value}'`,
