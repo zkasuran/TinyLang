@@ -453,6 +453,12 @@ fib(10) = 55</span>
         if (!root) return;
         var items = root.querySelectorAll("[data-step]");
         for (var i = 0; i < items.length; i++) { items[i].style.opacity = i < k ? "1" : "0"; }
+        // Settle the counters to their final value for a clean capture, since the
+        // count-up observer may not fire when the stats sit below the capture fold.
+        var nums = root.querySelectorAll(".num[data-count]");
+        for (var j = 0; j < nums.length; j++) {
+          nums[j].textContent = parseInt(nums[j].getAttribute("data-count"), 10).toLocaleString();
+        }
       };
       var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       var nav = document.getElementById("nav");
