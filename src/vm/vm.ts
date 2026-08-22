@@ -21,6 +21,8 @@ import {
   InstanceValue,
   Environment,
   RuntimeError,
+  StepLimitExceeded,
+  undefinedVariableMessage,
   createNumber,
   createString,
   createBoolean,
@@ -84,8 +86,11 @@ export interface VMClosure {
 /**
  * Raised when the step budget is exhausted. Distinct from RuntimeError so that
  * `try`/`catch` inside the runaway code cannot catch and resume it.
+ *
+ * Re-exported from types/values so that the interpreter raises the very same
+ * class; existing `import { StepLimitExceeded } from '../vm'` keeps working.
  */
-export class StepLimitExceeded extends RuntimeError {}
+export { StepLimitExceeded };
 
 export type OutputHandler = (message: string) => void;
 
@@ -340,8 +345,12 @@ export class VM {
   private dispatch(stopDepth: number): RuntimeValue {
     while (true) {
       if (this.steps++ > this.maxSteps) {
+        // Message is the interpreter's, word for word: it is the reference
+        // implementation and the two must not report the same condition
+        // differently.
         throw new StepLimitExceeded(
-          'Maximum execution steps exceeded (possible infinite loop)',
+          `Execution limit exceeded (${this.maxSteps} steps). Your program might ` +
+            'have an infinite loop. Check your while/for conditions.',
           this.currentLine()
         );
       }
@@ -588,8 +597,10 @@ export class VM {
           const name = this.currentFrame.chunk.constants[nameIdx] as StringValue;
           const value = this.globals.get(name.value);
           if (value === undefined) {
+            // Same message as the interpreter's Environment.lookup, hint
+            // included; this used to omit the "Did you mean?" suggestion.
             throw new RuntimeError(
-              `Variable '${name.value}' is not defined`,
+              undefinedVariableMessage(name.value, this.globals.keys()),
               this.currentLine()
             );
           }
@@ -953,11 +964,18 @@ export class VM {
 
         case OpCode.GET_THIS: {
           const thisVal = this.currentFrame.thisBinding;
-          if (thisVal) {
-            this.push(thisVal);
-          } else {
-            this.push(createNull());
+          if (!thisVal) {
+            // In the interpreter `this` is an ordinary binding in the method's
+            // environment, so using it outside a method is an undefined-variable
+            // error. Pushing null here instead let `this` outside a method read
+            // as a legitimate null and produced a different error later, or
+            // none at all.
+            throw new RuntimeError(
+              undefinedVariableMessage('this', this.globals.keys()),
+              this.currentLine()
+            );
           }
+          this.push(thisVal);
           break;
         }
 
@@ -1372,21 +1390,18 @@ export class VM {
       if (obj.properties.has(prop)) {
         return obj.properties.get(prop)!;
       }
-      // Then check class methods
+      // Then check class methods.
+      //
+      // Reading a method as a plain property yields the method itself, with no
+      // receiver attached - exactly what the interpreter's evalMemberExpression
+      // does. Binding `obj` here made `let m = t.show; m()` work in the VM while
+      // the interpreter rejected it, because there `this` is a binding in the
+      // method's environment that a detached call never establishes.
+      //
+      // Method *calls* still bind the receiver: that goes through GET_METHOD /
+      // performGetMethod, not through here.
       const method = obj.classRef.methods.get(prop);
       if (method) {
-        // Bind method to instance
-        if ((method as unknown as VMClosure).type === 'vm-closure') {
-          const closure = method as unknown as VMClosure;
-          const boundClosure: VMClosure = {
-            type: 'vm-closure',
-            fn: closure.fn,
-            upvalues: closure.upvalues,
-          };
-          // We'll set thisBinding when calling
-          (boundClosure as VMClosure & { boundThis: RuntimeValue }).boundThis = obj;
-          return boundClosure as unknown as RuntimeValue;
-        }
         return method as unknown as RuntimeValue;
       }
       return createNull();

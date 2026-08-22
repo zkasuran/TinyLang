@@ -137,11 +137,7 @@ export class Environment {
       return this.parent.lookup(name);
     }
     // Generate "Did you mean?" suggestion
-    const suggestion = this.findSimilar(name);
-    const hint = suggestion
-      ? `Did you mean '${suggestion}'?`
-      : `Did you forget to declare it with 'let' or 'const'?`;
-    throw new RuntimeError(`Variable '${name}' is not defined. ${hint}`);
+    throw new RuntimeError(undefinedVariableMessage(name, this.getAllNames()));
   }
 
   /**
@@ -184,19 +180,7 @@ export class Environment {
    * Returns null if no good match is found (distance > 3).
    */
   private findSimilar(name: string): string | null {
-    const allNames = this.getAllNames();
-    let bestMatch: string | null = null;
-    let bestDistance = Infinity;
-
-    for (const candidate of allNames) {
-      const dist = levenshteinDistance(name.toLowerCase(), candidate.toLowerCase());
-      if (dist < bestDistance && dist <= 3) {
-        bestDistance = dist;
-        bestMatch = candidate;
-      }
-    }
-
-    return bestMatch;
+    return suggestSimilarName(name, this.getAllNames());
   }
 }
 
@@ -210,6 +194,63 @@ export class RuntimeError extends Error {
   ) {
     super(message);
     this.name = 'RuntimeError';
+  }
+}
+
+/**
+ * Find the name in `candidates` closest to `name`, or null if none is within a
+ * Levenshtein distance of 3. Ties go to the first candidate seen, so the caller
+ * controls the outcome through candidate order.
+ *
+ * Shared so the VM can produce byte-identical "Did you mean?" hints to the
+ * interpreter's; the VM keeps globals in a plain Map rather than an Environment
+ * and previously reported undefined variables with no hint at all.
+ */
+export function suggestSimilarName(name: string, candidates: Iterable<string>): string | null {
+  let bestMatch: string | null = null;
+  let bestDistance = Infinity;
+
+  for (const candidate of candidates) {
+    const dist = levenshteinDistance(name.toLowerCase(), candidate.toLowerCase());
+    if (dist < bestDistance && dist <= 3) {
+      bestDistance = dist;
+      bestMatch = candidate;
+    }
+  }
+
+  return bestMatch;
+}
+
+/**
+ * The message both engines use for a variable that is not in scope. Kept in one
+ * place because the two used to word it differently.
+ */
+export function undefinedVariableMessage(
+  name: string,
+  candidates: Iterable<string>
+): string {
+  const suggestion = suggestSimilarName(name, candidates);
+  const hint = suggestion
+    ? `Did you mean '${suggestion}'?`
+    : `Did you forget to declare it with 'let' or 'const'?`;
+  return `Variable '${name}' is not defined. ${hint}`;
+}
+
+/**
+ * Raised when the step budget is exhausted.
+ *
+ * Deliberately a distinct class so that both engines can refuse to let a
+ * `try`/`catch` inside the runaway code catch it. A handler sitting inside the
+ * offending loop would otherwise swallow the limit and the loop would spin
+ * forever, which is the exact failure the limit exists to prevent.
+ *
+ * Shared by the tree-walk interpreter and the VM so that the two agree on both
+ * the class and the message.
+ */
+export class StepLimitExceeded extends RuntimeError {
+  constructor(message: string, line?: number, column?: number) {
+    super(message, line, column);
+    this.name = 'StepLimitExceeded';
   }
 }
 
@@ -264,6 +305,14 @@ export function isTruthy(value: RuntimeValue): boolean {
 }
 
 export function stringify(value: RuntimeValue): string {
+  // The VM represents a user-defined function as a closure object tagged
+  // 'vm-closure'. It is not part of the RuntimeValue union but it does reach
+  // print, where it used to render as '<unknown>' while the interpreter
+  // rendered the same function as '<fn name>'.
+  const asClosure = value as unknown as { type?: string; fn?: { name?: string } };
+  if (asClosure.type === 'vm-closure') {
+    return `<fn ${asClosure.fn?.name ?? '<anonymous>'}>`;
+  }
   switch (value.type) {
     case 'null': return 'null';
     case 'number': return String(value.value);

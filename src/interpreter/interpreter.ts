@@ -57,6 +57,7 @@ import {
   InstanceValue,
   Environment,
   RuntimeError,
+  StepLimitExceeded,
   ReturnSignal,
   BreakSignal,
   ContinueSignal,
@@ -1425,6 +1426,12 @@ export class Interpreter {
       const tryEnv = env.createChild();
       return this.executeStatements(stmt.tryBody, tryEnv);
     } catch (error) {
+      if (error instanceof StepLimitExceeded) {
+        // A runaway program must not be catchable: a handler inside the
+        // offending loop would swallow the limit and spin forever. Matches the
+        // VM's unwindToHandler.
+        throw error;
+      }
       const catchEnv = env.createChild();
       // Create an error object with .message property
       if (error instanceof RuntimeError) {
@@ -1680,7 +1687,12 @@ export class Interpreter {
   private checkStepLimit(): void {
     this.steps++;
     if (this.steps > this.maxSteps) {
-      throw new RuntimeError(
+      // StepLimitExceeded, not a plain RuntimeError: evalTryCatchStatement
+      // rethrows it rather than catching it. A plain RuntimeError meant a
+      // `catch` inside the runaway loop swallowed the limit and the loop then
+      // spun forever - the limit could be defeated by the very code it exists
+      // to stop. The VM already behaved this way; the interpreter now matches.
+      throw new StepLimitExceeded(
         `Execution limit exceeded (${this.maxSteps} steps). Your program might have an infinite loop. Check your while/for conditions.`
       );
     }
