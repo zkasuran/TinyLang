@@ -1183,12 +1183,34 @@ export class VM {
     );
   }
 
-  private callNative(fn: NativeFunctionValue, argCount: number): void {
+  /**
+   * Invoke a native (stdlib) function.
+   *
+   * `checkArity` mirrors where the interpreter performs the check: its
+   * `callFunction` rejects a wrong argument count for a native function value,
+   * but `tryBuiltinMethod` - the `arr.push(...)` / `s.split(...)` path - runs
+   * before that and does not. Checking unconditionally here would make the VM
+   * stricter than the reference on method calls.
+   */
+  private callNative(
+    fn: NativeFunctionValue,
+    argCount: number,
+    checkArity: boolean = true
+  ): void {
     const args: RuntimeValue[] = [];
     for (let i = 0; i < argCount; i++) {
       args.unshift(this.pop());
     }
     this.pop(); // Pop the function itself
+
+    // arity -1 means variadic. The VM previously ignored arity entirely, so
+    // `abs(-3, 99)` succeeded here while the interpreter rejected it.
+    if (checkArity && fn.arity >= 0 && args.length !== fn.arity) {
+      throw new RuntimeError(
+        `'${fn.name}' expects ${fn.arity} argument(s), but got ${args.length}`,
+        this.currentLine()
+      );
+    }
 
     const env = new Environment();
     const result = fn.fn(args, env);
@@ -1252,7 +1274,9 @@ export class VM {
       };
       this.frames.push(frame);
     } else if (method.type === 'native-function') {
-      this.callNative(method, argCount);
+      // Builtin methods are the interpreter's tryBuiltinMethod path, which does
+      // not arity-check. See callNative.
+      this.callNative(method, argCount, false);
     }
   }
 
