@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Bytecode Compiler and Stack-based Virtual Machine - Compile TinyLang AST to bytecode instructions and execute them on a stack-based VM. This is a major new component that enables tinylang compile and tinylang exec commands.",
-  "status": "pending",
+  "status": "in_progress",
   "steps": [
     "Create src/compiler/ directory with bytecode instruction set definition in src/compiler/opcodes.ts. Define opcodes: CONST, POP, ADD, SUB, MUL, DIV, MOD, POW, NEGATE, NOT, EQ, NEQ, LT, LTE, GT, GTE, AND, OR, JMP, JMP_IF_FALSE, JMP_IF_TRUE, LOAD_LOCAL, STORE_LOCAL, LOAD_GLOBAL, STORE_GLOBAL, CALL, RETURN, ARRAY, OBJECT, INDEX, SET_INDEX, GET_PROP, SET_PROP, PRINT, CLOSURE, CLASS, METHOD, INHERIT, NEW_INSTANCE, DUP, HALT",
     "Create src/compiler/chunk.ts - Bytecode chunk that holds instructions (Uint8Array), a constant pool (RuntimeValue[]), line number mapping for error messages, and serialization/deserialization to .tinyc binary format",

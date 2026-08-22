@@ -12,6 +12,12 @@ export type { InterpreterOptions, OutputHandler } from './interpreter';
 export { registerStdlib } from './stdlib';
 export { TinyLang } from './tinylang';
 
+// Compiler and VM
+export { Compiler, Chunk, OpCode, opcodeName, disassemble, optimize, CompilerError } from './compiler';
+export type { CompiledFunction } from './compiler';
+export { VM } from './vm';
+export type { VMOptions } from './vm';
+
 // Re-export types
 export * from './types/tokens';
 export * from './types/ast';

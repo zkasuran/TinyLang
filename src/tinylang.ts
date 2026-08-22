@@ -14,6 +14,9 @@ import { Environment, stringify } from './types/values';
 import { LexerError } from './lexer/errors';
 import { ParseError } from './parser/errors';
 import { RuntimeError } from './types/values';
+import { Compiler } from './compiler/compiler';
+import { Chunk } from './compiler/chunk';
+import { VM } from './vm/vm';
 
 export interface RunResult {
   success: boolean;
@@ -140,6 +143,54 @@ export class TinyLang {
    */
   getEnvironment(): Environment {
     return this.globalEnv;
+  }
+
+  /**
+   * Compile a TinyLang source string to bytecode
+   */
+  compile(source: string): Chunk {
+    const lexer = new Lexer(source);
+    const tokens = lexer.tokenize();
+    const parser = new Parser(tokens);
+    const program = parser.parse();
+    const compiler = new Compiler();
+    return compiler.compile(program);
+  }
+
+  /**
+   * Execute a compiled bytecode chunk and return the result
+   */
+  runCompiled(chunk: Chunk): RunResult {
+    this.outputBuffer = [];
+
+    try {
+      const vm = new VM({
+        output: (msg: string) => {
+          this.outputBuffer.push(msg);
+        },
+      });
+      const result = vm.run(chunk);
+
+      return {
+        success: true,
+        output: [...this.outputBuffer],
+        result: stringify(result),
+      };
+    } catch (error) {
+      return this.handleError(error);
+    }
+  }
+
+  /**
+   * Compile and run source code using the bytecode compiler and VM
+   */
+  compileAndRun(source: string): RunResult {
+    try {
+      const chunk = this.compile(source);
+      return this.runCompiled(chunk);
+    } catch (error) {
+      return this.handleError(error);
+    }
   }
 
   private handleError(error: unknown): RunResult {
