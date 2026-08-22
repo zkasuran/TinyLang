@@ -18,6 +18,12 @@ export type { CompiledFunction } from './compiler';
 export { VM } from './vm';
 export type { VMOptions } from './vm';
 
+// Debugger
+export { Debugger, DebugPauseSignal } from './debugger';
+export type { DebuggerOptions } from './debugger';
+export { formatVariable, formatCallStack, formatLocals, formatWatches, getLocalsFromEnv, parseCommand, getHelpText } from './debugger';
+export type { DebugCommand, Breakpoint, DebugFrame, DebugAction, DebugState, WatchExpression, DebugEvent } from './debugger';
+
 // Re-export types
 export * from './types/tokens';
 export * from './types/ast';

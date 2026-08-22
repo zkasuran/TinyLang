@@ -58,6 +58,7 @@ import {
   stringify,
   valueEquals,
 } from '../types/values';
+import { DebugFrame, DebugAction } from '../debugger/types';
 
 export type OutputHandler = (message: string) => void;
 
@@ -77,6 +78,12 @@ export class Interpreter {
   private globalEnv: Environment;
   private outputBuffer: string[] = [];
 
+  /** Optional debug hook called before each statement */
+  public debugHook?: (stmt: Statement, env: Environment, callStack: DebugFrame[]) => DebugAction;
+
+  /** Debug call stack tracking */
+  private debugCallStack: DebugFrame[] = [];
+
   constructor(options: InterpreterOptions = {}) {
     this.output = options.output || ((msg: string) => console.log(msg));
     this.maxSteps = options.maxSteps || 1_000_000;
@@ -89,6 +96,15 @@ export class Interpreter {
   execute(program: Program): RuntimeValue {
     this.steps = 0;
     this.outputBuffer = [];
+    // Initialize debug call stack with main frame if hook is set
+    if (this.debugHook) {
+      this.debugCallStack = [{
+        functionName: '<main>',
+        line: 1,
+        column: 1,
+        env: this.globalEnv,
+      }];
+    }
     return this.executeStatements(program.body, this.globalEnv);
   }
 
@@ -97,6 +113,15 @@ export class Interpreter {
    */
   executeInEnvironment(program: Program, env: Environment): RuntimeValue {
     this.steps = 0;
+    // Initialize debug call stack with main frame if hook is set
+    if (this.debugHook) {
+      this.debugCallStack = [{
+        functionName: '<main>',
+        line: 1,
+        column: 1,
+        env: env,
+      }];
+    }
     return this.executeStatements(program.body, env);
   }
 
@@ -121,6 +146,12 @@ export class Interpreter {
 
     for (const stmt of statements) {
       this.checkStepLimit();
+
+      // Call debug hook if set
+      if (this.debugHook) {
+        this.debugHook(stmt, env, this.debugCallStack);
+      }
+
       const value = this.executeStatement(stmt, env);
 
       // Handle control flow signals
@@ -807,8 +838,23 @@ export class Interpreter {
         fnEnv.define(param.name, value);
       }
 
+      // Push debug frame if hook is active
+      if (this.debugHook) {
+        this.debugCallStack.push({
+          functionName: fn.name || '<anonymous>',
+          line: expr.position.line,
+          column: expr.position.column,
+          env: fnEnv,
+        });
+      }
+
       // Execute function body
       const result = this.executeStatements(fn.body, fnEnv);
+
+      // Pop debug frame
+      if (this.debugHook) {
+        this.debugCallStack.pop();
+      }
 
       if ((result as unknown) instanceof ReturnSignal) {
         return (result as unknown as ReturnSignal).value;

@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Interactive Debugger with breakpoints, stepping, variable inspection, and watch expressions. Works from CLI via tinylang debug command.",
-  "status": "pending",
+  "status": "in_progress",
   "steps": [
     "Create src/debugger/debugger.ts - Debugger class that wraps the tree-walk interpreter with debugging hooks. Add breakpoint management (set/remove/list by line number, conditional breakpoints with expressions). Implement stepping modes: step-over (execute next statement), step-into (enter function calls), step-out (run until current function returns). Track call stack with frame info (function name, line, local variables).",
     "Create src/debugger/inspector.ts - Variable inspection at any scope. Display all variables in current scope and parent scopes. Support watch expressions (evaluate arbitrary expressions in current context). Format output with colorized display showing variable names, types, and values.",
