@@ -2,7 +2,7 @@
   "id": "FEAT-003",
   "type": "feat",
   "description": "Formatter (AST-based pretty printer), Linter (static analysis), and Built-in Test Framework. These are three developer tools that share AST analysis infrastructure.",
-  "status": "pending",
+  "status": "completed",
   "steps": [
     "Create src/formatter/formatter.ts - AST-based pretty printer. Walk the AST and produce formatted source. Configurable indent size (default 2), max line width (default 80). Preserve comments (requires lexer modification to track comments). Handle all AST node types. Ensure idempotency: formatting already-formatted code produces identical output.",
     "Create src/formatter/config.ts - Formatting configuration: indentSize, maxLineWidth, useSemicolons, braceStyle. Read from .tinylang.json if present, otherwise use defaults.",
@@ -32,5 +32,5 @@
     "npx vitest run"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All 320 tests pass (266 original + 54 new). Build succeeds. The test keyword was added as TEST to TokenType enum and KEYWORDS map. TestDeclaration AST node added to Statement union. Parser handles 'test <expression> { <body> }' syntax. Interpreter skips TestDeclaration during normal execution. Match statements in TinyLang require 'when' clauses to be on separate lines (no single-line multi-clause match). The test runner creates fresh environments per test but executes top-level non-test declarations as setup code, so test bodies should not re-declare top-level variable names."
 }
