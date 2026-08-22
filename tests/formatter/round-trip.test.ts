@@ -21,7 +21,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Lexer } from '../../src/lexer';
 import { Parser } from '../../src/parser';
-import { Formatter, FormatterError, astDifference } from '../../src/formatter';
+import {
+  Formatter,
+  FormatterError,
+  astDifference,
+  commentTexts,
+  commentDifference,
+} from '../../src/formatter';
 import { Interpreter } from '../../src/interpreter';
 import { registerStdlib } from '../../src/stdlib';
 
@@ -43,7 +49,7 @@ function run(source: string): string[] {
 }
 
 /**
- * Assert that formatting `source` preserves its meaning, three ways.
+ * Assert that formatting `source` preserves its meaning, four ways.
  * Returns the formatted text so callers can pin the exact output too.
  */
 function expectPreserved(source: string): string {
@@ -53,6 +59,12 @@ function expectPreserved(source: string): string {
   expect(
     difference,
     `formatting changed the AST\n${difference}\n--- formatted ---\n${formatted}`
+  ).toBeNull();
+
+  const commentLoss = commentDifference(commentTexts(source), commentTexts(formatted));
+  expect(
+    commentLoss,
+    `formatting changed the comments\n${commentLoss}\n--- formatted ---\n${formatted}`
   ).toBeNull();
 
   expect(formatter.format(formatted), 'formatting is not idempotent').toBe(formatted);
@@ -84,6 +96,17 @@ describe('Formatter round-trip safety', () => {
           const formatted = formatter.format(source);
           const difference = astDifference(parse(source), parse(formatted));
           expect(difference, `formatting ${file} changed the AST\n${difference}`).toBeNull();
+        });
+
+        it('keeps every comment', () => {
+          // These files are teaching material: the commentary is the product.
+          // `fmt` deleted all 230 lines of it across the 18 examples, and the AST
+          // check above cannot see that, because comments are not in the AST.
+          const formatted = formatter.format(source);
+          const before = commentTexts(source);
+          const difference = commentDifference(before, commentTexts(formatted));
+          expect(before.length, `${file} has no comments to check`).toBeGreaterThan(0);
+          expect(difference, `formatting ${file} changed its comments\n${difference}`).toBeNull();
         });
 
         it('is idempotent', () => {

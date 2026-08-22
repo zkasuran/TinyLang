@@ -122,7 +122,7 @@ node dist/cli/index.js <command> [options]
 | `compile <file>` | Compile source to `.tinyc` bytecode binary |
 | `exec <file>` | Compile and immediately execute via the VM |
 | `debug <file>` | Launch interactive debugger session |
-| `fmt <file>` | Format source code (AST-based, idempotent) |
+| `fmt <file>` | Format source code (AST-based, idempotent, comment-preserving) |
 | `lint <file>` | Run static analysis (5 rules, auto-fix with `--fix`) |
 | `test <file>` | Discover and run inline test blocks |
 | `doc <file>` | Extract documentation from source |

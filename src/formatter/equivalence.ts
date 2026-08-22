@@ -3,18 +3,39 @@
  *
  * Used by the formatter to prove that formatted output means exactly what the
  * input meant. Two ASTs are equivalent when they are identical after ignoring
- * source positions (which necessarily move when whitespace changes) and after
- * treating an explicitly-undefined property as an absent one (the parser sets
- * `superClass`, `defaultCase` and `defaultValue` only sometimes).
+ * source positions (which necessarily move when whitespace changes), the
+ * comment and blank-line fields (see below) and after treating an
+ * explicitly-undefined property as an absent one (the parser sets `superClass`,
+ * `defaultCase` and `defaultValue` only sometimes).
  *
  * Nothing else is ignored. In particular node types, operators, the `constant`
  * flag of a declaration, the `inclusive` flag of a range, property keys and the
  * order of every list are all compared, because every one of them changes what
  * a program does.
+ *
+ * Comments are excluded here but *not* unchecked. They cannot be compared this
+ * way: a comment legitimately moves from one anchor to another when formatting
+ * relocates it - a comment inside an expression has no anchor of its own and
+ * ends up on the enclosing statement - so a structural comparison of these
+ * fields would fail on output that is perfectly correct. What matters is that no
+ * comment is lost, gained or altered, and that is a property of the *sequence of
+ * comment texts*, checked by commentDifference() in ./comments.ts. Removing a
+ * key from this set without adding an equivalent check elsewhere would recreate
+ * the original bug, in which the formatter deleted every comment in the file and
+ * the round-trip check could not see it.
  */
 
 /** Keys that legitimately differ between two spellings of the same program. */
-const IGNORED_KEYS: ReadonlySet<string> = new Set(['position']);
+const IGNORED_KEYS: ReadonlySet<string> = new Set([
+  'position',
+  // Comment attachment and blank-line layout; verified by text, not structure.
+  'leadingComments',
+  'trailingComments',
+  'danglingComments',
+  'variantComments',
+  'defaultComments',
+  'blankBefore',
+]);
 
 const MAX_SNIPPET = 220;
 

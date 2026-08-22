@@ -105,6 +105,37 @@ export interface Token {
   length: number;
 }
 
+/** A `//` comment running to end of line, or a delimited block (which may nest). */
+export type CommentKind = 'line' | 'block';
+
+/**
+ * A comment retained by the lexer.
+ *
+ * Comments are not tokens: they never enter the token stream, because every
+ * consumer of `tokenize()` - parser, linter, debugger, module loader - is
+ * written against a stream in which they do not appear. They are collected
+ * alongside it instead, and read back with `Lexer.getComments()`.
+ *
+ * The formatter needs all four fields: the verbatim `text` so a block comment's
+ * internal layout survives, `start`/`end` to work out which construct a comment
+ * belongs to and whether a blank line preceded it, and `ownLine` to tell a
+ * comment that occupies its own line from one that trails code.
+ */
+export interface CommentToken {
+  kind: CommentKind;
+  /** Verbatim source text, including the `//` or `/*` delimiters. */
+  text: string;
+  /** Position of the first delimiter character. */
+  start: SourcePosition;
+  /**
+   * Position just past the comment. `offset` is exclusive; `line` is the line
+   * the comment ends on, which differs from `start.line` for block comments.
+   */
+  end: SourcePosition;
+  /** True when only whitespace precedes the comment on its line. */
+  ownLine: boolean;
+}
+
 /**
  * Maps keyword strings to their token types
  */

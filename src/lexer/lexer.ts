@@ -13,12 +13,26 @@
  * Educational error messages guide beginners when they make mistakes.
  */
 
-import { Token, TokenType, KEYWORDS, SourcePosition } from '../types/tokens';
+import {
+  Token,
+  TokenType,
+  KEYWORDS,
+  SourcePosition,
+  CommentToken,
+  CommentKind,
+} from '../types/tokens';
 import { LexerError } from './errors';
 
 export class Lexer {
   private source: string;
   private tokens: Token[] = [];
+  /**
+   * Comments seen during the last `tokenize()`, in source order.
+   *
+   * Kept out of `tokens` on purpose: adding them to the stream would change
+   * what every existing caller of `tokenize()` sees. See getComments().
+   */
+  private comments: CommentToken[] = [];
   private current: number = 0;
   private line: number = 1;
   private column: number = 1;
@@ -33,6 +47,7 @@ export class Lexer {
    */
   tokenize(): Token[] {
     this.tokens = [];
+    this.comments = [];
     this.current = 0;
     this.line = 1;
     this.column = 1;
@@ -50,6 +65,20 @@ export class Lexer {
     });
 
     return this.tokens;
+  }
+
+  /**
+   * The comments found by the most recent `tokenize()`, in source order.
+   *
+   * Comments used to be discarded as they were scanned, which is why
+   * `tinylang fmt` deleted every one of them: the formatter renders from the
+   * AST, the AST is built from the token stream, and by then the comments were
+   * gone. They are retained here so the parser can attach them to the nodes
+   * they belong to. `tokenize()` must be called first; the array is empty
+   * otherwise.
+   */
+  getComments(): CommentToken[] {
+    return this.comments;
   }
 
   private scanToken(): void {
@@ -103,21 +132,28 @@ export class Lexer {
         else if (this.match('=')) this.addToken(TokenType.STAR_ASSIGN);
         else this.addToken(TokenType.STAR);
         break;
-      case '/':
+      case '/': {
+        // Captured before the comment body is consumed: getPosition() derives
+        // the column from `current - start`, which stops being the start of the
+        // token once a comment has been scanned past.
+        const commentStart = this.getPosition();
         if (this.match('/')) {
-          // Single-line comment: skip to end of line
+          // Single-line comment: consume to end of line, then record it.
           while (!this.isAtEnd() && this.peek() !== '\n') {
             this.advance();
           }
+          this.addComment('line', commentStart);
         } else if (this.match('*')) {
           // Multi-line comment
           this.blockComment();
+          this.addComment('block', commentStart);
         } else if (this.match('=')) {
           this.addToken(TokenType.SLASH_ASSIGN);
         } else {
           this.addToken(TokenType.SLASH);
         }
         break;
+      }
 
       // Comparison & assignment operators
       case '=':
@@ -450,6 +486,35 @@ export class Lexer {
       position: this.getPosition(),
       length: this.current - this.start,
     });
+  }
+
+  /**
+   * Record a comment that has just been consumed, spanning `start` to the
+   * current scan position.
+   */
+  private addComment(kind: CommentKind, start: SourcePosition): void {
+    this.comments.push({
+      kind,
+      text: this.source.slice(start.offset, this.current),
+      start,
+      end: { line: this.line, column: this.column, offset: this.current },
+      ownLine: this.isFirstOnLine(start.offset),
+    });
+  }
+
+  /**
+   * Whether only whitespace precedes `offset` on its line.
+   *
+   * This is what separates a comment that documents the code below it from one
+   * that annotates the code beside it, and the two are formatted differently.
+   */
+  private isFirstOnLine(offset: number): boolean {
+    for (let i = offset - 1; i >= 0; i--) {
+      const char = this.source[i];
+      if (char === '\n') return true;
+      if (char !== ' ' && char !== '\t' && char !== '\r') return false;
+    }
+    return true;
   }
 
   private addTokenWithValue(type: TokenType, value: string): void {

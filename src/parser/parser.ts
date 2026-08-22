@@ -21,12 +21,15 @@
  * 14. Call, Member Access, Index
  */
 
-import { Token, TokenType } from '../types/tokens';
+import { Token, TokenType, CommentToken } from '../types/tokens';
 import { Lexer } from '../lexer';
 import {
   Program,
   Statement,
   Expression,
+  BaseNode,
+  Comment,
+  CommentAnchor,
   VariableDeclaration,
   DestructuringDeclaration,
   FunctionDeclaration,
@@ -78,14 +81,64 @@ import {
   TernaryExpression,
 } from '../types/ast';
 import { ParseError } from './errors';
+import { splitInterpolatedString } from './fstring';
+
+/** Nothing precedes the first construct in the file, so nothing can be blank. */
+const NO_LAYOUT_LINE = 0;
+
+/**
+ * A braced statement list, plus the comments found at its end that had no
+ * statement to attach to.
+ *
+ * Returning the two together is what makes it impossible to forget the second:
+ * an empty region is the only place a comment has nowhere to go, and the node
+ * that owns the region is built by parseBlock's caller, not by parseBlock.
+ */
+interface Block {
+  statements: Statement[];
+  dangling: Comment[];
+}
+
+/** A relocated comment, to be printed on a line of its own. */
+function ownLine(comment: Comment): Comment {
+  return { ...comment, ownLine: true, blankBefore: false };
+}
+
+/** A relocated comment, to be printed beside the code it now follows. */
+function sameLine(comment: Comment): Comment {
+  return { ...comment, ownLine: false, blankBefore: false };
+}
 
 export class Parser {
   private tokens: Token[];
   private current: number = 0;
   private errors: ParseError[] = [];
 
-  constructor(tokens: Token[]) {
+  /**
+   * Comments to attach, in source order, and how far through them we are.
+   *
+   * Empty unless the caller supplied them. Attachment is opt-in because the
+   * comment fields are pure layout: the interpreter, compiler, VM, linter and
+   * debugger have no use for them, and an AST without them is exactly the AST
+   * those tools have always been given.
+   */
+  private comments: CommentToken[] = [];
+  private commentIndex: number = 0;
+  private readonly trackComments: boolean;
+
+  /**
+   * The line the last consumed token or comment ended on.
+   *
+   * Blank lines are not tokens, so this is how they are detected: if the next
+   * construct starts two or more lines below this one, at least one line between
+   * them held nothing but whitespace.
+   */
+  private layoutLine: number = NO_LAYOUT_LINE;
+
+  constructor(tokens: Token[], comments?: CommentToken[]) {
     this.tokens = tokens;
+    this.comments = comments ?? [];
+    this.trackComments = comments !== undefined;
   }
 
   /**
@@ -93,6 +146,7 @@ export class Parser {
    */
   parse(): Program {
     const body: Statement[] = [];
+    this.startLayout();
     this.skipNewlines();
 
     while (!this.isAtEnd()) {
@@ -116,16 +170,256 @@ export class Parser {
       throw this.errors[0];
     }
 
-    return {
+    const program: Program = {
       type: 'Program',
       body,
       position: { line: 1, column: 1, offset: 0 },
     };
+
+    // Comments after the last top-level statement. The EOF token's offset is not
+    // the end of the source (it is derived from the last token's start), so the
+    // boundary is unbounded here rather than taken from a token.
+    this.setDangling(program, 'body', this.claimRegionEnd(body, Infinity));
+    return program;
+  }
+
+  // ============ Comment attachment ============
+
+  /**
+   * Seed the blank-line cursor with the first construct in the file, so that
+   * blank lines above it are not mistaken for a blank line the author put
+   * *between* two things and wanted kept.
+   */
+  private startLayout(): void {
+    if (!this.trackComments) return;
+    const firstToken = this.tokens[0]?.position.line ?? 1;
+    const firstComment = this.comments[0]?.start.line ?? Infinity;
+    this.layoutLine = Math.min(firstToken, firstComment);
+  }
+
+  /** Whether the author left a blank line above line `line`. */
+  private blankBefore(line: number): boolean {
+    return (
+      this.trackComments &&
+      this.layoutLine !== NO_LAYOUT_LINE &&
+      line - this.layoutLine >= 2
+    );
+  }
+
+  /**
+   * Convert a lexed comment, resolving its blank-line context as it goes.
+   *
+   * `anchored` is false for a comment that is being relocated because it was
+   * written somewhere with no node to attach to. Such a comment must not
+   * contribute to the blank-line layout at all: it is not where the author put
+   * it, so the gap it leaves behind is not a gap the author asked for, and
+   * counting it invents a blank line out of nothing.
+   */
+  private toComment(token: CommentToken, anchored: boolean = true): Comment {
+    const comment: Comment = {
+      kind: token.kind,
+      text: token.text,
+      ownLine: token.ownLine,
+      blankBefore: anchored && this.blankBefore(token.start.line),
+      indent: token.start.column - 1,
+    };
+    if (anchored) this.layoutLine = token.end.line;
+    return comment;
+  }
+
+  /**
+   * Unclaimed comments beginning before `offset`, in source order.
+   *
+   * One forward-only cursor claims every comment exactly once, which is what
+   * makes it impossible for two anchors to keep the same comment or for one to be
+   * skipped: an unclaimed comment is still there to be found later.
+   */
+  private takeComments(
+    offset: number,
+    anchored: (token: CommentToken) => boolean
+  ): Comment[] {
+    const taken: Comment[] = [];
+    while (
+      this.commentIndex < this.comments.length &&
+      this.comments[this.commentIndex].start.offset < offset
+    ) {
+      const token = this.comments[this.commentIndex++];
+      taken.push(this.toComment(token, anchored(token)));
+    }
+    return taken;
+  }
+
+  private takeCommentsBefore(offset: number, anchored: boolean = true): Comment[] {
+    return this.takeComments(offset, () => anchored);
+  }
+
+  /**
+   * Comments before `statementStart`, marking the ones that only happen to
+   * precede it as relocated.
+   *
+   * `previousEnd` is where the last token before the statement ended. A comment
+   * that starts before that has code between it and the statement - it was
+   * written in an `if` condition, or above a key in an object literal whose value
+   * is a function - so it documents that code, not this statement. It is still
+   * kept here, because this is the nearest anchor that exists, but it must not
+   * bring a blank line with it: the gap it leaves behind is not one the author
+   * asked for.
+   */
+  private takeLeadingComments(statementStart: number, previousEnd: number): Comment[] {
+    return this.takeComments(
+      statementStart,
+      (token) => token.start.offset >= previousEnd
+    );
+  }
+
+  /**
+   * Unclaimed comments that sit beside code on line `line`.
+   *
+   * `ownLine` is what distinguishes `x = 1 // why` from a comment that happens
+   * to follow on the next line: the latter documents what comes after it and
+   * belongs to the next construct, not this one.
+   */
+  private takeTrailingCommentsOn(line: number): Comment[] {
+    const taken: Comment[] = [];
+    while (this.commentIndex < this.comments.length) {
+      const candidate = this.comments[this.commentIndex];
+      if (candidate.ownLine || candidate.start.line !== line) break;
+      taken.push(this.toComment(candidate));
+      this.commentIndex++;
+    }
+    return taken;
+  }
+
+  /**
+   * Claim the comments between the last statement of a region and the token that
+   * closes it.
+   *
+   * With statements present the comments become trailing comments of the last
+   * one, which puts them back inside the braces when the region is printed. With
+   * none they are returned for the enclosing node to record as dangling: an
+   * empty region is the only place a comment has no statement to attach to.
+   */
+  private claimRegionEnd(statements: Statement[], boundaryOffset: number): Comment[] {
+    if (!this.trackComments) return [];
+    const leftover = this.takeCommentsBefore(boundaryOffset);
+    if (leftover.length === 0) return [];
+    if (statements.length === 0) return leftover;
+    this.appendTrailing(statements[statements.length - 1], leftover);
+    return [];
+  }
+
+  private appendTrailing(anchor: CommentAnchor, comments: Comment[]): void {
+    if (comments.length === 0) return;
+    anchor.trailingComments = [...(anchor.trailingComments ?? []), ...comments];
+  }
+
+  private setDangling(node: BaseNode, region: string, comments: Comment[]): void {
+    if (comments.length === 0) return;
+    node.danglingComments = { ...(node.danglingComments ?? {}), [region]: comments };
+  }
+
+  /** Assemble an anchor for a construct that is not a node of its own. */
+  private commentAnchor(
+    leading: Comment[],
+    trailing: Comment[],
+    blankBefore: boolean
+  ): CommentAnchor | undefined {
+    const anchor: CommentAnchor = {};
+    if (leading.length > 0) anchor.leadingComments = leading;
+    if (trailing.length > 0) anchor.trailingComments = trailing;
+    if (blankBefore) anchor.blankBefore = true;
+    return Object.keys(anchor).length > 0 ? anchor : undefined;
   }
 
   // ============ Statement Parsing ============
 
+  /**
+   * Parse one statement, attaching the comments that belong to it.
+   *
+   * Three kinds are attached here:
+   *
+   *  - own-line comments above the statement, as `leadingComments`;
+   *  - a comment beside the statement's last line, as `trailingComments`;
+   *  - comments *inside* the statement that no nested statement claimed.
+   *
+   * The third kind is a relocation, and the only one that loses information. A
+   * comment in the middle of an expression - `[1, // one` - has no node to attach
+   * to, because the formatter renders expressions from the AST and the AST has no
+   * room between two array elements. Rather than drop it, it is moved to the
+   * nearest place that does exist, keeping its position relative to every other
+   * comment: above the statement if the statement contains no comments of its
+   * own, and after it otherwise. Only the column moves, and the comment check
+   * verifies that much.
+   *
+   * The order matters more than it looks. Comments are claimed through one
+   * forward-only cursor, so anything left over sits *after* every comment a
+   * nested statement already took. Hoisting such a leftover above the statement
+   * would print it before those: a comment on a later argument of a call whose
+   * earlier argument is a function containing a comment would come out with the
+   * two the wrong way round, and the check would reject the file for reordering. Hence: leftovers go after the statement when the statement claimed
+   * anything internally.
+   */
   private parseStatement(): Statement {
+    return this.withComments(() => this.parseStatementInner());
+  }
+
+  private withComments<T extends Statement>(parse: () => T): T {
+    if (!this.trackComments) return parse();
+
+    const first = this.peek();
+    const leading = this.takeLeadingComments(
+      first.position.offset,
+      this.previousTokenEnd()
+    );
+    const blankBefore = this.blankBefore(first.position.line);
+
+    const claimedBefore = this.commentIndex;
+    const statement = parse();
+    const claimedInside = this.commentIndex > claimedBefore;
+
+    const last = this.lastConsumedToken();
+    const leftovers = this.takeCommentsBefore(
+      last.position.offset + last.length,
+      false
+    );
+    const trailing = this.takeTrailingCommentsOn(last.position.line);
+
+    if (claimedInside) {
+      // After the comments the statement's own body claimed.
+      this.appendTrailing(statement, leftovers.map(sameLine));
+      if (leading.length > 0) statement.leadingComments = leading;
+    } else if (leading.length > 0 || leftovers.length > 0) {
+      statement.leadingComments = [...leading, ...leftovers.map(ownLine)];
+    }
+    if (blankBefore) statement.blankBefore = true;
+    this.appendTrailing(statement, trailing);
+    return statement;
+  }
+
+  /** Where the token before the one about to be parsed ended. */
+  private previousTokenEnd(): number {
+    const previous = this.tokens[this.current - 1];
+    return previous === undefined ? 0 : previous.position.offset + previous.length;
+  }
+
+  /**
+   * The last token the parser consumed, ignoring the newline or semicolon that
+   * ended the statement. That token's line is where a trailing comment would be,
+   * and its end is where the statement's own text stops.
+   */
+  private lastConsumedToken(): Token {
+    let index = this.current - 1;
+    while (
+      index > 0 &&
+      (this.tokens[index].type === TokenType.NEWLINE ||
+        this.tokens[index].type === TokenType.SEMICOLON)
+    ) {
+      index--;
+    }
+    return this.tokens[Math.max(index, 0)];
+  }
+
+  private parseStatementInner(): Statement {
     switch (this.peek().type) {
       case TokenType.LET:
       case TokenType.CONST:
@@ -273,13 +567,15 @@ export class Parser {
     const params = this.parseParameterList();
     const body = this.parseBlock();
 
-    return {
+    const declaration: FunctionDeclaration = {
       type: 'FunctionDeclaration',
       name: nameToken.value,
       params,
-      body,
+      body: body.statements,
       position,
     };
+    this.setDangling(declaration, 'body', body.dangling);
+    return declaration;
   }
 
   private parseParameterList(): Parameter[] {
@@ -334,15 +630,20 @@ export class Parser {
 
     const methods: FunctionDeclaration[] = [];
     const properties: VariableDeclaration[] = [];
+    // Source order, which the two lists above lose. Only used to find the member
+    // a comment at the end of the class body should attach to.
+    const members: Statement[] = [];
 
     while (!this.check(TokenType.RBRACE) && !this.isAtEnd()) {
       this.skipNewlines();
       if (this.check(TokenType.RBRACE)) break;
 
       if (this.check(TokenType.FN)) {
-        methods.push(this.parseFunctionDeclaration());
+        const method = this.withComments(() => this.parseFunctionDeclaration());
+        methods.push(method);
+        members.push(method);
       } else if (this.check(TokenType.LET) || this.check(TokenType.CONST)) {
-        const decl = this.parseVariableDeclaration();
+        const decl = this.withComments(() => this.parseVariableDeclaration());
         if (decl.type !== 'VariableDeclaration') {
           throw ParseError.fromToken(this.peek(),
             'Destructuring is not supported in class properties',
@@ -350,15 +651,18 @@ export class Parser {
           );
         }
         properties.push(decl);
+        members.push(decl);
       } else {
         throw ParseError.unexpected(this.peek(), "'fn' or 'let' for class members");
       }
       this.skipNewlines();
     }
 
+    const memberComments = this.claimRegionEnd(members, this.peek().position.offset);
+
     this.expect(TokenType.RBRACE, "'}'", 'Close the class body with }');
 
-    return {
+    const declaration: ClassDeclaration = {
       type: 'ClassDeclaration',
       name: nameToken.value,
       superClass,
@@ -366,6 +670,8 @@ export class Parser {
       properties,
       position,
     };
+    this.setDangling(declaration, 'members', memberComments);
+    return declaration;
   }
 
   private parseReturnStatement(): ReturnStatement {
@@ -393,22 +699,28 @@ export class Parser {
     const consequent = this.parseBlock();
 
     let alternate: Statement[] | IfStatement | null = null;
+    let alternateComments: Comment[] = [];
     this.skipNewlines();
     if (this.match(TokenType.ELSE)) {
       if (this.check(TokenType.IF)) {
         alternate = this.parseIfStatement();
       } else {
-        alternate = this.parseBlock();
+        const elseBlock = this.parseBlock();
+        alternate = elseBlock.statements;
+        alternateComments = elseBlock.dangling;
       }
     }
 
-    return {
+    const statement: IfStatement = {
       type: 'IfStatement',
       condition,
-      consequent,
+      consequent: consequent.statements,
       alternate,
       position,
     };
+    this.setDangling(statement, 'consequent', consequent.dangling);
+    this.setDangling(statement, 'alternate', alternateComments);
+    return statement;
   }
 
   private parseWhileStatement(): WhileStatement {
@@ -418,12 +730,14 @@ export class Parser {
     const condition = this.parseExpression();
     const body = this.parseBlock();
 
-    return {
+    const statement: WhileStatement = {
       type: 'WhileStatement',
       condition,
-      body,
+      body: body.statements,
       position,
     };
+    this.setDangling(statement, 'body', body.dangling);
+    return statement;
   }
 
   private parseForStatement(): ForStatement {
@@ -442,13 +756,15 @@ export class Parser {
     const iterable = this.parseExpression();
     const body = this.parseBlock();
 
-    return {
+    const statement: ForStatement = {
       type: 'ForStatement',
       variable: varToken.value,
       iterable,
-      body,
+      body: body.statements,
       position,
     };
+    this.setDangling(statement, 'body', body.dangling);
+    return statement;
   }
 
   private parseBreakStatement(): BreakStatement {
@@ -539,16 +855,36 @@ export class Parser {
 
     const cases: MatchCase[] = [];
     let defaultCase: Statement[] | undefined;
+    let defaultComments: CommentAnchor | undefined;
+    // Anchors in source order, so a comment before the closing brace lands on
+    // the arm it follows.
+    const arms: CommentAnchor[] = [];
+    const dangling: Record<string, Comment[]> = {};
 
     while (!this.check(TokenType.RBRACE) && !this.isAtEnd()) {
       this.skipNewlines();
       if (this.check(TokenType.RBRACE)) break;
 
+      // Comments above a `when` or `else` belong to the arm, not to the first
+      // statement of its body: the body is printed after `=>`, on the same line.
+      const armStart = this.peek();
+      const leading = this.takeCommentsBefore(armStart.position.offset);
+      const blankBefore = this.blankBefore(armStart.position.line);
+
       if (this.match(TokenType.ELSE)) {
         this.expect(TokenType.ARROW, "'=>'",
           'Default case uses: else => { ... }'
         );
-        defaultCase = this.parseCaseBody();
+        const defaultBody = this.parseCaseBody();
+        defaultCase = defaultBody.statements;
+        const bodyComments = defaultBody.dangling;
+        const trailing = this.takeTrailingCommentsOn(this.lastConsumedToken().position.line);
+        // Pushed onto `arms` whether or not it has comments yet: a comment
+        // before the closing brace must land on the last arm in source order,
+        // and the `else` arm is printed after every `when`.
+        defaultComments = this.commentAnchor(leading, trailing, blankBefore) ?? {};
+        if (bodyComments.length > 0) dangling['default'] = bodyComments;
+        arms.push(defaultComments);
       } else {
         this.expect(TokenType.WHEN, "'when'",
           'Match cases start with "when": when value => { ... }'
@@ -558,29 +894,58 @@ export class Parser {
           'After the pattern, use => to specify the action'
         );
         const body = this.parseCaseBody();
-        cases.push({ pattern, body });
+        const bodyComments = body.dangling;
+        const trailing = this.takeTrailingCommentsOn(this.lastConsumedToken().position.line);
+        const matchCase: MatchCase = {
+          pattern,
+          body: body.statements,
+          ...this.commentAnchor(leading, trailing, blankBefore),
+        };
+        if (bodyComments.length > 0) dangling[`case${cases.length}`] = bodyComments;
+        cases.push(matchCase);
+        arms.push(matchCase);
       }
       this.skipNewlines();
     }
 
+    // Comments before the closing brace: on the last arm if there is one,
+    // dangling in the body of an arm-less match otherwise.
+    const leftover = this.trackComments
+      ? this.takeCommentsBefore(this.peek().position.offset)
+      : [];
+    if (leftover.length > 0) {
+      if (arms.length > 0) {
+        this.appendTrailing(arms[arms.length - 1], leftover);
+      } else {
+        dangling['cases'] = leftover;
+      }
+    }
+
     this.expect(TokenType.RBRACE, "'}'");
 
-    return {
+    const statement: MatchStatement = {
       type: 'MatchStatement',
       subject,
       cases,
       defaultCase,
       position,
     };
+    if (defaultComments !== undefined && Object.keys(defaultComments).length > 0) {
+      statement.defaultComments = defaultComments;
+    }
+    for (const [region, comments] of Object.entries(dangling)) {
+      this.setDangling(statement, region, comments);
+    }
+    return statement;
   }
 
-  private parseCaseBody(): Statement[] {
+  private parseCaseBody(): Block {
     if (this.check(TokenType.LBRACE)) {
       return this.parseBlock();
     }
-    // Single statement case
-    const stmt = this.parseStatement();
-    return [stmt];
+    // A one-statement arm has no braces, so it has no region for a comment to
+    // dangle in: the statement itself is the whole body.
+    return { statements: [this.parseStatement()], dangling: [] };
   }
 
   private parseTestDeclaration(): TestDeclaration {
@@ -590,12 +955,14 @@ export class Parser {
     const description = this.parseExpression();
     const body = this.parseBlock();
 
-    return {
+    const declaration: TestDeclaration = {
       type: 'TestDeclaration',
       description,
-      body,
+      body: body.statements,
       position,
     };
+    this.setDangling(declaration, 'body', body.dangling);
+    return declaration;
   }
 
   private parseTryCatchStatement(): TryCatchStatement {
@@ -615,13 +982,16 @@ export class Parser {
 
     const catchBody = this.parseBlock();
 
-    return {
+    const statement: TryCatchStatement = {
       type: 'TryCatchStatement',
-      tryBody,
+      tryBody: tryBody.statements,
       catchVariable: errorVarToken.value,
-      catchBody,
+      catchBody: catchBody.statements,
       position,
     };
+    this.setDangling(statement, 'tryBody', tryBody.dangling);
+    this.setDangling(statement, 'catchBody', catchBody.dangling);
+    return statement;
   }
 
   private parseThrowStatement(): ThrowStatement {
@@ -653,24 +1023,56 @@ export class Parser {
     this.skipNewlines();
 
     const variants: string[] = [];
+    // A variant is a bare identifier, not a node, so its comments are collected
+    // into a list that stays index-aligned with `variants`.
+    const variantComments: CommentAnchor[] = [];
+    let anyVariantComments = false;
+
     while (!this.check(TokenType.RBRACE) && !this.isAtEnd()) {
       this.skipNewlines();
       if (this.check(TokenType.RBRACE)) break;
+
+      const leading = this.takeCommentsBefore(this.peek().position.offset);
+      const blankBefore = this.blankBefore(this.peek().position.line);
       const variantToken = this.expect(TokenType.IDENTIFIER, 'a variant name',
         'Enum variants are identifiers listed on separate lines'
       );
+      const trailing = this.takeTrailingCommentsOn(variantToken.position.line);
+
       variants.push(variantToken.value);
+      const anchor = this.commentAnchor(leading, trailing, blankBefore);
+      variantComments.push(anchor ?? {});
+      if (anchor !== undefined) anyVariantComments = true;
+
       this.skipNewlines();
+    }
+
+    // Comments before the closing brace: on the last variant if there is one,
+    // dangling in the body if the enum is empty.
+    const leftover = this.trackComments
+      ? this.takeCommentsBefore(this.peek().position.offset)
+      : [];
+    let danglingVariants: Comment[] = [];
+    if (leftover.length > 0) {
+      if (variantComments.length > 0) {
+        this.appendTrailing(variantComments[variantComments.length - 1], leftover);
+        anyVariantComments = true;
+      } else {
+        danglingVariants = leftover;
+      }
     }
 
     this.expect(TokenType.RBRACE, "'}'", 'Close the enum body with }');
 
-    return {
+    const declaration: EnumDeclaration = {
       type: 'EnumDeclaration',
       name: nameToken.value,
       variants,
       position,
     };
+    if (anyVariantComments) declaration.variantComments = variantComments;
+    this.setDangling(declaration, 'variants', danglingVariants);
+    return declaration;
   }
 
   private parseExpressionStatement(): ExpressionStatement {
@@ -1217,20 +1619,26 @@ export class Parser {
   private parseGroupOrArrow(): Expression {
     const startPos = this.peek().position;
 
-    // Try to parse as arrow function
+    // Try to parse as arrow function. Comment state has to be saved along with
+    // the token index: a speculative parse can consume comments, and rewinding
+    // the tokens without rewinding those would lose them for good.
     const savedPosition = this.current;
+    const savedCommentIndex = this.commentIndex;
+    const savedLayoutLine = this.layoutLine;
     try {
       const params = this.tryParseArrowParams();
       if (params !== null && this.match(TokenType.ARROW)) {
         // It's an arrow function
         if (this.check(TokenType.LBRACE)) {
           const body = this.parseBlock();
-          return {
+          const arrow: ArrowFunction = {
             type: 'ArrowFunction',
             params,
-            body,
+            body: body.statements,
             position: startPos,
-          } as ArrowFunction;
+          };
+          this.setDangling(arrow, 'body', body.dangling);
+          return arrow;
         } else {
           const expr = this.parseExpression();
           return {
@@ -1247,6 +1655,8 @@ export class Parser {
 
     // Reset and parse as grouping
     this.current = savedPosition;
+    this.commentIndex = savedCommentIndex;
+    this.layoutLine = savedLayoutLine;
     this.advance(); // consume '('
     const expr = this.parseExpression();
     this.expect(TokenType.RPAREN, "')'",
@@ -1322,12 +1732,14 @@ export class Parser {
     const params = this.parseParameterList();
     const body = this.parseBlock();
 
-    return {
+    const expression: FunctionExpression = {
       type: 'FunctionExpression',
       params,
-      body,
+      body: body.statements,
       position: token.position,
     };
+    this.setDangling(expression, 'body', body.dangling);
+    return expression;
   }
 
   private parseInterpolatedString(): InterpolatedString {
@@ -1335,49 +1747,21 @@ export class Parser {
     const position = token.position;
     const raw = token.value;
 
-    // Parse the raw f-string value into parts
-    const parts: InterpolatedPart[] = [];
-    let i = 0;
-    let currentLiteral = '';
-
-    while (i < raw.length) {
-      if (raw[i] === '\\' && i + 1 < raw.length && raw[i + 1] === '{') {
-        // Escaped brace - treat as literal
-        currentLiteral += '{';
-        i += 2;
-      } else if (raw[i] === '{') {
-        // Start of interpolation - find matching }
-        if (currentLiteral.length > 0) {
-          parts.push({ kind: 'literal', value: currentLiteral });
-          currentLiteral = '';
-        }
-        i++; // skip opening {
-        let depth = 1;
-        let exprSource = '';
-        while (i < raw.length && depth > 0) {
-          if (raw[i] === '{') depth++;
-          else if (raw[i] === '}') {
-            depth--;
-            if (depth === 0) { i++; break; }
-          }
-          exprSource += raw[i];
-          i++;
-        }
-        // Parse the expression source
-        const innerLexer = new Lexer(exprSource);
-        const innerTokens = innerLexer.tokenize();
-        const innerParser = new Parser(innerTokens);
-        const expr = innerParser.parseExpression();
-        parts.push({ kind: 'expression', expression: expr });
-      } else {
-        currentLiteral += raw[i];
-        i++;
+    // Split the raw f-string, then parse each interpolated expression source.
+    // The splitting rules are shared with the formatter's comment check, which
+    // has to look inside interpolations for the same reason: they contain code.
+    const parts: InterpolatedPart[] = splitInterpolatedString(raw).map((part) => {
+      if (part.kind === 'literal') {
+        return { kind: 'literal', value: part.value } as InterpolatedPart;
       }
-    }
-
-    if (currentLiteral.length > 0) {
-      parts.push({ kind: 'literal', value: currentLiteral });
-    }
+      const innerLexer = new Lexer(part.source);
+      const innerTokens = innerLexer.tokenize();
+      const innerParser = new Parser(innerTokens);
+      return {
+        kind: 'expression',
+        expression: innerParser.parseExpression(),
+      } as InterpolatedPart;
+    });
 
     return {
       type: 'InterpolatedString',
@@ -1398,7 +1782,7 @@ export class Parser {
 
   // ============ Block Parsing ============
 
-  private parseBlock(): Statement[] {
+  private parseBlock(): Block {
     this.expect(TokenType.LBRACE, "'{'",
       'Blocks must start with an opening brace {'
     );
@@ -1410,11 +1794,13 @@ export class Parser {
       this.skipNewlines();
     }
 
+    const dangling = this.claimRegionEnd(statements, this.peek().position.offset);
+
     this.expect(TokenType.RBRACE, "'}'",
       'Blocks must end with a closing brace }'
     );
 
-    return statements;
+    return { statements, dangling };
   }
 
   // ============ Helper Methods ============
@@ -1433,6 +1819,11 @@ export class Parser {
   private advance(): Token {
     const token = this.tokens[this.current];
     this.current++;
+    // Keeps the blank-line cursor on the last thing consumed, including the
+    // braces and newlines that are not part of any statement. Without that, the
+    // first statement of a block would look like it had a blank line above it
+    // whenever the block's header was two lines up.
+    if (token !== undefined) this.layoutLine = token.position.line;
     return token;
   }
 

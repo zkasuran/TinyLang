@@ -16,6 +16,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **`tinylang fmt` no longer deletes every comment in the file.** The lexer
+  discarded comments as it scanned, so by the time the formatter rendered from the
+  AST there was nothing left to print - `fmt --write` stripped all 230 lines of
+  commentary from `examples/`, and `fmt --check` reported all 18 files as needing
+  reformatting for that reason alone. Comments are now retained by the lexer,
+  attached to the statement, class member, match arm or enum variant they belong
+  to, and printed back with the author's blank lines. Formatting is verified
+  against comment loss the same way it is verified against meaning loss: the
+  output is re-lexed and its comments compared with the input's, and the formatter
+  throws rather than return output that dropped, added or altered one. The AST
+  round-trip check could not catch this on its own, because comments are not in
+  the AST.
 - **WASM target no longer emits functions with a placeholder in place of real
   work.** Unsupported constructs were collected into a module-wide warning list
   and `(i32.const 0)` was substituted for them, so e.g.

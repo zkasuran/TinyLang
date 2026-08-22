@@ -3,8 +3,8 @@
  *
  * Produces clean, consistently formatted TinyLang source code.
  *
- * Two properties matter more than the aesthetics, and both are enforced rather
- * than hoped for:
+ * Three properties matter more than the aesthetics, and all three are enforced
+ * rather than hoped for:
  *
  *  1. Meaning preservation. Every formatted result is re-lexed, re-parsed and
  *     compared against the AST it came from; if anything differs the formatter
@@ -17,10 +17,31 @@
  *     parentheses leave no AST node, and nothing re-inserted them, so
  *     `(low + high) / 2` was rewritten to `low + high / 2`.
  *
- *  2. Idempotency: format(format(code)) === format(code). This follows from (1)
- *     plus the fact that rendering is a pure function of the position-free AST:
- *     if the output parses back to the same AST, formatting it again must
- *     produce the same text.
+ *  2. Comment preservation. Every comment in the input appears in the output,
+ *     once, unaltered and in the same order. This needs its own check: comments
+ *     are not part of the AST, so the round-trip in (1) is blind to them, and
+ *     the formatter used to delete every comment in the file while passing that
+ *     check with nothing to report. The comparison is by comment text, not by
+ *     position, because a comment may legitimately have to move - see
+ *     ./comments.ts for exactly what is and is not allowed to change.
+ *
+ *     Together (1) and (2) give the only guarantee worth making to a tool that
+ *     rewrites a file in place: it returns output only when that output means
+ *     what the input meant *and* still says everything the input said.
+ *
+ *     What (2) does not promise is that a comment stays where it was written.
+ *     Expressions are rendered from the AST, and the AST has no room between two
+ *     array elements or inside an `if` condition, so a comment written there is
+ *     moved to the nearest anchor that does exist - above the statement, after
+ *     it, or into the block that follows. Its text and its order survive; its
+ *     column, and sometimes what it appears to be documenting, do not. The one
+ *     position with no anchor at any distance is inside an f-string
+ *     interpolation, and that is refused outright rather than quietly dropped.
+ *
+ *  3. Idempotency: format(format(code)) === format(code). Rendering is a pure
+ *     function of the AST plus the comment and blank-line layout attached to it,
+ *     and formatting reproduces that layout, so a second pass has nothing left
+ *     to change.
  *
  * Both switches below are exhaustive over their AST unions and end in a `never`
  * guard, the same pattern the bytecode compiler uses. A new node type is a
@@ -71,10 +92,19 @@ import {
   ArrayLiteral,
   ObjectLiteral,
   Parameter,
+  Comment,
+  CommentAnchor,
+  MatchCase,
 } from '../types/ast';
 import { FormatOptions, DEFAULT_FORMAT_OPTIONS } from './config';
 import { FormatterError } from './errors';
 import { astDifference } from './equivalence';
+import {
+  commentTexts,
+  commentDifference,
+  commonIndent,
+  hasInterpolatedComment,
+} from './comments';
 
 /**
  * Expression binding strength, mirroring the parser's descent exactly.
@@ -132,8 +162,9 @@ export class Formatter {
   /**
    * Format a TinyLang source string.
    *
-   * @throws FormatterError if the result cannot be shown to be equivalent to the
-   * input. Callers may rely on this: output that is returned has been verified.
+   * @throws FormatterError if the result cannot be shown to mean what the input
+   * meant and to contain the same comments. Callers may rely on this: output that
+   * is returned has been verified on both counts.
    */
   format(source: string, options?: Partial<FormatOptions>): string {
     const opts = options ? { ...this.options, ...options } : this.options;
@@ -146,6 +177,7 @@ export class Formatter {
       const body = this.formatProgram(program);
       const result = opts.insertFinalNewline ? body + '\n' : body;
       this.verifyRoundTrip(program, result);
+      this.verifyComments(source, result);
       return result;
     } finally {
       this.options = prevOptions;
@@ -182,6 +214,42 @@ export class Formatter {
     }
   }
 
+  /**
+   * Prove that `output` still contains every comment `source` did.
+   *
+   * This is the check the AST round trip structurally cannot perform. Comments
+   * are absent from the AST, so when the formatter deleted all of them - a
+   * header, an explanation of an algorithm, 230 lines of teaching commentary
+   * across the examples - astDifference had nothing to compare and reported
+   * success. Comparing the comment text of the input against the comment text of
+   * the output is the only way to notice, and it is done before the result is
+   * handed back, never after.
+   */
+  private verifyComments(source: string, output: string): void {
+    const difference = commentDifference(commentTexts(source), commentTexts(output));
+    if (difference === null) return;
+
+    // One cause is not a defect and never will be fixable: an interpolation is
+    // re-rendered from the AST of the expression inside it, and that AST has no
+    // room for a comment. Say so, rather than asking for a bug report about a
+    // file the formatter is never going to accept.
+    if (hasInterpolatedComment(source)) {
+      throw new FormatterError(
+        'Cannot format this file: it has a comment inside an f-string ' +
+          'interpolation, which the formatter cannot put back - the text between ' +
+          '{ and } is re-rendered from the expression it contains. Move the ' +
+          'comment outside the string.\n' +
+          difference
+      );
+    }
+
+    throw new FormatterError(
+      'Internal formatter error: formatting would not preserve this file\'s ' +
+        'comments. Refusing to return the result.\n' +
+        difference
+    );
+  }
+
   private formatProgram(program: Program): string {
     const parts: string[] = [];
     let prevWasDeclaration = false;
@@ -193,16 +261,127 @@ export class Formatter {
         stmt.type === 'TestDeclaration' ||
         stmt.type === 'EnumDeclaration';
 
-      // Add blank line between top-level declarations
-      if (i > 0 && (isDeclaration || prevWasDeclaration)) {
+      // A blank line between top-level declarations, and wherever the author left
+      // one. Exactly one either way: two rules asking for a blank line still only
+      // produce one, which is what keeps a second formatting pass a no-op.
+      if (i > 0 && (isDeclaration || prevWasDeclaration || leadingBlank(stmt))) {
         parts.push('');
       }
 
-      parts.push(this.formatStatement(stmt));
+      parts.push(...this.statementLines(stmt));
       prevWasDeclaration = isDeclaration;
     }
 
+    // A file whose only content is comments still has to keep them.
+    if (program.body.length === 0) {
+      parts.push(
+        ...this.ownLineCommentLines(program.danglingComments?.['body'] ?? [])
+      );
+    }
+
     return parts.join('\n');
+  }
+
+  // ============ Comments ============
+
+  /**
+   * Lines for a statement: its own-line comments, its code, its trailing comment.
+   */
+  private statementLines(stmt: Statement): string[] {
+    return this.anchoredLines(stmt, this.formatStatement(stmt).split('\n'));
+  }
+
+  /**
+   * Lines for anything a comment can be attached to, given the lines of the
+   * thing itself.
+   *
+   * `blankBefore` on the anchor is the blank line between the *last* leading
+   * comment and the code. The blank line above the whole group belongs to
+   * whatever is printing the list, which is why it is not emitted here.
+   */
+  private anchoredLines(anchor: CommentAnchor, codeLines: string[]): string[] {
+    const leading = anchor.leadingComments ?? [];
+    const lines = this.ownLineCommentLines(leading);
+    if (leading.length > 0 && anchor.blankBefore) lines.push('');
+    lines.push(...this.withTrailingComments(codeLines, anchor.trailingComments));
+    return lines;
+  }
+
+  /**
+   * Render own-line comments, keeping the blank lines the author put *between*
+   * them. The blank line above the first one is the caller's business.
+   */
+  private ownLineCommentLines(comments: Comment[]): string[] {
+    const lines: string[] = [];
+    for (let i = 0; i < comments.length; i++) {
+      if (i > 0 && comments[i].blankBefore) lines.push('');
+      lines.push(...this.commentLines(comments[i]));
+    }
+    return lines;
+  }
+
+  /**
+   * Append trailing comments to already-rendered code.
+   *
+   * The first goes on the same line, two spaces after the code, unless it
+   * occupied a line of its own in the source - which is how a comment written
+   * just above a closing brace gets back to just above that closing brace.
+   */
+  private withTrailingComments(codeLines: string[], trailing?: Comment[]): string[] {
+    if (trailing === undefined || trailing.length === 0) return codeLines;
+
+    const lines = [...codeLines];
+    let next = 0;
+    // Block comments are self-delimiting, so several can share the code's line; a
+    // line comment runs to the end of the line and has to be the last thing on it.
+    while (next < trailing.length && !trailing[next].ownLine) {
+      const last = lines.length - 1;
+      const rendered = this.renderComment(trailing[next], lines[last].length + 2);
+      lines[last] += '  ' + rendered[0];
+      lines.push(...rendered.slice(1));
+      const endsTheLine = trailing[next].kind === 'line';
+      next++;
+      if (endsTheLine) break;
+    }
+    for (; next < trailing.length; next++) {
+      if (trailing[next].blankBefore) lines.push('');
+      lines.push(...this.commentLines(trailing[next]));
+    }
+    return lines;
+  }
+
+  /** One comment on lines of its own, at the current indentation. */
+  private commentLines(comment: Comment): string[] {
+    const indent = this.indentLevel * this.options.indentSize;
+    const rendered = this.renderComment(comment, indent);
+    return [this.indentStr() + rendered[0], ...rendered.slice(1)];
+  }
+
+  /**
+   * One comment, with its first character destined for `column`. The first line
+   * comes back unindented, because it may be appended after code.
+   *
+   * A block comment's interior is reproduced verbatim, shifted by however far its
+   * first line moves. Shifting every line by the same amount is the whole point:
+   * an ASCII diagram, an indented example, or a closing delimiter on its own line
+   * only survives if the lines keep their positions relative to one another. An
+   * earlier version chose the shift per line - one space for `*`-prefixed lines,
+   * three for the rest - which sheared apart every comment whose lines were not
+   * uniformly `*`-prefixed and, since relative indentation is compared exactly,
+   * made the formatter refuse the file rather than return it.
+   */
+  private renderComment(comment: Comment, column: number): string[] {
+    const raw = comment.text.split('\n');
+    if (raw.length === 1) return [raw[0]];
+
+    const continuations = raw.slice(1).map((line) => line.replace(/[ \t]+$/, ''));
+    // Moving left is limited by the least-indented line: taking four columns off
+    // a line that only has three would shear it away from the others, which is
+    // the one thing the shift exists to prevent. `let /* a` puts a comment at
+    // column four whose closing delimiter is at column zero, and this is what
+    // stops that comment being pulled apart when it is hoisted to column zero.
+    const shift = Math.max(column - comment.indent, -commonIndent(continuations));
+    return [raw[0], ...continuations.map((line) => shiftIndent(line, shift))];
   }
 
   // ============ Statements ============
@@ -276,7 +455,7 @@ export class Formatter {
   private formatFunctionDeclaration(stmt: FunctionDeclaration): string {
     const params = this.formatParams(stmt.params);
     const header = this.indent(`fn ${stmt.name}(${params}) {`);
-    const body = this.formatBlock(stmt.body);
+    const body = this.formatBlock(stmt.body, stmt.danglingComments?.['body']);
     const close = this.indent('}');
     return `${header}\n${body}\n${close}`;
   }
@@ -291,15 +470,27 @@ export class Formatter {
     const lines: string[] = [this.indent(header)];
 
     this.indentLevel++;
-    for (const prop of stmt.properties) {
-      lines.push(this.formatVariableDeclaration(prop));
+    for (let i = 0; i < stmt.properties.length; i++) {
+      if (i > 0 && leadingBlank(stmt.properties[i])) lines.push('');
+      lines.push(...this.anchoredLines(
+        stmt.properties[i],
+        [this.formatVariableDeclaration(stmt.properties[i])]
+      ));
     }
     if (stmt.properties.length > 0 && stmt.methods.length > 0) {
       lines.push('');
     }
     for (let i = 0; i < stmt.methods.length; i++) {
       if (i > 0) lines.push('');
-      lines.push(this.formatFunctionDeclaration(stmt.methods[i]));
+      lines.push(...this.anchoredLines(
+        stmt.methods[i],
+        this.formatFunctionDeclaration(stmt.methods[i]).split('\n')
+      ));
+    }
+    if (stmt.properties.length === 0 && stmt.methods.length === 0) {
+      lines.push(
+        ...this.ownLineCommentLines(stmt.danglingComments?.['members'] ?? [])
+      );
     }
     this.indentLevel--;
 
@@ -312,13 +503,26 @@ export class Formatter {
    * a bare list of identifiers, so a comma is a syntax error.
    */
   private formatEnumDeclaration(stmt: EnumDeclaration): string {
+    const dangling = stmt.danglingComments?.['variants'] ?? [];
+
     if (stmt.variants.length === 0) {
-      return this.indent(`enum ${stmt.name} {}`);
+      if (dangling.length === 0) return this.indent(`enum ${stmt.name} {}`);
+      // `{}` has nowhere to put a comment, so an empty enum that has one is
+      // printed open.
+      const lines: string[] = [this.indent(`enum ${stmt.name} {`)];
+      this.indentLevel++;
+      lines.push(...this.ownLineCommentLines(dangling));
+      this.indentLevel--;
+      lines.push(this.indent('}'));
+      return lines.join('\n');
     }
+
     const lines: string[] = [this.indent(`enum ${stmt.name} {`)];
     this.indentLevel++;
-    for (const variant of stmt.variants) {
-      lines.push(this.indent(variant));
+    for (let i = 0; i < stmt.variants.length; i++) {
+      const anchor: CommentAnchor = stmt.variantComments?.[i] ?? {};
+      if (i > 0 && leadingBlank(anchor)) lines.push('');
+      lines.push(...this.anchoredLines(anchor, [this.indent(stmt.variants[i])]));
     }
     this.indentLevel--;
     lines.push(this.indent('}'));
@@ -339,12 +543,15 @@ export class Formatter {
   private formatIfStatementInline(stmt: IfStatement): string {
     const condition = this.formatExpression(stmt.condition);
     const header = `if ${condition} {`;
-    const body = this.formatBlock(stmt.consequent);
+    const body = this.formatBlock(stmt.consequent, stmt.danglingComments?.['consequent']);
     let result = `${header}\n${body}\n`;
 
     if (stmt.alternate) {
       if (Array.isArray(stmt.alternate)) {
-        const elseBody = this.formatBlock(stmt.alternate);
+        const elseBody = this.formatBlock(
+          stmt.alternate,
+          stmt.danglingComments?.['alternate']
+        );
         result += `${this.indent('} else {')}\n${elseBody}\n${this.indent('}')}`;
       } else {
         // `else if` is chained rather than nested, so the alternate's header
@@ -361,7 +568,7 @@ export class Formatter {
   private formatWhileStatement(stmt: WhileStatement): string {
     const condition = this.formatExpression(stmt.condition);
     const header = this.indent(`while ${condition} {`);
-    const body = this.formatBlock(stmt.body);
+    const body = this.formatBlock(stmt.body, stmt.danglingComments?.['body']);
     const close = this.indent('}');
     return `${header}\n${body}\n${close}`;
   }
@@ -369,7 +576,7 @@ export class Formatter {
   private formatForStatement(stmt: ForStatement): string {
     const iterable = this.formatExpression(stmt.iterable);
     const header = this.indent(`for ${stmt.variable} in ${iterable} {`);
-    const body = this.formatBlock(stmt.body);
+    const body = this.formatBlock(stmt.body, stmt.danglingComments?.['body']);
     const close = this.indent('}');
     return `${header}\n${body}\n${close}`;
   }
@@ -401,12 +608,25 @@ export class Formatter {
     const lines: string[] = [this.indent(`match ${subject} {`)];
 
     this.indentLevel++;
-    for (const c of stmt.cases) {
+    for (let i = 0; i < stmt.cases.length; i++) {
+      const c: MatchCase = stmt.cases[i];
+      if (i > 0 && leadingBlank(c)) lines.push('');
       const pattern = this.formatExpression(c.pattern);
-      lines.push(...this.formatCaseBody(`when ${pattern} => `, c.body));
+      lines.push(...this.anchoredLines(
+        c,
+        this.formatCaseBody(`when ${pattern} => `, c.body, stmt.danglingComments?.[`case${i}`])
+      ));
     }
     if (stmt.defaultCase) {
-      lines.push(...this.formatCaseBody('else => ', stmt.defaultCase));
+      const anchor: CommentAnchor = stmt.defaultComments ?? {};
+      if (stmt.cases.length > 0 && leadingBlank(anchor)) lines.push('');
+      lines.push(...this.anchoredLines(
+        anchor,
+        this.formatCaseBody('else => ', stmt.defaultCase, stmt.danglingComments?.['default'])
+      ));
+    }
+    if (stmt.cases.length === 0 && stmt.defaultCase === undefined) {
+      lines.push(...this.ownLineCommentLines(stmt.danglingComments?.['cases'] ?? []));
     }
     this.indentLevel--;
     lines.push(this.indent('}'));
@@ -414,12 +634,13 @@ export class Formatter {
     return lines.join('\n');
   }
 
-  private formatCaseBody(header: string, body: Statement[]): string[] {
-    if (body.length === 1) {
-      return [this.indent(header + this.formatStatementInline(body[0]))];
+  private formatCaseBody(header: string, body: Statement[], dangling?: Comment[]): string[] {
+    if (body.length === 1 && !needsBracedArm(body[0])) {
+      const inline = this.indent(header + this.formatStatementInline(body[0]));
+      return this.withTrailingComments([inline], body[0].trailingComments);
     }
     const lines: string[] = [this.indent(header + '{')];
-    lines.push(this.formatBlock(body));
+    lines.push(this.formatBlock(body, dangling));
     lines.push(this.indent('}'));
     return lines;
   }
@@ -427,14 +648,14 @@ export class Formatter {
   private formatTestDeclaration(stmt: TestDeclaration): string {
     const desc = this.formatExpression(stmt.description);
     const header = this.indent(`test ${desc} {`);
-    const body = this.formatBlock(stmt.body);
+    const body = this.formatBlock(stmt.body, stmt.danglingComments?.['body']);
     const close = this.indent('}');
     return `${header}\n${body}\n${close}`;
   }
 
   private formatTryCatchStatement(stmt: TryCatchStatement): string {
-    const tryBody = this.formatBlock(stmt.tryBody);
-    const catchBody = this.formatBlock(stmt.catchBody);
+    const tryBody = this.formatBlock(stmt.tryBody, stmt.danglingComments?.['tryBody']);
+    const catchBody = this.formatBlock(stmt.catchBody, stmt.danglingComments?.['catchBody']);
     return (
       `${this.indent('try {')}\n${tryBody}\n` +
       `${this.indent(`} catch ${stmt.catchVariable} {`)}\n${catchBody}\n` +
@@ -678,9 +899,7 @@ export class Formatter {
     if (Array.isArray(expr.body)) {
       const lines: string[] = [`(${params}) => {`];
       this.indentLevel++;
-      for (const s of expr.body) {
-        lines.push(this.formatStatement(s));
-      }
+      lines.push(...this.statementListLines(expr.body, expr.danglingComments?.['body']));
       this.indentLevel--;
       lines.push(this.indentStr() + '}');
       return lines.join('\n');
@@ -696,9 +915,7 @@ export class Formatter {
     const params = this.formatParams(expr.params);
     const lines: string[] = [`fn(${params}) {`];
     this.indentLevel++;
-    for (const s of expr.body) {
-      lines.push(this.formatStatement(s));
-    }
+    lines.push(...this.statementListLines(expr.body, expr.danglingComments?.['body']));
     this.indentLevel--;
     lines.push(this.indentStr() + '}');
     return lines.join('\n');
@@ -772,11 +989,30 @@ export class Formatter {
     }).join(', ');
   }
 
-  private formatBlock(statements: Statement[]): string {
+  /**
+   * A braced region, indented one level.
+   *
+   * `dangling` is only ever non-empty when `statements` is empty: that is the one
+   * shape of region where a comment has no statement to attach to.
+   */
+  private formatBlock(statements: Statement[], dangling?: Comment[]): string {
     this.indentLevel++;
-    const lines = statements.map(s => this.formatStatement(s));
+    const lines = this.statementListLines(statements, dangling);
     this.indentLevel--;
     return lines.join('\n');
+  }
+
+  /** Statements at the current indentation, with the author's blank lines. */
+  private statementListLines(statements: Statement[], dangling?: Comment[]): string[] {
+    const lines: string[] = [];
+    for (let i = 0; i < statements.length; i++) {
+      if (i > 0 && leadingBlank(statements[i])) lines.push('');
+      lines.push(...this.statementLines(statements[i]));
+    }
+    if (statements.length === 0) {
+      lines.push(...this.ownLineCommentLines(dangling ?? []));
+    }
+    return lines;
   }
 
   private indent(text: string): string {
@@ -803,8 +1039,61 @@ export class Formatter {
   }
 }
 
+/**
+ * Parse for formatting: with comments and blank-line layout attached.
+ *
+ * Every other consumer of the parser asks for the plain AST. The formatter is
+ * the only one that has to reproduce the file, so it is the only one that needs
+ * to know where the author put their comments and their blank lines.
+ */
 function parseSource(source: string): Program {
-  return new Parser(new Lexer(source).tokenize()).parse();
+  const lexer = new Lexer(source);
+  const tokens = lexer.tokenize();
+  return new Parser(tokens, lexer.getComments()).parse();
+}
+
+/**
+ * Move a line `shift` columns right, or left by removing that much of its
+ * existing indentation - never more than it has, and never anything but
+ * whitespace.
+ */
+function shiftIndent(line: string, shift: number): string {
+  if (line === '') return '';
+  if (shift >= 0) return ' '.repeat(shift) + line;
+  const existing = line.length - line.trimStart().length;
+  return line.slice(Math.min(-shift, existing));
+}
+
+/**
+ * Whether a blank line belongs above an anchored construct.
+ *
+ * The author's blank line sits above the whole group, so when the construct has
+ * leading comments it is the *first comment's* blank line that matters, not the
+ * construct's own - that one describes the gap between the last comment and the
+ * code.
+ */
+function leadingBlank(anchor: CommentAnchor): boolean {
+  const first = anchor.leadingComments?.[0];
+  return first !== undefined ? first.blankBefore : anchor.blankBefore === true;
+}
+
+/**
+ * Whether a one-statement match arm has to be printed with braces.
+ *
+ * `when 1 => print(x)` is the nicer form, but it puts the statement after the
+ * arrow on a line that is already occupied, so anything that needs a line of its
+ * own - a comment above the statement, a comment that sat on its own line below
+ * it, a second trailing comment - forces the braces back. Adding them changes
+ * nothing about what the arm means: the parser reads both spellings as a
+ * one-statement body.
+ */
+function needsBracedArm(stmt: Statement): boolean {
+  const trailing = stmt.trailingComments ?? [];
+  return (
+    (stmt.leadingComments?.length ?? 0) > 0 ||
+    trailing.length > 1 ||
+    trailing[0]?.ownLine === true
+  );
 }
 
 /** How tightly an expression binds; see Prec. */

@@ -5,12 +5,82 @@
  * Each node type corresponds to a syntactic construct in the language.
  */
 
-import { SourcePosition } from './tokens';
+import { SourcePosition, CommentKind } from './tokens';
+
+// ============ Comments ============
+
+/**
+ * A comment, attached to the construct it belongs to.
+ *
+ * Comments are not part of a program's meaning, which is exactly why they were
+ * easy to lose: the formatter renders from the AST, and until these fields
+ * existed there was nowhere for a comment to be. `text` is verbatim - including
+ * the `//` or `/*` delimiters and, for a block comment, its internal newlines -
+ * so that formatting can reproduce it character for character.
+ */
+export interface Comment {
+  kind: CommentKind;
+  /** Verbatim source text, including delimiters. */
+  text: string;
+  /** True when the comment occupied its own line in the source. */
+  ownLine: boolean;
+  /** True when the author left at least one blank line above the comment. */
+  blankBefore: boolean;
+  /**
+   * Zero-based column the comment started at in the source.
+   *
+   * A block comment's continuation lines are shifted by however far its first
+   * line moves, which needs the column it moved *from*. Shifting every line by
+   * the same amount is what makes the interior survive: shift them by different
+   * amounts and a diagram, an indented example, or a closing delimiter on a line
+   * of its own comes out sheared - and, because the formatter's comment check
+   * compares relative indentation exactly, the whole file is then refused.
+   */
+  indent: number;
+}
+
+/**
+ * Somewhere a comment can be anchored.
+ *
+ * Statements are the natural anchor and get these fields through BaseNode, but
+ * a few constructs that comments demonstrably attach to are not nodes at all -
+ * a `when` arm of a match, a variant of an enum - so they carry an anchor too.
+ *
+ * All three fields are optional and absent unless a comment or blank line was
+ * actually there, which keeps them invisible to anything that does not look for
+ * them. `src/formatter/equivalence.ts` ignores them: a comment must not make two
+ * programs count as different in the formatter's meaning-preservation check,
+ * because comments are verified separately and by text.
+ */
+export interface CommentAnchor {
+  /** Own-line comments immediately above, in source order. */
+  leadingComments?: Comment[];
+  /**
+   * Comments after the construct: the first on the same line when it did not
+   * occupy its own line in the source, the rest on lines of their own.
+   */
+  trailingComments?: Comment[];
+  /** True when the author left at least one blank line above. */
+  blankBefore?: boolean;
+}
+
+/**
+ * Comments inside a construct that has no statement to hang them on, keyed by
+ * the region they were found in ('body', 'consequent', 'alternate', ...).
+ *
+ * Only an *empty* region needs this. In a region with statements, a comment
+ * either precedes one (leading), follows one on its line (trailing) or comes
+ * after the last of them (trailing, own-line). A `catch` block whose whole body is
+ * a comment explaining why the error is ignored is the case that would otherwise
+ * have nowhere to put it.
+ */
+export type DanglingComments = Record<string, Comment[]>;
 
 // Base interface for all AST nodes
-export interface BaseNode {
+export interface BaseNode extends CommentAnchor {
   type: string;
   position: SourcePosition;
+  danglingComments?: DanglingComments;
 }
 
 // ============ Program ============
@@ -133,9 +203,12 @@ export interface MatchStatement extends BaseNode {
   subject: Expression;
   cases: MatchCase[];
   defaultCase?: Statement[];
+  /** Comments attached to the `else =>` arm, which is not a node of its own. */
+  defaultComments?: CommentAnchor;
 }
 
-export interface MatchCase {
+/** A `when <pattern> => <body>` arm. Not a node, but comments attach to it. */
+export interface MatchCase extends CommentAnchor {
   pattern: Expression;
   body: Statement[];
 }
@@ -162,6 +235,14 @@ export interface EnumDeclaration extends BaseNode {
   type: 'EnumDeclaration';
   name: string;
   variants: string[];
+  /**
+   * Comments attached to each variant, index-aligned with `variants`.
+   *
+   * A variant is a bare string, so there is no node to hang a comment on;
+   * present only when some variant in the enum carries one, and then it has
+   * exactly as many entries as `variants`.
+   */
+  variantComments?: CommentAnchor[];
 }
 
 // ============ Expressions ============

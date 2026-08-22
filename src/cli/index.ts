@@ -381,10 +381,16 @@ function cmdFmt(files: string[], flags: Record<string, string | boolean>): void 
       }
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
+      // A FormatterError means nothing was written, so say so. Only ask for a bug
+      // report when the formatter is blaming itself: it also refuses input it can
+      // never format, such as a comment inside an f-string interpolation, and that
+      // is a message to act on rather than to forward.
+      const internal = message.includes('Internal formatter error');
       showError(
         `Failed to format ${filePath}: ${message}`,
         e instanceof FormatterError && flags['write']
-          ? `${filePath} was left untouched. Please report this file as a formatter bug.`
+          ? `${filePath} was left untouched.` +
+              (internal ? ' Please report this file as a formatter bug.' : '')
           : undefined
       );
       process.exit(1);
