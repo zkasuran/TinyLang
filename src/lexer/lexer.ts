@@ -76,7 +76,20 @@ export class Lexer {
       case ':': this.addToken(TokenType.COLON); break;
       case ';': this.addToken(TokenType.SEMICOLON); break;
       case '%': this.addToken(TokenType.PERCENT); break;
-      case '|': this.addToken(TokenType.PIPE); break;
+      case '?':
+        if (this.match('.')) this.addToken(TokenType.QUESTION_DOT);
+        else if (this.match('?')) this.addToken(TokenType.NULLISH_COALESCE);
+        else {
+          throw this.createError(
+            `Unexpected character '?'`,
+            `Use '?.' for optional chaining or '??' for nullish coalescing`
+          );
+        }
+        break;
+      case '|':
+        if (this.match('>')) this.addToken(TokenType.PIPE_ARROW);
+        else this.addToken(TokenType.PIPE);
+        break;
 
       // Multi-character operators
       case '+':

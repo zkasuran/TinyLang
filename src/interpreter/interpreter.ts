@@ -41,6 +41,11 @@ import {
   ThrowStatement,
   InterpolatedString,
   DestructuringDeclaration,
+  EnumDeclaration,
+  PipeExpression,
+  OptionalMemberExpression,
+  OptionalIndexExpression,
+  NullishCoalesceExpression,
 } from '../types/ast';
 import {
   RuntimeValue,
@@ -59,6 +64,7 @@ import {
   createBoolean,
   createNull,
   createArray,
+  createObject,
   isTruthy,
   stringify,
   valueEquals,
@@ -206,6 +212,8 @@ export class Interpreter {
         return this.evalFunctionDeclaration(stmt, env);
       case 'ClassDeclaration':
         return this.evalClassDeclaration(stmt, env);
+      case 'EnumDeclaration':
+        return this.evalEnumDeclaration(stmt as unknown as EnumDeclaration, env);
       case 'ReturnStatement':
         return this.evalReturnStatement(stmt, env);
       case 'IfStatement':
@@ -553,6 +561,14 @@ export class Interpreter {
           expr.position.line,
           expr.position.column
         );
+      case 'PipeExpression':
+        return this.evalPipeExpression(expr as unknown as PipeExpression, env);
+      case 'OptionalMemberExpression':
+        return this.evalOptionalMemberExpression(expr as unknown as OptionalMemberExpression, env);
+      case 'OptionalIndexExpression':
+        return this.evalOptionalIndexExpression(expr as unknown as OptionalIndexExpression, env);
+      case 'NullishCoalesceExpression':
+        return this.evalNullishCoalesceExpression(expr as unknown as NullishCoalesceExpression, env);
       default:
         throw new RuntimeError(
           `Unknown expression type: ${(expr as unknown as Expression).type}`,
@@ -1448,6 +1464,153 @@ export class Interpreter {
       }
     }
     return createString(result);
+  }
+
+  private evalEnumDeclaration(stmt: EnumDeclaration, env: Environment): RuntimeValue {
+    const properties = new Map<string, RuntimeValue>();
+    for (const variant of stmt.variants) {
+      properties.set(variant, createString(variant));
+    }
+    const enumObj = createObject(properties);
+    env.define(stmt.name, enumObj, true);
+    return enumObj;
+  }
+
+  private evalPipeExpression(expr: PipeExpression, env: Environment): RuntimeValue {
+    const left = this.evalExpression(expr.left, env);
+
+    // The right side should be a function (identifier, member expression, or call expression)
+    // If right is a CallExpression, prepend left as the first argument
+    if (expr.right.type === 'CallExpression') {
+      const callee = this.evalExpression(expr.right.callee, env);
+      const args = [left, ...expr.right.args.map(arg => this.evalExpression(arg, env))];
+      return this.callFunction(callee, args, null, expr.right, env);
+    }
+
+    // If right is an identifier or member expression, call it with left as the only argument
+    const callee = this.evalExpression(expr.right, env);
+    if (callee.type === 'function' || callee.type === 'native-function') {
+      // Create a synthetic call expression for error reporting
+      const syntheticCall = {
+        type: 'CallExpression' as const,
+        callee: expr.right,
+        args: [],
+        position: expr.position,
+      };
+      return this.callFunction(callee, [left], null, syntheticCall, env);
+    }
+
+    throw new RuntimeError(
+      `Right side of pipe operator (|>) must be a function or function call`,
+      expr.position.line,
+      expr.position.column
+    );
+  }
+
+  private evalOptionalMemberExpression(expr: OptionalMemberExpression, env: Environment): RuntimeValue {
+    const obj = this.evalExpression(expr.object, env);
+
+    // If object is null, return null without accessing property
+    if (obj.type === 'null') {
+      return createNull();
+    }
+
+    if (obj.type === 'object') {
+      return obj.properties.get(expr.property) || createNull();
+    }
+
+    if (obj.type === 'instance') {
+      if (obj.properties.has(expr.property)) {
+        return obj.properties.get(expr.property)!;
+      }
+      const method = this.findMethod(obj.classRef, expr.property);
+      if (method) return method;
+      return createNull();
+    }
+
+    if (obj.type === 'array') {
+      if (expr.property === 'length') {
+        return createNumber(obj.elements.length);
+      }
+    }
+
+    if (obj.type === 'string') {
+      if (expr.property === 'length') {
+        return createNumber(obj.value.length);
+      }
+    }
+
+    throw new RuntimeError(
+      `Cannot access property '${expr.property}' on ${obj.type}`,
+      expr.position.line,
+      expr.position.column
+    );
+  }
+
+  private evalOptionalIndexExpression(expr: OptionalIndexExpression, env: Environment): RuntimeValue {
+    const obj = this.evalExpression(expr.object, env);
+
+    // If object is null, return null without accessing index
+    if (obj.type === 'null') {
+      return createNull();
+    }
+
+    const index = this.evalExpression(expr.index, env);
+
+    if (obj.type === 'array') {
+      if (index.type !== 'number') {
+        throw new RuntimeError(
+          `Array index must be a number, got ${index.type}`,
+          expr.position.line,
+          expr.position.column
+        );
+      }
+      const idx = Math.floor(index.value);
+      if (idx < 0 || idx >= obj.elements.length) {
+        return createNull();
+      }
+      return obj.elements[idx];
+    }
+
+    if (obj.type === 'string') {
+      if (index.type !== 'number') {
+        throw new RuntimeError(
+          `String index must be a number, got ${index.type}`,
+          expr.position.line,
+          expr.position.column
+        );
+      }
+      const idx = Math.floor(index.value);
+      if (idx < 0 || idx >= obj.value.length) {
+        return createNull();
+      }
+      return createString(obj.value[idx]);
+    }
+
+    if (obj.type === 'object') {
+      if (index.type !== 'string') {
+        throw new RuntimeError(
+          `Object keys must be strings, got ${index.type}`,
+          expr.position.line,
+          expr.position.column
+        );
+      }
+      return obj.properties.get(index.value) || createNull();
+    }
+
+    throw new RuntimeError(
+      `Cannot index into ${obj.type}`,
+      expr.position.line,
+      expr.position.column
+    );
+  }
+
+  private evalNullishCoalesceExpression(expr: NullishCoalesceExpression, env: Environment): RuntimeValue {
+    const left = this.evalExpression(expr.left, env);
+    if (left.type === 'null') {
+      return this.evalExpression(expr.right, env);
+    }
+    return left;
   }
 
   private checkStepLimit(): void {

@@ -45,6 +45,7 @@ export enum TokenType {
   TRY = 'TRY',
   CATCH = 'CATCH',
   THROW = 'THROW',
+  ENUM = 'ENUM',
 
   // Operators
   PLUS = 'PLUS',             // +
@@ -80,7 +81,10 @@ export enum TokenType {
   SEMICOLON = 'SEMICOLON',   // ;
   ARROW = 'ARROW',           // =>
   PIPE = 'PIPE',             // |
+  PIPE_ARROW = 'PIPE_ARROW', // |>
   SPREAD = 'SPREAD',         // ...
+  QUESTION_DOT = 'QUESTION_DOT',         // ?.
+  NULLISH_COALESCE = 'NULLISH_COALESCE', // ??
 
   // Special
   EOF = 'EOF',
@@ -134,4 +138,5 @@ export const KEYWORDS: Record<string, TokenType> = {
   'try': TokenType.TRY,
   'catch': TokenType.CATCH,
   'throw': TokenType.THROW,
+  'enum': TokenType.ENUM,
 };

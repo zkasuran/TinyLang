@@ -29,6 +29,7 @@ import {
   DestructuringDeclaration,
   FunctionDeclaration,
   ClassDeclaration,
+  EnumDeclaration,
   ReturnStatement,
   IfStatement,
   WhileStatement,
@@ -67,6 +68,10 @@ import {
   TryCatchStatement,
   ThrowStatement,
   SpreadExpression,
+  PipeExpression,
+  OptionalMemberExpression,
+  OptionalIndexExpression,
+  NullishCoalesceExpression,
 } from '../types/ast';
 import { ParseError } from './errors';
 
@@ -149,6 +154,8 @@ export class Parser {
         return this.parseTryCatchStatement();
       case TokenType.THROW:
         return this.parseThrowStatement();
+      case TokenType.ENUM:
+        return this.parseEnumDeclaration();
       default:
         return this.parseExpressionStatement();
     }
@@ -627,6 +634,41 @@ export class Parser {
     };
   }
 
+  private parseEnumDeclaration(): EnumDeclaration {
+    const token = this.advance(); // consume 'enum'
+    const position = token.position;
+
+    const nameToken = this.expect(TokenType.IDENTIFIER,
+      'an enum name',
+      'Enum declarations look like: enum Direction { North South East West }'
+    );
+
+    this.expect(TokenType.LBRACE, "'{'",
+      'Enum body must be enclosed in braces { }'
+    );
+    this.skipNewlines();
+
+    const variants: string[] = [];
+    while (!this.check(TokenType.RBRACE) && !this.isAtEnd()) {
+      this.skipNewlines();
+      if (this.check(TokenType.RBRACE)) break;
+      const variantToken = this.expect(TokenType.IDENTIFIER, 'a variant name',
+        'Enum variants are identifiers listed on separate lines'
+      );
+      variants.push(variantToken.value);
+      this.skipNewlines();
+    }
+
+    this.expect(TokenType.RBRACE, "'}'", 'Close the enum body with }');
+
+    return {
+      type: 'EnumDeclaration',
+      name: nameToken.value,
+      variants,
+      position,
+    };
+  }
+
   private parseExpressionStatement(): ExpressionStatement {
     const position = this.peek().position;
     const expression = this.parseExpression();
@@ -646,7 +688,7 @@ export class Parser {
   }
 
   private parseAssignment(): Expression {
-    const expr = this.parseTernary();
+    const expr = this.parsePipe();
 
     if (this.check(TokenType.ASSIGN) ||
         this.check(TokenType.PLUS_ASSIGN) ||
@@ -666,6 +708,38 @@ export class Parser {
     }
 
     return expr;
+  }
+
+  private parsePipe(): Expression {
+    let left = this.parseNullishCoalesce();
+
+    while (this.match(TokenType.PIPE_ARROW)) {
+      const right = this.parseNullishCoalesce();
+      left = {
+        type: 'PipeExpression',
+        left,
+        right,
+        position: left.position,
+      } as PipeExpression;
+    }
+
+    return left;
+  }
+
+  private parseNullishCoalesce(): Expression {
+    let left = this.parseTernary();
+
+    while (this.match(TokenType.NULLISH_COALESCE)) {
+      const right = this.parseTernary();
+      left = {
+        type: 'NullishCoalesceExpression',
+        left,
+        right,
+        position: left.position,
+      } as NullishCoalesceExpression;
+    }
+
+    return left;
   }
 
   private parseTernary(): Expression {
@@ -848,6 +922,33 @@ export class Parser {
     while (true) {
       if (this.check(TokenType.LPAREN)) {
         expr = this.parseCallExpression(expr);
+      } else if (this.check(TokenType.QUESTION_DOT)) {
+        this.advance(); // consume '?.'
+        if (this.check(TokenType.LBRACKET)) {
+          // Optional index access: obj?.[index]
+          this.advance(); // consume '['
+          const index = this.parseExpression();
+          this.expect(TokenType.RBRACKET, "']'",
+            'Optional index access must be closed with ]'
+          );
+          expr = {
+            type: 'OptionalIndexExpression',
+            object: expr,
+            index,
+            position: expr.position,
+          } as OptionalIndexExpression;
+        } else {
+          // Optional member access: obj?.prop
+          const property = this.expect(TokenType.IDENTIFIER, 'a property name',
+            'After ?. provide a property or method name'
+          );
+          expr = {
+            type: 'OptionalMemberExpression',
+            object: expr,
+            property: property.value,
+            position: expr.position,
+          } as OptionalMemberExpression;
+        }
       } else if (this.check(TokenType.DOT)) {
         // Don't consume dot if next is also dot (it's a range expression)
         if (this.peekNext()?.type === TokenType.DOT) {
@@ -1342,6 +1443,7 @@ export class Parser {
         case TokenType.TEST:
         case TokenType.TRY:
         case TokenType.THROW:
+        case TokenType.ENUM:
           return;
       }
 

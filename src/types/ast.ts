@@ -25,6 +25,7 @@ export type Statement =
   | DestructuringDeclaration
   | FunctionDeclaration
   | ClassDeclaration
+  | EnumDeclaration
   | ReturnStatement
   | IfStatement
   | WhileStatement
@@ -157,6 +158,12 @@ export interface ThrowStatement extends BaseNode {
   value: Expression;
 }
 
+export interface EnumDeclaration extends BaseNode {
+  type: 'EnumDeclaration';
+  name: string;
+  variants: string[];
+}
+
 // ============ Expressions ============
 export type Expression =
   | NumberLiteral
@@ -180,7 +187,11 @@ export type Expression =
   | ThisExpression
   | SpreadExpression
   | TernaryExpression
-  | RangeExpression;
+  | RangeExpression
+  | PipeExpression
+  | OptionalMemberExpression
+  | OptionalIndexExpression
+  | NullishCoalesceExpression;
 
 export interface NumberLiteral extends BaseNode {
   type: 'NumberLiteral';
@@ -314,4 +325,28 @@ export interface RangeExpression extends BaseNode {
   start: Expression;
   end: Expression;
   inclusive: boolean;
+}
+
+export interface PipeExpression extends BaseNode {
+  type: 'PipeExpression';
+  left: Expression;
+  right: Expression;
+}
+
+export interface OptionalMemberExpression extends BaseNode {
+  type: 'OptionalMemberExpression';
+  object: Expression;
+  property: string;
+}
+
+export interface OptionalIndexExpression extends BaseNode {
+  type: 'OptionalIndexExpression';
+  object: Expression;
+  index: Expression;
+}
+
+export interface NullishCoalesceExpression extends BaseNode {
+  type: 'NullishCoalesceExpression';
+  left: Expression;
+  right: Expression;
 }
