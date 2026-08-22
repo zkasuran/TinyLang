@@ -52,6 +52,7 @@ export enum OpCode {
   STORE_UPVALUE = 0x55,
   LOAD_ARGC = 0x56,     // Push the number of arguments actually passed to this frame
   DECLARE_GLOBAL = 0x57, // Like STORE_GLOBAL, but rejects a name already bound
+  DECLARE_CONST_GLOBAL = 0x58, // DECLARE_GLOBAL, and the name may never be stored to again
 
   // Functions
   CALL = 0x60,
@@ -128,6 +129,7 @@ const TWO_BYTE_OPERAND: ReadonlySet<number> = new Set<number>([
   OpCode.LOAD_GLOBAL,
   OpCode.STORE_GLOBAL,
   OpCode.DECLARE_GLOBAL,
+  OpCode.DECLARE_CONST_GLOBAL,
   OpCode.LOAD_UPVALUE,
   OpCode.STORE_UPVALUE,
   OpCode.CALL,
@@ -207,6 +209,7 @@ export function opcodeName(op: OpCode): string {
     [OpCode.LOAD_GLOBAL]: 'LOAD_GLOBAL',
     [OpCode.STORE_GLOBAL]: 'STORE_GLOBAL',
     [OpCode.DECLARE_GLOBAL]: 'DECLARE_GLOBAL',
+    [OpCode.DECLARE_CONST_GLOBAL]: 'DECLARE_CONST_GLOBAL',
     [OpCode.LOAD_UPVALUE]: 'LOAD_UPVALUE',
     [OpCode.STORE_UPVALUE]: 'STORE_UPVALUE',
     [OpCode.LOAD_ARGC]: 'LOAD_ARGC',

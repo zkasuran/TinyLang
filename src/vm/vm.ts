@@ -105,6 +105,13 @@ export class VM {
   private frames: CallFrame[] = [];
   private handlers: TryHandler[] = [];
   private globals: Map<string, RuntimeValue> = new Map();
+  /**
+   * Names of globals declared with `const`, mirroring Environment's constants
+   * set in the interpreter. Not cleared by run(), for the same reason globals
+   * are not: the REPL runs successive chunks against one set of globals, and a
+   * constant declared on an earlier line is still constant on a later one.
+   */
+  private constGlobals: Set<string> = new Set();
   private output: OutputHandler;
   private maxSteps: number;
   private steps: number = 0;
@@ -612,6 +619,15 @@ export class VM {
           const nameIdx = this.read16();
           const name = this.currentFrame.chunk.constants[nameIdx] as StringValue;
           const value = this.pop(); // Consume the value
+          // `const` was entirely unenforced here: the interpreter's
+          // Environment.assign refuses to overwrite a constant, while the VM
+          // happily let `const RATE = 3.14` be followed by `RATE = 99`.
+          if (this.constGlobals.has(name.value)) {
+            throw new RuntimeError(
+              `Cannot reassign constant '${name.value}'`,
+              this.currentLine()
+            );
+          }
           this.globals.set(name.value, value);
           break;
         }
@@ -621,7 +637,9 @@ export class VM {
         // stdlib name - is an error, exactly as Environment.define is in the
         // interpreter. Both declaration and assignment used to compile to
         // STORE_GLOBAL, so the VM silently overwrote.
-        case OpCode.DECLARE_GLOBAL: {
+        case OpCode.DECLARE_GLOBAL:
+        case OpCode.DECLARE_CONST_GLOBAL: {
+          const isConst = instruction === OpCode.DECLARE_CONST_GLOBAL;
           const nameIdx = this.read16();
           const name = this.currentFrame.chunk.constants[nameIdx] as StringValue;
           const value = this.pop();
@@ -632,6 +650,9 @@ export class VM {
             );
           }
           this.globals.set(name.value, value);
+          if (isConst) {
+            this.constGlobals.add(name.value);
+          }
           break;
         }
 

@@ -6310,6 +6310,7 @@ var TinyLangBundle = (() => {
     OpCode2[OpCode2["STORE_UPVALUE"] = 85] = "STORE_UPVALUE";
     OpCode2[OpCode2["LOAD_ARGC"] = 86] = "LOAD_ARGC";
     OpCode2[OpCode2["DECLARE_GLOBAL"] = 87] = "DECLARE_GLOBAL";
+    OpCode2[OpCode2["DECLARE_CONST_GLOBAL"] = 88] = "DECLARE_CONST_GLOBAL";
     OpCode2[OpCode2["CALL"] = 96] = "CALL";
     OpCode2[OpCode2["RETURN"] = 97] = "RETURN";
     OpCode2[OpCode2["CLOSURE"] = 98] = "CLOSURE";
@@ -6353,6 +6354,7 @@ var TinyLangBundle = (() => {
     82 /* LOAD_GLOBAL */,
     83 /* STORE_GLOBAL */,
     87 /* DECLARE_GLOBAL */,
+    88 /* DECLARE_CONST_GLOBAL */,
     84 /* LOAD_UPVALUE */,
     85 /* STORE_UPVALUE */,
     96 /* CALL */,
@@ -6419,6 +6421,7 @@ var TinyLangBundle = (() => {
       [82 /* LOAD_GLOBAL */]: "LOAD_GLOBAL",
       [83 /* STORE_GLOBAL */]: "STORE_GLOBAL",
       [87 /* DECLARE_GLOBAL */]: "DECLARE_GLOBAL",
+      [88 /* DECLARE_CONST_GLOBAL */]: "DECLARE_CONST_GLOBAL",
       [84 /* LOAD_UPVALUE */]: "LOAD_UPVALUE",
       [85 /* STORE_UPVALUE */]: "STORE_UPVALUE",
       [86 /* LOAD_ARGC */]: "LOAD_ARGC",
@@ -6690,11 +6693,12 @@ var TinyLangBundle = (() => {
         }
       }
     }
-    addLocal(name) {
+    addLocal(name, isConst = false) {
       this.current.locals.push({
         name,
         depth: this.current.scopeDepth,
-        isCaptured: false
+        isCaptured: false,
+        isConst
       });
     }
     /**
@@ -6712,11 +6716,11 @@ var TinyLangBundle = (() => {
      * a redeclaration inside `if false { }` is never reported, and one inside `try`
      * is caught. Failing compilation would change both.
      */
-    declareLocal(name, line) {
+    declareLocal(name, line, isConst = false) {
       if (this.isRedeclaredInCurrentScope(name)) {
         this.emitRaise(`Variable '${name}' is already declared in this scope`, line);
       }
-      this.addLocal(name);
+      this.addLocal(name, isConst);
     }
     isRedeclaredInCurrentScope(name) {
       for (let i = this.current.locals.length - 1; i >= 0; i--) {
@@ -6732,10 +6736,21 @@ var TinyLangBundle = (() => {
       this.emit(163 /* RAISE */, line);
       this.emit16(msgIdx, line);
     }
-    /** Emit the store for a top-level declaration (not an assignment). */
-    emitDeclareGlobal(name, line) {
+    /**
+     * Emit the store for a top-level declaration (not an assignment).
+     *
+     * A `const` declaration uses its own opcode so the VM can remember which
+     * globals are constant. Constness of a global cannot be decided at compile
+     * time: a function body compiled before the declaration it assigns to still
+     * has to be rejected, as in
+     *
+     *     fn f() { RATE = 1 }
+     *     const RATE = 3.14
+     *     f()               // the interpreter throws here
+     */
+    emitDeclareGlobal(name, line, isConst) {
       const nameIdx = this.current.chunk.addConstant(createString(name));
-      this.emit(87 /* DECLARE_GLOBAL */, line);
+      this.emit(isConst ? 88 /* DECLARE_CONST_GLOBAL */ : 87 /* DECLARE_GLOBAL */, line);
       this.emit16(nameIdx, line);
     }
     resolveLocal(scope, name) {
@@ -6750,23 +6765,29 @@ var TinyLangBundle = (() => {
       if (!scope.enclosing) return -1;
       const localIdx = this.resolveLocal(scope.enclosing, name);
       if (localIdx !== -1) {
-        scope.enclosing.locals[localIdx].isCaptured = true;
-        return this.addUpvalue(scope, localIdx, true);
+        const local = scope.enclosing.locals[localIdx];
+        local.isCaptured = true;
+        return this.addUpvalue(scope, localIdx, true, local.isConst);
       }
       const upvalueIdx = this.resolveUpvalue(scope.enclosing, name);
       if (upvalueIdx !== -1) {
-        return this.addUpvalue(scope, upvalueIdx, false);
+        return this.addUpvalue(
+          scope,
+          upvalueIdx,
+          false,
+          scope.enclosing.upvalues[upvalueIdx].isConst
+        );
       }
       return -1;
     }
-    addUpvalue(scope, index, isLocal) {
+    addUpvalue(scope, index, isLocal, isConst) {
       for (let i = 0; i < scope.upvalues.length; i++) {
         const uv = scope.upvalues[i];
         if (uv.index === index && uv.isLocal === isLocal) {
           return i;
         }
       }
-      scope.upvalues.push({ index, isLocal });
+      scope.upvalues.push({ index, isLocal, isConst });
       return scope.upvalues.length - 1;
     }
     // ============ Statement Compilation ============
@@ -6882,7 +6903,7 @@ var TinyLangBundle = (() => {
     compileVariableDeclaration(stmt) {
       const line = stmt.position.line;
       this.compileExpression(stmt.value);
-      this.addLocalOrStoreGlobal(stmt.name, line);
+      this.addLocalOrStoreGlobal(stmt.name, line, stmt.constant);
     }
     compileFunctionDeclaration(stmt) {
       const line = stmt.position.line;
@@ -7182,13 +7203,13 @@ var TinyLangBundle = (() => {
           this.emit(80 /* LOAD_LOCAL */, line);
           this.emit16(subjectSlot, line);
           this.emitDestructureExtract(isArray, names[i], i, line);
-          this.declareLocal(names[i], line);
+          this.declareLocal(names[i], line, stmt.constant);
         }
       } else {
         for (let i = 0; i < names.length; i++) {
           this.emit(3 /* DUP */, line);
           this.emitDestructureExtract(isArray, names[i], i, line);
-          this.emitDeclareGlobal(names[i], line);
+          this.emitDeclareGlobal(names[i], line, stmt.constant);
         }
         this.emit(2 /* POP */, line);
       }
@@ -7206,6 +7227,9 @@ var TinyLangBundle = (() => {
     /**
      * `enum Color { Red, Green }` compiles to an object mapping each variant name
      * to itself as a string, matching the interpreter.
+     *
+     * The interpreter binds the enum as a constant, so `Color = 1` is an error;
+     * this binds it the same way.
      */
     compileEnumDeclaration(stmt) {
       const line = stmt.position.line;
@@ -7215,18 +7239,18 @@ var TinyLangBundle = (() => {
       }
       this.emit(113 /* OBJECT */, line);
       this.emit16(stmt.variants.length, line);
-      this.addLocalOrStoreGlobal(stmt.name, line);
+      this.addLocalOrStoreGlobal(stmt.name, line, true);
     }
     /**
      * Bind the value on top of the stack to `name` as a *declaration*: as a local
      * it simply stays on the stack in its slot, as a global it is stored and
      * popped. Either way a redeclaration in the same scope is rejected.
      */
-    addLocalOrStoreGlobal(name, line) {
+    addLocalOrStoreGlobal(name, line, isConst = false) {
       if (this.current.scopeDepth > 0) {
-        this.declareLocal(name, line);
+        this.declareLocal(name, line, isConst);
       } else {
-        this.emitDeclareGlobal(name, line);
+        this.emitDeclareGlobal(name, line, isConst);
       }
     }
     // ============ Expression Compilation ============
@@ -7399,14 +7423,32 @@ var TinyLangBundle = (() => {
         }
       }
     }
+    /**
+     * Store the value on top of the stack into `name`, as an *assignment*.
+     *
+     * Assigning to a `const` is rejected here for locals and upvalues, whose
+     * constness is only known at compile time, and by the VM for globals, whose
+     * constness is only known at run time. Both report the interpreter's message.
+     *
+     * As with redeclaration, the local case emits a RAISE instead of failing the
+     * compile, because the interpreter reports it when execution *reaches* the
+     * assignment: inside `if false { }` it is never reported, and inside `try` it
+     * is caught. Failing compilation would change both.
+     */
     compileStoreVariable(name, line) {
       const localIdx = this.resolveLocal(this.current, name);
       if (localIdx !== -1) {
+        if (this.current.locals[localIdx].isConst) {
+          this.emitRaise(`Cannot reassign constant '${name}'`, line);
+        }
         this.emit(81 /* STORE_LOCAL */, line);
         this.emit16(localIdx, line);
       } else {
         const upvalueIdx = this.resolveUpvalue(this.current, name);
         if (upvalueIdx !== -1) {
+          if (this.current.upvalues[upvalueIdx].isConst) {
+            this.emitRaise(`Cannot reassign constant '${name}'`, line);
+          }
           this.emit(85 /* STORE_UPVALUE */, line);
           this.emit16(upvalueIdx, line);
         } else {
@@ -7723,6 +7765,13 @@ var TinyLangBundle = (() => {
       __publicField(this, "frames", []);
       __publicField(this, "handlers", []);
       __publicField(this, "globals", /* @__PURE__ */ new Map());
+      /**
+       * Names of globals declared with `const`, mirroring Environment's constants
+       * set in the interpreter. Not cleared by run(), for the same reason globals
+       * are not: the REPL runs successive chunks against one set of globals, and a
+       * constant declared on an earlier line is still constant on a later one.
+       */
+      __publicField(this, "constGlobals", /* @__PURE__ */ new Set());
       __publicField(this, "output");
       __publicField(this, "maxSteps");
       __publicField(this, "steps", 0);
@@ -8134,6 +8183,12 @@ var TinyLangBundle = (() => {
             const nameIdx = this.read16();
             const name = this.currentFrame.chunk.constants[nameIdx];
             const value = this.pop();
+            if (this.constGlobals.has(name.value)) {
+              throw new RuntimeError(
+                `Cannot reassign constant '${name.value}'`,
+                this.currentLine()
+              );
+            }
             this.globals.set(name.value, value);
             break;
           }
@@ -8142,7 +8197,9 @@ var TinyLangBundle = (() => {
           // stdlib name - is an error, exactly as Environment.define is in the
           // interpreter. Both declaration and assignment used to compile to
           // STORE_GLOBAL, so the VM silently overwrote.
-          case 87 /* DECLARE_GLOBAL */: {
+          case 87 /* DECLARE_GLOBAL */:
+          case 88 /* DECLARE_CONST_GLOBAL */: {
+            const isConst = instruction === 88 /* DECLARE_CONST_GLOBAL */;
             const nameIdx = this.read16();
             const name = this.currentFrame.chunk.constants[nameIdx];
             const value = this.pop();
@@ -8153,6 +8210,9 @@ var TinyLangBundle = (() => {
               );
             }
             this.globals.set(name.value, value);
+            if (isConst) {
+              this.constGlobals.add(name.value);
+            }
             break;
           }
           // Raise a RuntimeError the compiler determined statically but which the
@@ -9674,6 +9734,7 @@ var TinyLangBundle = (() => {
       case 82 /* LOAD_GLOBAL */:
       case 83 /* STORE_GLOBAL */:
       case 87 /* DECLARE_GLOBAL */:
+      case 88 /* DECLARE_CONST_GLOBAL */:
       case 163 /* RAISE */: {
         const idx = chunk.code[offset + 1] << 8 | chunk.code[offset + 2];
         const name = chunk.constants[idx];

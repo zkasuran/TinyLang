@@ -1266,6 +1266,182 @@ describe('Differential: engine agreement audit', () => {
     });
   });
 
+  /**
+   * `const` was enforced by the interpreter and completely ignored by the VM:
+   *
+   *     const RATE = 3.14
+   *     RATE = 99          // interpreter: throws. VM: RATE becomes 99.
+   *
+   * at top level and inside functions alike. As with redeclaration, the report
+   * happens when execution *reaches* the assignment - a violation inside
+   * `if false { }` is never reported, and one inside `try` is catchable - so the
+   * VM raises at that point instead of failing to compile.
+   */
+  describe('const enforcement (VM ignored it entirely)', () => {
+    const MESSAGE = (name: string): string => `Cannot reassign constant '${name}'`;
+
+    it('agrees that reassigning a top-level const is an error', () => {
+      expectSameError(`const RATE = 3.14\nRATE = 99\nprint(RATE)`, MESSAGE('RATE'));
+    });
+
+    it('agrees that reassigning a const inside a function is an error', () => {
+      expectSameError(
+        `fn f() {\n  const INNER = 1\n  INNER = 2\n  print(INNER)\n}\nf()`,
+        MESSAGE('INNER')
+      );
+    });
+
+    it('agrees that reassigning a const in a nested scope is an error', () => {
+      expectSameError(
+        `fn f() {\n  if true {\n    const C = 1\n    C = 2\n  }\n}\nf()`,
+        MESSAGE('C')
+      );
+    });
+
+    it('agrees that a nested scope cannot reassign a top-level const', () => {
+      expectSameError(`const C = 1\nif true {\n  C = 2\n}\nprint(C)`, MESSAGE('C'));
+    });
+
+    it('agrees that a loop body cannot reassign its own const', () => {
+      expectSameError(`for i in 0..3 {\n  const C = i\n  C = 9\n}`, MESSAGE('C'));
+    });
+
+    it('agrees that compound assignment to a const is an error', () => {
+      expectSameError(`const RATE = 1\nRATE += 1\nprint(RATE)`, MESSAGE('RATE'));
+      expectSameError(`fn f() {\n  const R = 1\n  R *= 2\n}\nf()`, MESSAGE('R'));
+    });
+
+    it('agrees that a closure cannot reassign a captured const', () => {
+      expectSameError(
+        `fn outer() {\n  const C = 1\n  fn inner() {\n    C = 2\n  }\n  inner()\n}\nouter()`,
+        MESSAGE('C')
+      );
+    });
+
+    it('agrees that a closure two levels deep cannot reassign it either', () => {
+      // The upvalue is captured through an intermediate function, so constness
+      // has to travel with the capture rather than being read off the local.
+      expectSameError(
+        `fn a() {\n  const C = 1\n  fn b() {\n    fn c() {\n      C = 9\n    }\n    c()\n  }\n  b()\n}\na()`,
+        MESSAGE('C')
+      );
+    });
+
+    it('agrees that destructured const bindings are constant', () => {
+      expectSameError(`const [a, b] = [1, 2]\na = 5\nprint(b)`, MESSAGE('a'));
+      expectSameError(`const {x} = {x: 1}\nx = 5`, MESSAGE('x'));
+      expectSameError(`fn f() {\n  const [a] = [1]\n  a = 2\n}\nf()`, MESSAGE('a'));
+    });
+
+    it('agrees that an enum binding is constant', () => {
+      expectSameError(`enum Color {\n  Red\n  Green\n}\nColor = 1`, MESSAGE('Color'));
+      expectSameError(`fn f() {\n  enum E {\n    A\n  }\n  E = 1\n}\nf()`, MESSAGE('E'));
+    });
+
+    it('agrees that a const violation in a branch never taken is never reported', () => {
+      expect(
+        expectAgreement(`const C = 1\nif false {\n  C = 2\n}\nprint("reached")`)
+      ).toEqual(['reached']);
+      expect(
+        expectAgreement(
+          `fn f() {\n  const C = 1\n  if false {\n    C = 2\n  }\n  print("reached")\n}\nf()`
+        )
+      ).toEqual(['reached']);
+    });
+
+    it('agrees that a const violation inside try is catchable', () => {
+      expect(
+        expectAgreement(
+          `const C = 1\ntry {\n  C = 2\n} catch e {\n  print("caught:", e.message)\n}\nprint(C)`
+        )
+      ).toEqual([`caught: ${MESSAGE('C')}`, '1']);
+      expect(
+        expectAgreement(
+          `fn f() {\n  const C = 1\n  try {\n    C = 2\n  } catch e {\n    print("caught:", e.message)\n  }\n  print(C)\n}\nf()`
+        )
+      ).toEqual([`caught: ${MESSAGE('C')}`, '1']);
+    });
+
+    it('agrees that the right-hand side is evaluated before the error', () => {
+      // Both engines evaluate the value and only then refuse the store, so a
+      // side effect in the value expression is observable before the failure.
+      // Pinning it keeps the VM's raise from drifting earlier than the
+      // interpreter's check.
+      const source = `fn side() {\n  print("evaluated")\n  return 1\n}\nconst C = 0\nC = side()`;
+
+      const outcomeOf = (run: (sink: (m: string) => void) => void) => {
+        const output: string[] = [];
+        try {
+          run((m) => output.push(m));
+          return { output, message: '<no error>' };
+        } catch (e) {
+          return { output, message: (e as Error).message };
+        }
+      };
+
+      const fromInterpreter = outcomeOf((sink) => {
+        const program = new Parser(new Lexer(source).tokenize()).parse();
+        const interpreter = new Interpreter({ output: sink });
+        const env = interpreter.getGlobalEnvironment();
+        registerStdlib(env, { output: sink });
+        interpreter.executeInEnvironment(program, env);
+      });
+      const fromVM = outcomeOf((sink) => {
+        const program = new Parser(new Lexer(source).tokenize()).parse();
+        new VM({ output: sink }).run(new Compiler().compile(program));
+      });
+
+      expect(fromInterpreter).toEqual({ output: ['evaluated'], message: MESSAGE('C') });
+      expect(fromVM, 'VM must fail at the same point with the same message').toEqual(
+        fromInterpreter
+      );
+    });
+
+    // The other side of the coin: everything that is *not* a const reassignment
+    // must keep working, or "enforcement" is just a new way to reject valid code.
+    it('agrees that let is still freely reassignable', () => {
+      expect(expectAgreement(`let x = 1\nx = 2\nx += 3\nprint(x)`)).toEqual(['5']);
+      expect(
+        expectAgreement(`fn f() {\n  let x = 1\n  x = 2\n  x -= 1\n  print(x)\n}\nf()`)
+      ).toEqual(['1']);
+      expect(expectAgreement(`let [a, b] = [1, 2]\na = 5\nprint(a, b)`)).toEqual(['5 2']);
+    });
+
+    it('agrees that a let may shadow a const and be reassigned', () => {
+      expect(
+        expectAgreement(
+          `const C = 1\nfn f() {\n  let C = 5\n  C = 6\n  print(C)\n}\nf()\nprint(C)`
+        )
+      ).toEqual(['6', '1']);
+    });
+
+    it('agrees that a parameter shadowing a const is assignable', () => {
+      expect(
+        expectAgreement(`const P = 1\nfn f(P) {\n  P = 2\n  return P\n}\nprint(f(5))\nprint(P)`)
+      ).toEqual(['2', '1']);
+    });
+
+    it('agrees that a const is rebound freshly on each loop iteration', () => {
+      expect(expectAgreement(`for i in 0..3 {\n  const C = i\n  print(C)\n}`)).toEqual([
+        '0',
+        '1',
+        '2',
+      ]);
+    });
+
+    it('agrees that function and class names are not constant', () => {
+      expect(expectAgreement(`fn f() {\n  return 1\n}\nf = 2\nprint(f)`)).toEqual(['2']);
+      expect(
+        expectAgreement(`class K {\n  fn init() {\n    this.v = 1\n  }\n}\nK = 2\nprint(K)`)
+      ).toEqual(['2']);
+    });
+
+    it('agrees that a const binding still allows mutating what it points at', () => {
+      expect(expectAgreement(`const O = {v: 1}\nO.v = 2\nprint(O.v)`)).toEqual(['2']);
+      expect(expectAgreement(`const A = [1]\nA[0] = 9\nprint(A)`)).toEqual(['[9]']);
+    });
+  });
+
   describe('detached methods and unbound this (VM bound this implicitly)', () => {
     const CLS = `
       class Counter {

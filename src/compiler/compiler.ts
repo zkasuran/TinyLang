@@ -60,6 +60,12 @@ interface Local {
   name: string;
   depth: number;
   isCaptured: boolean;
+  /**
+   * Declared with `const`. Locals are anonymous stack slots at runtime, so there
+   * is nothing for the VM to check: constness has to be recorded here and the
+   * store rejected while the assignment is being compiled.
+   */
+  isConst: boolean;
 }
 
 /**
@@ -68,6 +74,8 @@ interface Local {
 interface Upvalue {
   index: number;
   isLocal: boolean;
+  /** Whether the variable this upvalue captures was declared `const`. */
+  isConst: boolean;
 }
 
 /**
@@ -214,11 +222,12 @@ export class Compiler {
     }
   }
 
-  private addLocal(name: string): void {
+  private addLocal(name: string, isConst: boolean = false): void {
     this.current.locals.push({
       name,
       depth: this.current.scopeDepth,
       isCaptured: false,
+      isConst,
     });
   }
 
@@ -237,11 +246,11 @@ export class Compiler {
    * a redeclaration inside `if false { }` is never reported, and one inside `try`
    * is caught. Failing compilation would change both.
    */
-  private declareLocal(name: string, line: number): void {
+  private declareLocal(name: string, line: number, isConst: boolean = false): void {
     if (this.isRedeclaredInCurrentScope(name)) {
       this.emitRaise(`Variable '${name}' is already declared in this scope`, line);
     }
-    this.addLocal(name);
+    this.addLocal(name, isConst);
   }
 
   private isRedeclaredInCurrentScope(name: string): boolean {
@@ -260,10 +269,21 @@ export class Compiler {
     this.emit16(msgIdx, line);
   }
 
-  /** Emit the store for a top-level declaration (not an assignment). */
-  private emitDeclareGlobal(name: string, line: number): void {
+  /**
+   * Emit the store for a top-level declaration (not an assignment).
+   *
+   * A `const` declaration uses its own opcode so the VM can remember which
+   * globals are constant. Constness of a global cannot be decided at compile
+   * time: a function body compiled before the declaration it assigns to still
+   * has to be rejected, as in
+   *
+   *     fn f() { RATE = 1 }
+   *     const RATE = 3.14
+   *     f()               // the interpreter throws here
+   */
+  private emitDeclareGlobal(name: string, line: number, isConst: boolean): void {
     const nameIdx = this.current.chunk.addConstant(createString(name));
-    this.emit(OpCode.DECLARE_GLOBAL, line);
+    this.emit(isConst ? OpCode.DECLARE_CONST_GLOBAL : OpCode.DECLARE_GLOBAL, line);
     this.emit16(nameIdx, line);
   }
 
@@ -281,19 +301,32 @@ export class Compiler {
 
     const localIdx = this.resolveLocal(scope.enclosing, name);
     if (localIdx !== -1) {
-      scope.enclosing.locals[localIdx].isCaptured = true;
-      return this.addUpvalue(scope, localIdx, true);
+      const local = scope.enclosing.locals[localIdx];
+      local.isCaptured = true;
+      // Constness travels with the capture: a closure assigning to an enclosing
+      // `const` must be rejected just as an assignment in the declaring scope is.
+      return this.addUpvalue(scope, localIdx, true, local.isConst);
     }
 
     const upvalueIdx = this.resolveUpvalue(scope.enclosing, name);
     if (upvalueIdx !== -1) {
-      return this.addUpvalue(scope, upvalueIdx, false);
+      return this.addUpvalue(
+        scope,
+        upvalueIdx,
+        false,
+        scope.enclosing.upvalues[upvalueIdx].isConst
+      );
     }
 
     return -1;
   }
 
-  private addUpvalue(scope: CompilerScope, index: number, isLocal: boolean): number {
+  private addUpvalue(
+    scope: CompilerScope,
+    index: number,
+    isLocal: boolean,
+    isConst: boolean
+  ): number {
     // Check if already captured
     for (let i = 0; i < scope.upvalues.length; i++) {
       const uv = scope.upvalues[i];
@@ -301,7 +334,7 @@ export class Compiler {
         return i;
       }
     }
-    scope.upvalues.push({ index, isLocal });
+    scope.upvalues.push({ index, isLocal, isConst });
     return scope.upvalues.length - 1;
   }
 
@@ -433,7 +466,7 @@ export class Compiler {
     const line = stmt.position.line;
     this.compileExpression(stmt.value);
 
-    this.addLocalOrStoreGlobal(stmt.name, line);
+    this.addLocalOrStoreGlobal(stmt.name, line, stmt.constant);
   }
 
   private compileFunctionDeclaration(stmt: FunctionDeclaration): void {
@@ -880,13 +913,13 @@ export class Compiler {
         this.emit(OpCode.LOAD_LOCAL, line);
         this.emit16(subjectSlot, line);
         this.emitDestructureExtract(isArray, names[i], i, line);
-        this.declareLocal(names[i], line);
+        this.declareLocal(names[i], line, stmt.constant);
       }
     } else {
       for (let i = 0; i < names.length; i++) {
         this.emit(OpCode.DUP, line);
         this.emitDestructureExtract(isArray, names[i], i, line);
-        this.emitDeclareGlobal(names[i], line);
+        this.emitDeclareGlobal(names[i], line, stmt.constant);
       }
       this.emit(OpCode.POP, line); // discard the subject
     }
@@ -911,6 +944,9 @@ export class Compiler {
   /**
    * `enum Color { Red, Green }` compiles to an object mapping each variant name
    * to itself as a string, matching the interpreter.
+   *
+   * The interpreter binds the enum as a constant, so `Color = 1` is an error;
+   * this binds it the same way.
    */
   private compileEnumDeclaration(stmt: EnumDeclaration): void {
     const line = stmt.position.line;
@@ -920,7 +956,7 @@ export class Compiler {
     }
     this.emit(OpCode.OBJECT, line);
     this.emit16(stmt.variants.length, line);
-    this.addLocalOrStoreGlobal(stmt.name, line);
+    this.addLocalOrStoreGlobal(stmt.name, line, true);
   }
 
   /**
@@ -928,11 +964,11 @@ export class Compiler {
    * it simply stays on the stack in its slot, as a global it is stored and
    * popped. Either way a redeclaration in the same scope is rejected.
    */
-  private addLocalOrStoreGlobal(name: string, line: number): void {
+  private addLocalOrStoreGlobal(name: string, line: number, isConst: boolean = false): void {
     if (this.current.scopeDepth > 0) {
-      this.declareLocal(name, line);
+      this.declareLocal(name, line, isConst);
     } else {
-      this.emitDeclareGlobal(name, line);
+      this.emitDeclareGlobal(name, line, isConst);
     }
   }
 
@@ -1123,14 +1159,32 @@ export class Compiler {
     }
   }
 
+  /**
+   * Store the value on top of the stack into `name`, as an *assignment*.
+   *
+   * Assigning to a `const` is rejected here for locals and upvalues, whose
+   * constness is only known at compile time, and by the VM for globals, whose
+   * constness is only known at run time. Both report the interpreter's message.
+   *
+   * As with redeclaration, the local case emits a RAISE instead of failing the
+   * compile, because the interpreter reports it when execution *reaches* the
+   * assignment: inside `if false { }` it is never reported, and inside `try` it
+   * is caught. Failing compilation would change both.
+   */
   private compileStoreVariable(name: string, line: number): void {
     const localIdx = this.resolveLocal(this.current, name);
     if (localIdx !== -1) {
+      if (this.current.locals[localIdx].isConst) {
+        this.emitRaise(`Cannot reassign constant '${name}'`, line);
+      }
       this.emit(OpCode.STORE_LOCAL, line);
       this.emit16(localIdx, line);
     } else {
       const upvalueIdx = this.resolveUpvalue(this.current, name);
       if (upvalueIdx !== -1) {
+        if (this.current.upvalues[upvalueIdx].isConst) {
+          this.emitRaise(`Cannot reassign constant '${name}'`, line);
+        }
         this.emit(OpCode.STORE_UPVALUE, line);
         this.emit16(upvalueIdx, line);
       } else {
