@@ -28,7 +28,7 @@ import { Interpreter } from '../../src/interpreter';
 import { registerStdlib } from '../../src/stdlib';
 import { Compiler, optimize } from '../../src/compiler';
 import { VM } from '../../src/vm';
-import { Environment, stringify, StepLimitExceeded } from '../../src/types/values';
+import { StepLimitExceeded } from '../../src/types/values';
 
 /** Run source through the tree-walk interpreter (the reference). */
 function runInterpreter(source: string): string[] {

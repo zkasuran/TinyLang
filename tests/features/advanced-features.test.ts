@@ -9,7 +9,6 @@
 import { describe, it, expect } from 'vitest';
 import { Lexer } from '../../src/lexer';
 import { Parser } from '../../src/parser';
-import { Interpreter } from '../../src/interpreter';
 import { TokenType } from '../../src/types/tokens';
 import { TinyLang } from '../../src/tinylang';
 

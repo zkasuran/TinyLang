@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { TinyLang } from '../../src/tinylang';
 
 describe('Integration Tests - Complete Programs', () => {
-  function runProgram(source: string): { output: string[]; success: boolean; error?: any } {
+  function runProgram(source: string): { output: string[]; success: boolean; error?: unknown } {
     const output: string[] = [];
     const tl = new TinyLang({ output: (msg) => output.push(msg) });
     const result = tl.run(source);
@@ -118,7 +118,7 @@ describe('Integration Tests - Complete Programs', () => {
       print(c.decrement())
       print(c.value())
     `;
-    const { output, success, error } = runProgram(source);
+    const { success } = runProgram(source);
     expect(success).toBe(true);
   });
 

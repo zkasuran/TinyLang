@@ -5,8 +5,6 @@
 import { describe, it, expect } from 'vitest';
 import { TinyLang } from '../../src/tinylang';
 import { WasmCompiler } from '../../src/compiler/wasm-compiler';
-import { Lexer } from '../../src/lexer';
-import { Parser } from '../../src/parser';
 
 function run(source: string): string[] {
   const output: string[] = [];

@@ -1287,7 +1287,7 @@ export class Parser {
   }
 
   private parseRange(): Expression {
-    let left = this.parseAddition();
+    const left = this.parseAddition();
 
     if (this.check(TokenType.DOT) && this.peekNext()?.type === TokenType.DOT) {
       // Range expression: start..end
@@ -1708,7 +1708,7 @@ export class Parser {
     const token = this.advance(); // consume 'new'
     const callee = this.parsePrimary();
     
-    let args: Expression[] = [];
+    const args: Expression[] = [];
     if (this.check(TokenType.LPAREN)) {
       this.advance(); // consume '('
       if (!this.check(TokenType.RPAREN)) {

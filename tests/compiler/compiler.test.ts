@@ -33,11 +33,6 @@ function expectVMOutput(source: string, expected: string[]) {
   expect(output).toEqual(expected);
 }
 
-function expectVMResult(source: string, expected: string) {
-  const { result } = runVM(source);
-  expect(result).toBe(expected);
-}
-
 describe('Compiler', () => {
   describe('Compilation', () => {
     it('should compile a simple program to a chunk', () => {

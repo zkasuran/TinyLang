@@ -2818,7 +2818,7 @@ var TinyLangBundle = (() => {
       return left;
     }
     parseRange() {
-      let left = this.parseAddition();
+      const left = this.parseAddition();
       if (this.check("DOT" /* DOT */) && this.peekNext()?.type === "DOT" /* DOT */) {
         this.advance();
         this.advance();
@@ -3187,7 +3187,7 @@ var TinyLangBundle = (() => {
     parseNew() {
       const token = this.advance();
       const callee = this.parsePrimary();
-      let args = [];
+      const args = [];
       if (this.check("LPAREN" /* LPAREN */)) {
         this.advance();
         if (!this.check("RPAREN" /* RPAREN */)) {

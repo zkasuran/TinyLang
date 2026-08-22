@@ -49,7 +49,6 @@ export function getFs(): FileSystemHost {
   if (cachedFs) return cachedFs;
   try {
     // Deliberately a call-time require, not a top-level import.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     cachedFs = require('fs') as FileSystemHost;
   } catch {
     unavailable('fs');
@@ -61,7 +60,7 @@ export function getFs(): FileSystemHost {
 export function getPath(): PathHost {
   if (cachedPath) return cachedPath;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    // Deliberately a call-time require, not a top-level import.
     cachedPath = require('path') as PathHost;
   } catch {
     unavailable('path');

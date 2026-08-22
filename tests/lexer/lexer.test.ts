@@ -12,10 +12,6 @@ describe('Lexer', () => {
     return tokenize(source).map(t => t.type);
   }
 
-  function tokenValues(source: string): string[] {
-    return tokenize(source).map(t => t.value);
-  }
-
   describe('Number Literals', () => {
     it('should tokenize integers', () => {
       const tokens = tokenize('42');

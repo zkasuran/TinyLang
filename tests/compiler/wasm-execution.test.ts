@@ -16,7 +16,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { WasmCompiler, summarizeWasmResult } from '../../src/compiler/wasm-compiler';
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const wabtInit = require('wabt');
 
 interface WabtModule {

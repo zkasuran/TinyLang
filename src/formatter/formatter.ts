@@ -1034,7 +1034,6 @@ export class Formatter {
       .replace(/\n/g, '\\n')
       .replace(/\t/g, '\\t')
       .replace(/\r/g, '\\r')
-      // eslint-disable-next-line no-control-regex
       .replace(/\0/g, '\\0');
   }
 }
