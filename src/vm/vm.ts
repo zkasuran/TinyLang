@@ -123,28 +123,12 @@ export class VM {
   }
 
   private extractGlobalsFromEnv(env: Environment): void {
-    // Access the environment's variables via lookup of known stdlib names
-    const knownNames = [
-      'print', 'println', 'input', 'type', 'len', 'toString', 'toNumber',
-      'isNumber', 'isString', 'isBool', 'isNull', 'isArray', 'isObject',
-      'isFunction', 'push', 'pop', 'shift', 'unshift', 'slice', 'concat',
-      'join', 'reverse', 'sort', 'map', 'filter', 'reduce', 'find',
-      'includes', 'indexOf', 'forEach', 'split', 'trim', 'upper', 'lower',
-      'replace', 'startsWith', 'endsWith', 'contains', 'repeat', 'charAt',
-      'substring', 'abs', 'floor', 'ceil', 'round', 'sqrt', 'min', 'max',
-      'random', 'sin', 'cos', 'tan', 'log', 'pow',
-      'PI', 'E', 'INFINITY',
-      'time', 'sleep', 'range', 'assert',
-    ];
-
-    for (const name of knownNames) {
-      if (env.has(name)) {
-        try {
-          this.globals.set(name, env.lookup(name));
-        } catch {
-          // Skip if not found
-        }
-      }
+    // Extract ALL variables registered in the environment dynamically.
+    // This ensures every stdlib function is available in the VM without
+    // needing to maintain a hardcoded list that can fall out of sync.
+    const allVars = env.getAll();
+    for (const [name, value] of allVars) {
+      this.globals.set(name, value);
     }
   }
 

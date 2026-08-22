@@ -391,4 +391,111 @@ describe('VM', () => {
       expect(output).toEqual(['30']);
     });
   });
+
+  describe('Stdlib Globals', () => {
+    it('should have str() type conversion available', () => {
+      const { output } = runVM('print(str(42))');
+      expect(output).toEqual(['42']);
+    });
+
+    it('should have num() type conversion available', () => {
+      const { output } = runVM('print(num("5"))');
+      expect(output).toEqual(['5']);
+    });
+
+    it('should have bool() type conversion available', () => {
+      const { output } = runVM('print(bool(1))');
+      expect(output).toEqual(['true']);
+    });
+
+    it('should have keys() available', () => {
+      const { output } = runVM('let k = keys({a: 1, b: 2})\nprint(len(k))');
+      expect(output).toEqual(['2']);
+    });
+
+    it('should have values() available', () => {
+      const { output } = runVM('let v = values({x: 1, y: 2})\nprint(len(v))');
+      expect(output).toEqual(['2']);
+    });
+
+    it('should have entries() available', () => {
+      const { output } = runVM('let e = entries({x: 1})\nprint(len(e))');
+      expect(output).toEqual(['1']);
+    });
+
+    it('should have flatten() available', () => {
+      const { output } = runVM('let f = flatten([[1,2],[3,4]])\nprint(len(f))');
+      expect(output).toEqual(['4']);
+    });
+
+    it('should have zip() available', () => {
+      const { output } = runVM('let z = zip([1,2],[3,4])\nprint(len(z))');
+      expect(output).toEqual(['2']);
+    });
+
+    it('should have enumerate() available', () => {
+      const { output } = runVM('let e = enumerate([10,20,30])\nprint(len(e))');
+      expect(output).toEqual(['3']);
+    });
+
+    it('should have unique() available', () => {
+      const { output } = runVM('let u = unique([1,2,2,3,3])\nprint(len(u))');
+      expect(output).toEqual(['3']);
+    });
+
+    it('should have format() available', () => {
+      const { output } = runVM('print(format("{} world", "hello"))');
+      expect(output).toEqual(['hello world']);
+    });
+
+    it('should have clone() available', () => {
+      const { output } = runVM('let c = clone([1,2,3])\nprint(len(c))');
+      expect(output).toEqual(['3']);
+    });
+
+    it('should have padStart() available', () => {
+      const { output } = runVM('print(padStart("5", 3, "0"))');
+      expect(output).toEqual(['005']);
+    });
+
+    it('should have padEnd() available', () => {
+      const { output } = runVM('print(padEnd("hi", 5, "."))');
+      expect(output).toEqual(['hi...']);
+    });
+
+    it('should have isNull() available', () => {
+      const { output } = runVM('print(isNull(null))');
+      expect(output).toEqual(['true']);
+    });
+
+    it('should have isArray() available', () => {
+      const { output } = runVM('print(isArray([1,2]))');
+      expect(output).toEqual(['true']);
+    });
+
+    it('should have isString() available', () => {
+      const { output } = runVM('print(isString("hi"))');
+      expect(output).toEqual(['true']);
+    });
+
+    it('should have isNumber() available', () => {
+      const { output } = runVM('print(isNumber(5))');
+      expect(output).toEqual(['true']);
+    });
+
+    it('should have isFunction() available', () => {
+      const { output } = runVM('print(isFunction(len))');
+      expect(output).toEqual(['true']);
+    });
+
+    it('should have typeof() available', () => {
+      const { output } = runVM('print(typeof(42))');
+      expect(output).toEqual(['number']);
+    });
+
+    it('should have unshift() available', () => {
+      const { output } = runVM('let a = [2,3]\nunshift(a, 1)\nprint(len(a))');
+      expect(output).toEqual(['3']);
+    });
+  });
 });

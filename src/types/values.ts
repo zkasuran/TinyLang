@@ -150,6 +150,14 @@ export class Environment {
   createChild(): Environment {
     return new Environment(this);
   }
+
+  /**
+   * Get all variables defined in this environment (not including parent scopes)
+   * Used by the VM to extract stdlib globals after registration.
+   */
+  getAll(): Map<string, RuntimeValue> {
+    return new Map(this.variables);
+  }
 }
 
 // ============ Errors ============
