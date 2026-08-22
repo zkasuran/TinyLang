@@ -12,3 +12,9 @@ playground/node_modules/
 *.tinyc
 .agents/
 .scratch/
+
+# Demo video + submission artifacts (delivered via YouTube and the entry form, not the repo)
+DEMO-*.mp4
+upload-*/
+CODEX-VIDEO-BRIEF.md
+SUBMIT-*.html

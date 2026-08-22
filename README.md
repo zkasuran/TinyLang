@@ -24,6 +24,11 @@
   <img src="https://img.shields.io/badge/hackathon-Ready%2C%20Spec%2C%20Ship-orange" alt="Hackathon" />
 </p>
 
+<p align="center">
+  <strong><a href="https://zkasuran.github.io/TinyLang/">Live site</a></strong> &nbsp;·&nbsp;
+  <strong><a href="https://zkasuran.github.io/TinyLang/playground/index.html">Try the Web IDE in your browser</a></strong>
+</p>
+
 ---
 
 ## What is TinyLang?
