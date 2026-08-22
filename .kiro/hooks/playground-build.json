@@ -7,7 +7,7 @@
       "matcher": "playground/template\\.html$|src/.*\\.ts$",
       "action": {
         "type": "command",
-        "command": "cd /projects/sandbox/tinylang && node playground/build.js"
+        "command": "node playground/build.js"
       }
     }
   ]

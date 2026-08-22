@@ -428,8 +428,7 @@ tinylang/
 ├── playground/                     # Web IDE (browser-based)
 │   ├── index.html                  # Self-contained IDE application
 │   ├── build.js                    # esbuild bundler script
-│   ├── src/                        # IDE source modules
-│   └── public/                     # Static assets
+│   └── template.html               # IDE template (source of truth)
 ├── docs/                           # Documentation site (static HTML)
 │   ├── index.html                  # Landing page
 │   ├── getting-started.html        # Installation and first steps

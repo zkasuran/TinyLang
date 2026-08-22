@@ -7,7 +7,7 @@
       "matcher": "src/.*\\.ts$",
       "action": {
         "type": "command",
-        "command": "cd /projects/sandbox/tinylang && npx tsc --noEmit 2>&1 | head -20"
+        "command": "npx tsc --noEmit 2>&1 | head -20"
       }
     }
   ]

@@ -7,7 +7,7 @@
       "matcher": "src/.*\\.ts$",
       "action": {
         "type": "command",
-        "command": "cd /projects/sandbox/tinylang && npx vitest run --reporter=verbose 2>&1 | tail -30"
+        "command": "npx vitest run --reporter=verbose 2>&1 | tail -30"
       }
     }
   ]

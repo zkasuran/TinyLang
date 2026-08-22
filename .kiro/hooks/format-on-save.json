@@ -7,7 +7,7 @@
       "matcher": "\\.ts$",
       "action": {
         "type": "command",
-        "command": "cd /projects/sandbox/tinylang && npx prettier --write"
+        "command": "npx prettier --write"
       }
     }
   ]

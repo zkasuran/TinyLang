@@ -53,7 +53,7 @@
         // Keywords
         if (stream.match(/^(let|const|fn|return|if|else|while|for|in|break|continue|class|extends|new|this|super|import|from|export|test|expect|match|enum|type|interface|try|catch|throw|async|await|yield|true|false|null)\b/)) return 'keyword';
         // Built-in functions
-        if (stream.match(/^(print|println|len|push|pop|slice|keys|values|type|toString|toNumber|range|map|filter|reduce|forEach|some|every|find|indexOf|join|split|trim|replace|contains|startsWith|endsWith|abs|floor|ceil|round|sqrt|pow|min|max|random|PI|E|readLine|writeFile|readFile|assert|time)\b/)) return 'builtin';
+        if (stream.match(/^(print|println|input|len|split|join|upper|lower|trim|contains|replace|charAt|startsWith|endsWith|repeat|padStart|padEnd|push|pop|shift|unshift|slice|concat|indexOf|includes|reverse|sort|flatten|zip|enumerate|unique|abs|floor|ceil|round|sqrt|pow|random|randomInt|min|max|sin|cos|tan|log|range|keys|values|entries|time|clone|assert|format|sleep|type|str|num|bool|isNumber|isString|isArray|isNull|isFunction|PI|E|TAU|INFINITY)\b/)) return 'builtin';
         // Operators
         if (stream.match(/^[+\-*/%=<>!&|^~?:]+/)) return 'operator';
         // Brackets
@@ -75,11 +75,11 @@
           // Keywords
           ...'let const fn return if else while for in break continue class extends new this super import from export test expect match enum type interface try catch throw'.split(' ').map(w => ({label: w, type: 'keyword'})),
           // Built-ins
-          ...'print println len push pop slice keys values type toString toNumber range map filter reduce forEach some every find indexOf join split trim replace contains startsWith endsWith abs floor ceil round sqrt pow min max random PI E readLine writeFile readFile assert time'.split(' ').map(w => ({label: w, type: 'function'})),
+          ...'print println input len split join upper lower trim contains replace charAt startsWith endsWith repeat padStart padEnd push pop shift unshift slice concat indexOf includes reverse sort flatten zip enumerate unique abs floor ceil round sqrt pow random randomInt min max sin cos tan log range keys values entries time clone assert format sleep type str num bool isNumber isString isArray isNull isFunction PI E TAU INFINITY'.split(' ').map(w => ({label: w, type: 'function'})),
           // Snippets
           {label: 'fn', type: 'keyword', apply: 'fn name() {\n  \n}', detail: 'function'},
-          {label: 'for', type: 'keyword', apply: 'for (let i = 0; i < 10; i = i + 1) {\n  \n}', detail: 'for loop'},
-          {label: 'class', type: 'keyword', apply: 'class Name {\n  constructor() {\n    \n  }\n}', detail: 'class'},
+          {label: 'for', type: 'keyword', apply: 'for i in 0..10 {\n  \n}', detail: 'for loop'},
+          {label: 'class', type: 'keyword', apply: 'class Name {\n  fn init() {\n    \n  }\n}', detail: 'class'},
           {label: 'test', type: 'keyword', apply: 'test "description" {\n  expect(actual).toBe(expected)\n}', detail: 'test block'},
         ]
       };
@@ -994,24 +994,27 @@
     const DEFAULT_CODE = `// Welcome to TinyLang IDE!
 // Try running this program with Ctrl+Enter
 
+// --- Recursive Fibonacci ---
 fn fibonacci(n) {
-  if (n <= 1) return n
+  if n <= 1 {
+    return n
+  }
   return fibonacci(n - 1) + fibonacci(n - 2)
 }
 
 // Print the first 10 Fibonacci numbers
-for (let i = 0; i < 10; i = i + 1) {
-  println("fib(" + toString(i) + ") = " + toString(fibonacci(i)))
+for i in 0..10 {
+  println("fib(" + str(i) + ") = " + str(fibonacci(i)))
 }
 
-// Classes and objects
+// --- Classes and Objects ---
 class Animal {
-  constructor(name, sound) {
+  fn init(name, sound) {
     this.name = name
     this.sound = sound
   }
 
-  speak() {
+  fn speak() {
     println(this.name + " says " + this.sound + "!")
   }
 }
@@ -1021,11 +1024,31 @@ let cat = new Animal("Whiskers", "Meow")
 dog.speak()
 cat.speak()
 
-// Higher-order functions
+// --- Higher-order Functions ---
 let numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-let evens = filter(numbers, fn(x) { return x % 2 == 0 })
-let doubled = map(evens, fn(x) { return x * 2 })
-println("Doubled evens: " + toString(doubled))
+let evens = numbers.filter((x) => x % 2 == 0)
+let doubled = evens.map((x) => x * 2)
+println("Doubled evens: " + str(doubled))
+
+// --- Pattern Matching ---
+fn describe(value) {
+  match value {
+    when 0 => "zero"
+    when 1 => "one"
+    else => "many: " + str(value)
+  }
+}
+
+for i in 0..3 {
+  println(describe(i))
+}
+
+// --- Utilities ---
+let start = time()
+let items = range(5)
+println("Range: " + str(items))
+println("Length: " + str(len(items)))
+println("Type: " + type(items))
 `;
 
     // ============ Virtual Filesystem ============

@@ -7,7 +7,7 @@
       "matcher": "\\.tiny$",
       "action": {
         "type": "command",
-        "command": "cd /projects/sandbox/tinylang && node dist/cli/index.js check"
+        "command": "node dist/cli/index.js check"
       }
     }
   ]
