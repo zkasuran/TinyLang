@@ -118,8 +118,14 @@ describe('Integration Tests - Complete Programs', () => {
       print(c.decrement())
       print(c.value())
     `;
-    const { success } = runProgram(source);
+    const { output, success } = runProgram(source);
     expect(success).toBe(true);
+    // Asserting the output, not just that it ran, is the whole point here: the
+    // closures share one captured `count`, so a backend that captured it by
+    // value would still "succeed" while printing 11, 11, 9, 10. This test
+    // asserted only `success` for a long time and so missed exactly that bug in
+    // the VM, where upvalues were copied instead of referenced.
+    expect(output).toEqual(['11', '12', '11', '11']);
   });
 
   it('should run bubble sort program', () => {
