@@ -234,9 +234,24 @@ function peepholeOptimize(chunk: Chunk): Chunk {
 }
 
 /**
- * Try to fold a binary operation on two constant values
+ * Try to fold a binary operation on two constant values.
+ *
+ * Returns null (declining to fold) for anything it cannot prove safe.
+ *
+ * The caller scans raw bytecode for the byte pattern `CONST, CONST, <op>`
+ * rather than stepping instruction-by-instruction, so it can land mid
+ * instruction and decode operand bytes as an opcode. That yields out-of-range
+ * constant indices, so the operands must be treated as possibly absent.
  */
-function tryFoldBinary(a: RuntimeValue, b: RuntimeValue, op: number): RuntimeValue | null {
+function tryFoldBinary(
+  a: RuntimeValue | undefined,
+  b: RuntimeValue | undefined,
+  op: number
+): RuntimeValue | null {
+  if (a === undefined || b === undefined) {
+    return null;
+  }
+
   if (a.type === 'number' && b.type === 'number') {
     const av = (a as NumberValue).value;
     const bv = (b as NumberValue).value;

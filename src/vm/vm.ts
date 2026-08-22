@@ -196,7 +196,14 @@ export class VM {
     return frame.chunk.lines[frame.ip - 1] || 1;
   }
 
-  private execute(): RuntimeValue {
+  /**
+   * Run the dispatch loop.
+   *
+   * @param stopDepth Frame depth at which to stop and return. 0 means "run to
+   *   completion" (top-level). A non-zero value is used by callFromNative() to
+   *   run a single nested call and hand control back to the native caller.
+   */
+  private execute(stopDepth: number = 0): RuntimeValue {
     while (true) {
       if (this.steps++ > this.maxSteps) {
         throw new RuntimeError(
@@ -469,6 +476,12 @@ export class VM {
           // The callee sits at basePointer - 1
           this.stack.length = frame.basePointer - 1;
           this.push(returnValue);
+
+          // A nested call started by callFromNative() has finished; return
+          // control to the native function that initiated it.
+          if (this.frames.length === stopDepth) {
+            return returnValue;
+          }
           break;
         }
 
@@ -733,6 +746,40 @@ export class VM {
     this.frames.push(frame);
   }
 
+  /**
+   * Invoke a callable from inside native code, e.g. the callback passed to
+   * array methods like map/filter/reduce/forEach.
+   *
+   * Native functions are called directly. VM closures require re-entering the
+   * dispatch loop: we lay out the callee and arguments on the stack exactly as
+   * a CALL instruction would, push the frame, then run until that frame
+   * returns. This is what makes higher-order array methods work in the VM.
+   */
+  public callFromNative(callee: RuntimeValue, args: RuntimeValue[]): RuntimeValue {
+    if (callee.type === 'native-function') {
+      return callee.fn(args, new Environment());
+    }
+
+    if ((callee as unknown as VMClosure).type === 'vm-closure') {
+      const closure = callee as unknown as VMClosure;
+      const depthBefore = this.frames.length;
+
+      // Stack layout expected by callClosure: callee, then args
+      this.push(callee);
+      for (const arg of args) {
+        this.push(arg);
+      }
+      this.callClosure(closure, args.length);
+      this.execute(depthBefore);
+      return this.pop();
+    }
+
+    throw new RuntimeError(
+      `'${stringify(callee)}' is not callable`,
+      this.currentLine()
+    );
+  }
+
   private callNative(fn: NativeFunctionValue, argCount: number): void {
     const args: RuntimeValue[] = [];
     for (let i = 0; i < argCount; i++) {
@@ -918,22 +965,149 @@ export class VM {
           arity: 0,
           fn: () => self.elements.pop() || createNull(),
         };
+      case 'shift':
+        return {
+          type: 'native-function',
+          name: 'shift',
+          arity: 0,
+          fn: () => self.elements.shift() || createNull(),
+        };
+      case 'unshift':
+        return {
+          type: 'native-function',
+          name: 'unshift',
+          arity: 1,
+          fn: (args: RuntimeValue[]) => {
+            self.elements.unshift(args[0]);
+            return createNumber(self.elements.length);
+          },
+        };
+      case 'length':
+        return {
+          type: 'native-function',
+          name: 'length',
+          arity: 0,
+          fn: () => createNumber(self.elements.length),
+        };
       case 'map':
         return {
           type: 'native-function',
           name: 'map',
           arity: 1,
-          fn: (_args: RuntimeValue[]) => createArray([...self.elements]),
+          fn: (args: RuntimeValue[]) => {
+            const cb = args[0];
+            const out = self.elements.map((el, i) =>
+              this.callFromNative(cb, [el, createNumber(i)])
+            );
+            return createArray(out);
+          },
         };
       case 'filter':
         return {
           type: 'native-function',
           name: 'filter',
           arity: 1,
-          fn: (_args: RuntimeValue[]) => createArray([...self.elements]),
+          fn: (args: RuntimeValue[]) => {
+            const cb = args[0];
+            const out = self.elements.filter((el, i) =>
+              isTruthy(this.callFromNative(cb, [el, createNumber(i)]))
+            );
+            return createArray(out);
+          },
+        };
+      case 'reduce':
+        return {
+          type: 'native-function',
+          name: 'reduce',
+          arity: -1,
+          fn: (args: RuntimeValue[]) => {
+            const cb = args[0];
+            // With no seed, the first element seeds the accumulator
+            let acc = args.length > 1 ? args[1] : self.elements[0] || createNull();
+            const start = args.length > 1 ? 0 : 1;
+            for (let i = start; i < self.elements.length; i++) {
+              acc = this.callFromNative(cb, [acc, self.elements[i], createNumber(i)]);
+            }
+            return acc;
+          },
+        };
+      case 'forEach':
+        return {
+          type: 'native-function',
+          name: 'forEach',
+          arity: 1,
+          fn: (args: RuntimeValue[]) => {
+            const cb = args[0];
+            self.elements.forEach((el, i) => {
+              this.callFromNative(cb, [el, createNumber(i)]);
+            });
+            return createNull();
+          },
+        };
+      case 'sort':
+        return {
+          type: 'native-function',
+          name: 'sort',
+          arity: 0,
+          fn: () =>
+            createArray(
+              [...self.elements].sort((a, b) =>
+                a.type === 'number' && b.type === 'number'
+                  ? a.value - b.value
+                  : stringify(a).localeCompare(stringify(b))
+              )
+            ),
+        };
+      case 'reverse':
+        return {
+          type: 'native-function',
+          name: 'reverse',
+          arity: 0,
+          fn: () => createArray([...self.elements].reverse()),
+        };
+      case 'slice':
+        return {
+          type: 'native-function',
+          name: 'slice',
+          arity: -1,
+          fn: (args: RuntimeValue[]) => {
+            const start = args[0]?.type === 'number' ? args[0].value : 0;
+            const end =
+              args[1]?.type === 'number' ? args[1].value : self.elements.length;
+            return createArray(self.elements.slice(start, end));
+          },
+        };
+      case 'indexOf':
+        return {
+          type: 'native-function',
+          name: 'indexOf',
+          arity: 1,
+          fn: (args: RuntimeValue[]) =>
+            createNumber(self.elements.findIndex((el) => valueEquals(el, args[0]))),
+        };
+      case 'includes':
+        return {
+          type: 'native-function',
+          name: 'includes',
+          arity: 1,
+          fn: (args: RuntimeValue[]) =>
+            createBoolean(self.elements.some((el) => valueEquals(el, args[0]))),
+        };
+      case 'join':
+        return {
+          type: 'native-function',
+          name: 'join',
+          arity: -1,
+          fn: (args: RuntimeValue[]) => {
+            const sep = args[0]?.type === 'string' ? args[0].value : ',';
+            return createString(self.elements.map(stringify).join(sep));
+          },
         };
       default:
-        return createNull();
+        throw new RuntimeError(
+          `Arrays have no method '${method}'`,
+          this.currentLine()
+        );
     }
   }
 

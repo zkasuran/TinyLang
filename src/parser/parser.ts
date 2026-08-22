@@ -947,6 +947,19 @@ export class Parser {
     let expr = this.parsePrimary();
 
     while (true) {
+      // Support fluent multi-line chaining:
+      //   [1, 2, 3]
+      //     .filter(...)
+      //     .map(...)
+      // The lexer emits a NEWLINE after ']' and ')', which would otherwise end
+      // the statement. If the next significant token is a '.', the line is a
+      // continuation, so consume the pending newlines and keep chaining.
+      if (this.check(TokenType.NEWLINE) && this.nextSignificantIsDot()) {
+        while (this.check(TokenType.NEWLINE)) {
+          this.advance();
+        }
+      }
+
       if (this.check(TokenType.LPAREN)) {
         expr = this.parseCallExpression(expr);
       } else if (this.check(TokenType.QUESTION_DOT)) {
@@ -1447,7 +1460,34 @@ export class Parser {
   /**
    * Error recovery: skip tokens until we reach a likely statement boundary
    */
+  /**
+   * Look past any run of NEWLINE tokens and report whether the next
+   * significant token is a DOT. Used to detect fluent method chains that
+   * continue onto the following line.
+   *
+   * A lone DOT is required; `..` is a range operator, not a continuation.
+   */
+  private nextSignificantIsDot(): boolean {
+    let i = this.current;
+    while (i < this.tokens.length && this.tokens[i].type === TokenType.NEWLINE) {
+      i++;
+    }
+    if (i >= this.tokens.length || this.tokens[i].type !== TokenType.DOT) {
+      return false;
+    }
+    // Exclude the range operator `..`
+    return this.tokens[i + 1]?.type !== TokenType.DOT;
+  }
+
   private synchronize(): void {
+    // Always consume at least one token. Without this the caller can spin
+    // forever: if the offending token is preceded by a NEWLINE we would return
+    // immediately, parse() would retry the very same token, and error recovery
+    // would never make progress.
+    if (!this.isAtEnd()) {
+      this.advance();
+    }
+
     while (!this.isAtEnd()) {
       // If we just passed a newline/semicolon, we're at a new statement
       const prev = this.current > 0 ? this.tokens[this.current - 1] : undefined;

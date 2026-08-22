@@ -508,7 +508,11 @@ export class Compiler {
     this.emit16(idxSlot, line);
     this.emit(OpCode.INDEX, line);
 
-    // Store as the loop variable
+    // Store as the loop variable, inside its own scope.
+    // The scope is essential: any `let` declared in the body allocates a stack
+    // slot, and without endScope() emitting matching POPs those slots leak on
+    // every iteration, shifting all subsequent local indices.
+    this.beginScope();
     this.addLocal(stmt.variable);
 
     // Compile body
@@ -516,9 +520,8 @@ export class Compiler {
       this.compileStatement(s);
     }
 
-    // Pop loop variable
-    this.emit(OpCode.POP, line);
-    this.current.locals.pop();
+    // Pops the loop variable and every body-local declared this iteration
+    this.endScope(line);
 
     // Increment __idx
     this.emit(OpCode.LOAD_LOCAL, line);

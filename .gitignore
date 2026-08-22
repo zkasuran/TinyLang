@@ -11,3 +11,4 @@ playground/node_modules/
 *.log
 *.tinyc
 .agents/
+.scratch/
