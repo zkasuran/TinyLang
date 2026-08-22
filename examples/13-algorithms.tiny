@@ -1,0 +1,182 @@
+// =============================================================
+// Example 13: Classic Algorithms
+// =============================================================
+// Demonstrates implementing well-known algorithms in TinyLang:
+// binary search, quicksort, sieve of Eratosthenes, and more.
+
+// --- Binary Search ---
+print("=== Binary Search ===")
+
+fn binarySearch(arr, target) {
+  let low = 0
+  let high = len(arr) - 1
+  
+  while low <= high {
+    let mid = floor((low + high) / 2)
+    if arr[mid] == target {
+      return mid
+    }
+    if arr[mid] < target {
+      low = mid + 1
+    } else {
+      high = mid - 1
+    }
+  }
+  return -1
+}
+
+let sorted = [2, 5, 8, 12, 16, 23, 38, 45, 56, 72, 91]
+print(f"Array: {sorted}")
+print(f"Search for 23: index {binarySearch(sorted, 23)}")
+print(f"Search for 72: index {binarySearch(sorted, 72)}")
+print(f"Search for 99: index {binarySearch(sorted, 99)}")
+
+// --- Quicksort ---
+print("")
+print("=== Quicksort ===")
+
+fn quicksort(arr) {
+  if len(arr) <= 1 {
+    return arr
+  }
+  
+  let pivot = arr[0]
+  let left = []
+  let right = []
+  
+  for i in 1..len(arr) {
+    if arr[i] < pivot {
+      push(left, arr[i])
+    } else {
+      push(right, arr[i])
+    }
+  }
+  
+  let sortedLeft = quicksort(left)
+  let sortedRight = quicksort(right)
+  return [...sortedLeft, pivot, ...sortedRight]
+}
+
+let unsorted = [38, 27, 43, 3, 9, 82, 10]
+print(f"Before: {unsorted}")
+let result = quicksort(unsorted)
+print(f"After:  {result}")
+
+// --- Sieve of Eratosthenes ---
+print("")
+print("=== Sieve of Eratosthenes ===")
+
+fn sieve(limit) {
+  let isPrime = []
+  for i in 0..limit + 1 {
+    push(isPrime, true)
+  }
+  isPrime[0] = false
+  isPrime[1] = false
+  
+  let i = 2
+  while i * i <= limit {
+    if isPrime[i] {
+      let j = i * i
+      while j <= limit {
+        isPrime[j] = false
+        j = j + i
+      }
+    }
+    i = i + 1
+  }
+  
+  let primes = []
+  for i in 2..limit + 1 {
+    if isPrime[i] {
+      push(primes, i)
+    }
+  }
+  return primes
+}
+
+let primes = sieve(50)
+print(f"Primes up to 50: {primes}")
+print(f"Count: {len(primes)}")
+
+// --- Greatest Common Divisor (Euclidean) ---
+print("")
+print("=== GCD (Euclidean Algorithm) ===")
+
+fn gcd(a, b) {
+  while b != 0 {
+    let temp = b
+    b = a % b
+    a = temp
+  }
+  return a
+}
+
+fn lcm(a, b) {
+  return (a * b) / gcd(a, b)
+}
+
+print(f"GCD(48, 18) = {gcd(48, 18)}")
+print(f"GCD(100, 75) = {gcd(100, 75)}")
+print(f"LCM(12, 8) = {lcm(12, 8)}")
+print(f"LCM(15, 20) = {lcm(15, 20)}")
+
+// --- Matrix Multiplication ---
+print("")
+print("=== Matrix Operations ===")
+
+fn matMul(a, b) {
+  let rows = len(a)
+  let cols = len(b[0])
+  let inner = len(b)
+  let result = []
+  
+  for i in 0..rows {
+    let row = []
+    for j in 0..cols {
+      let sum = 0
+      for k in 0..inner {
+        sum = sum + a[i][k] * b[k][j]
+      }
+      push(row, sum)
+    }
+    push(result, row)
+  }
+  return result
+}
+
+let matA = [[1, 2], [3, 4]]
+let matB = [[5, 6], [7, 8]]
+let product = matMul(matA, matB)
+print(f"Matrix A: {matA}")
+print(f"Matrix B: {matB}")
+print(f"A * B = {product}")
+
+// --- Power Set ---
+print("")
+print("=== Power Set ===")
+
+fn powerSet(items) {
+  if len(items) == 0 {
+    return [[]]
+  }
+  let first = items[0]
+  let rest = slice(items, 1, len(items))
+  let subsetsWithout = powerSet(rest)
+  let subsetsWith = []
+  for subset in subsetsWithout {
+    push(subsetsWith, [first, ...subset])
+  }
+  return [...subsetsWithout, ...subsetsWith]
+}
+
+let set = [1, 2, 3]
+let ps = powerSet(set)
+print(f"Power set of {set}:")
+for subset in ps {
+  print(f"  {subset}")
+}
+
+print("")
+print("=== Done! ===")
+print("Classic algorithms implemented cleanly in TinyLang.")

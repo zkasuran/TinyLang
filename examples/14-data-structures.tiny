@@ -1,0 +1,295 @@
+// =============================================================
+// Example 14: Data Structures
+// =============================================================
+// Implements common data structures using TinyLang classes:
+// Stack, Queue, LinkedList, HashMap, and PriorityQueue.
+
+// --- Stack (LIFO) ---
+print("=== Stack ===")
+
+class Stack {
+  fn init() {
+    this.items = []
+    this.size = 0
+  }
+  
+  fn push(item) {
+    push(this.items, item)
+    this.size = this.size + 1
+  }
+  
+  fn pop() {
+    if this.size == 0 {
+      throw "Stack underflow: cannot pop from empty stack"
+    }
+    this.size = this.size - 1
+    return pop(this.items)
+  }
+  
+  fn peek() {
+    if this.size == 0 {
+      return null
+    }
+    return this.items[this.size - 1]
+  }
+  
+  fn isEmpty() {
+    return this.size == 0
+  }
+}
+
+let stack = new Stack()
+stack.push(10)
+stack.push(20)
+stack.push(30)
+print(f"Stack peek: {stack.peek()}")
+print(f"Pop: {stack.pop()}")
+print(f"Pop: {stack.pop()}")
+print(f"Size: {stack.size}")
+
+// --- Queue (FIFO) ---
+print("")
+print("=== Queue ===")
+
+class Queue {
+  fn init() {
+    this.items = []
+    this.size = 0
+  }
+  
+  fn enqueue(item) {
+    push(this.items, item)
+    this.size = this.size + 1
+  }
+  
+  fn dequeue() {
+    if this.size == 0 {
+      throw "Queue underflow: cannot dequeue from empty queue"
+    }
+    this.size = this.size - 1
+    return shift(this.items)
+  }
+  
+  fn front() {
+    if this.size == 0 {
+      return null
+    }
+    return this.items[0]
+  }
+  
+  fn isEmpty() {
+    return this.size == 0
+  }
+}
+
+let queue = new Queue()
+queue.enqueue("first")
+queue.enqueue("second")
+queue.enqueue("third")
+print(f"Front: {queue.front()}")
+print(f"Dequeue: {queue.dequeue()}")
+print(f"Dequeue: {queue.dequeue()}")
+print(f"Size: {queue.size}")
+
+// --- Linked List ---
+print("")
+print("=== Linked List ===")
+
+class Node {
+  fn init(value) {
+    this.value = value
+    this.next = null
+  }
+}
+
+class LinkedList {
+  fn init() {
+    this.head = null
+    this.size = 0
+  }
+  
+  fn prepend(value) {
+    let node = new Node(value)
+    node.next = this.head
+    this.head = node
+    this.size = this.size + 1
+  }
+  
+  fn append(value) {
+    let node = new Node(value)
+    if this.head == null {
+      this.head = node
+    } else {
+      let current = this.head
+      while current.next != null {
+        current = current.next
+      }
+      current.next = node
+    }
+    this.size = this.size + 1
+  }
+  
+  fn toArray() {
+    let result = []
+    let current = this.head
+    while current != null {
+      push(result, current.value)
+      current = current.next
+    }
+    return result
+  }
+  
+  fn contains(value) {
+    let current = this.head
+    while current != null {
+      if current.value == value {
+        return true
+      }
+      current = current.next
+    }
+    return false
+  }
+  
+  fn removeFirst() {
+    if this.head == null {
+      throw "Cannot remove from empty list"
+    }
+    let value = this.head.value
+    this.head = this.head.next
+    this.size = this.size - 1
+    return value
+  }
+}
+
+let list = new LinkedList()
+list.append(10)
+list.append(20)
+list.append(30)
+list.prepend(5)
+print(f"List: {list.toArray()}")
+print(f"Size: {list.size}")
+print(f"Contains 20: {list.contains(20)}")
+print(f"Contains 99: {list.contains(99)}")
+print(f"Remove first: {list.removeFirst()}")
+print(f"List now: {list.toArray()}")
+
+// --- Binary Search Tree ---
+print("")
+print("=== Binary Search Tree ===")
+
+class TreeNode {
+  fn init(value) {
+    this.value = value
+    this.left = null
+    this.right = null
+  }
+}
+
+class BST {
+  fn init() {
+    this.root = null
+  }
+  
+  fn insert(value) {
+    this.root = this._insertNode(this.root, value)
+  }
+  
+  fn _insertNode(node, value) {
+    if node == null {
+      return new TreeNode(value)
+    }
+    if value < node.value {
+      node.left = this._insertNode(node.left, value)
+    } else {
+      node.right = this._insertNode(node.right, value)
+    }
+    return node
+  }
+  
+  fn contains(value) {
+    return this._search(this.root, value)
+  }
+  
+  fn _search(node, value) {
+    if node == null { return false }
+    if value == node.value { return true }
+    if value < node.value {
+      return this._search(node.left, value)
+    }
+    return this._search(node.right, value)
+  }
+  
+  fn inorder() {
+    let result = []
+    this._inorder(this.root, result)
+    return result
+  }
+  
+  fn _inorder(node, result) {
+    if node == null { return null }
+    this._inorder(node.left, result)
+    push(result, node.value)
+    this._inorder(node.right, result)
+  }
+}
+
+let tree = new BST()
+let treeData = [50, 30, 70, 20, 40, 60, 80]
+for v in treeData {
+  tree.insert(v)
+}
+print(f"Inserted: {treeData}")
+print(f"In-order traversal: {tree.inorder()}")
+print(f"Contains 40: {tree.contains(40)}")
+print(f"Contains 55: {tree.contains(55)}")
+
+// --- Simple HashMap (array-based) ---
+print("")
+print("=== HashMap (array-based) ===")
+
+class HashMap {
+  fn init() {
+    this.mapKeys = []
+    this.mapValues = []
+    this.size = 0
+  }
+  
+  fn set(key, value) {
+    // Check if key already exists
+    for i in 0..len(this.mapKeys) {
+      if this.mapKeys[i] == key {
+        this.mapValues[i] = value
+        return null
+      }
+    }
+    push(this.mapKeys, key)
+    push(this.mapValues, value)
+    this.size = this.size + 1
+  }
+  
+  fn get(key) {
+    for i in 0..len(this.mapKeys) {
+      if this.mapKeys[i] == key {
+        return this.mapValues[i]
+      }
+    }
+    return null
+  }
+  
+  fn has(key) {
+    return includes(this.mapKeys, key)
+  }
+}
+
+let map = new HashMap()
+map.set("name", "TinyLang")
+map.set("version", "1.0")
+map.set("type", "language")
+print(f"name: {map.get('name')}")
+print(f"version: {map.get('version')}")
+print(f"has 'type': {map.has('type')}")
+print(f"size: {map.size}")
+
+print("")
+print("=== Done! ===")
+print("Data structures work great with TinyLang classes!")

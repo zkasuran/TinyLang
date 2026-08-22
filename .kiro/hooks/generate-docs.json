@@ -1,0 +1,23 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Generate Documentation",
+      "trigger": "PostFileSave",
+      "matcher": "src/stdlib/.*\\.ts$",
+      "action": {
+        "type": "command",
+        "command": "echo 'Reminder: Update docs/stdlib.html if stdlib signatures changed'"
+      }
+    },
+    {
+      "name": "Validate Examples After Language Change",
+      "trigger": "PostFileSave",
+      "matcher": "src/(parser|interpreter|compiler)/.*\\.ts$",
+      "action": {
+        "type": "command",
+        "command": "node dist/cli/index.js run examples/01-hello.tiny 2>&1 | head -5"
+      }
+    }
+  ]
+}

@@ -1,0 +1,229 @@
+// =============================================================
+// Example 15: Text Adventure Game Engine
+// =============================================================
+// A mini text-adventure game engine demonstrating classes,
+// objects, arrays, match expressions, and control flow.
+
+print("=== TinyLang Text Adventure Engine ===")
+print("")
+
+// --- Game World Definition ---
+
+class Room {
+  fn init(name, description) {
+    this.name = name
+    this.description = description
+    this.exitNames = []
+    this.exitRooms = []
+    this.items = []
+    this.visited = false
+  }
+  
+  fn addExit(direction, room) {
+    push(this.exitNames, direction)
+    push(this.exitRooms, room)
+  }
+  
+  fn getExit(direction) {
+    for i in 0..len(this.exitNames) {
+      if this.exitNames[i] == direction {
+        return this.exitRooms[i]
+      }
+    }
+    return null
+  }
+  
+  fn addItem(item) {
+    push(this.items, item)
+  }
+  
+  fn removeItem(itemName) {
+    let newItems = []
+    for item in this.items {
+      if item.name != itemName {
+        push(newItems, item)
+      }
+    }
+    this.items = newItems
+  }
+  
+  fn describe() {
+    print(f"--- {this.name} ---")
+    print(this.description)
+    if len(this.items) > 0 {
+      print("You see:")
+      for item in this.items {
+        print(f"  - {item.name}: {item.description}")
+      }
+    }
+    if len(this.exitNames) > 0 {
+      print(f"Exits: {this.exitNames}")
+    }
+  }
+}
+
+class Item {
+  fn init(name, description, usable) {
+    this.name = name
+    this.description = description
+    this.usable = usable
+  }
+}
+
+class Player {
+  fn init(startRoom) {
+    this.currentRoom = startRoom
+    this.inventory = []
+    this.health = 100
+    this.score = 0
+  }
+  
+  fn move(direction) {
+    let room = this.currentRoom.getExit(direction)
+    if room != null {
+      this.currentRoom = room
+      this.currentRoom.visited = true
+      this.currentRoom.describe()
+      return true
+    }
+    print(f"You cannot go {direction} from here.")
+    return false
+  }
+  
+  fn take(itemName) {
+    let found = false
+    for item in this.currentRoom.items {
+      if item.name == itemName {
+        push(this.inventory, item)
+        this.currentRoom.removeItem(itemName)
+        print(f"You pick up the {itemName}.")
+        this.score = this.score + 10
+        found = true
+        break
+      }
+    }
+    if not found {
+      print(f"There is no '{itemName}' here.")
+    }
+  }
+  
+  fn showInventory() {
+    if len(this.inventory) == 0 {
+      print("Your inventory is empty.")
+    } else {
+      print("Inventory:")
+      for item in this.inventory {
+        print(f"  [{item.name}] {item.description}")
+      }
+    }
+  }
+  
+  fn hasItem(itemName) {
+    for item in this.inventory {
+      if item.name == itemName {
+        return true
+      }
+    }
+    return false
+  }
+}
+
+// --- Build the World ---
+
+let entrance = new Room("Cave Entrance", "A dark cave mouth yawns before you. Cool air flows from within.")
+let tunnel = new Room("Narrow Tunnel", "The passage is tight. Water drips from the ceiling.")
+let chamber = new Room("Crystal Chamber", "Glittering crystals cover every surface, casting rainbow light.")
+let pit = new Room("The Pit", "A deep chasm stretches before you. A narrow ledge runs along the wall.")
+let treasure = new Room("Treasure Room", "Mountains of gold coins and jewels fill this ancient vault!")
+
+// Connect rooms
+entrance.addExit("north", tunnel)
+tunnel.addExit("south", entrance)
+tunnel.addExit("east", chamber)
+tunnel.addExit("north", pit)
+chamber.addExit("west", tunnel)
+pit.addExit("south", tunnel)
+pit.addExit("east", treasure)
+treasure.addExit("west", pit)
+
+// Add items
+let torch = new Item("torch", "A sturdy wooden torch, unlit", true)
+let key = new Item("key", "A rusty iron key with strange markings", true)
+let gem = new Item("gem", "A brilliant ruby that pulses with inner light", false)
+let sword = new Item("sword", "An ancient blade etched with runes", true)
+let crown = new Item("crown", "A golden crown studded with diamonds", false)
+
+entrance.addItem(torch)
+tunnel.addItem(key)
+chamber.addItem(gem)
+chamber.addItem(sword)
+treasure.addItem(crown)
+
+// --- Game Simulation ---
+// (Since TinyLang does not have interactive input in examples,
+//  we simulate a sequence of player commands)
+
+print("You stand at the entrance of an ancient cave...")
+print("")
+
+let player = new Player(entrance)
+player.currentRoom.describe()
+
+print("")
+print("=== Simulating Adventure ===")
+print("")
+
+// Simulate: take torch, go north, take key, go east, take gem, take sword
+print("> take torch")
+player.take("torch")
+
+print("")
+print("> go north")
+player.move("north")
+
+print("")
+print("> take key")
+player.take("key")
+
+print("")
+print("> go east")
+player.move("east")
+
+print("")
+print("> take gem")
+player.take("gem")
+
+print("")
+print("> take sword")
+player.take("sword")
+
+print("")
+print("> inventory")
+player.showInventory()
+
+print("")
+print("> go west")
+player.move("west")
+
+print("")
+print("> go north")
+player.move("north")
+
+print("")
+print("> go east")
+player.move("east")
+
+print("")
+print("> take crown")
+player.take("crown")
+
+print("")
+print("=== Game Over ===")
+print(f"Final Score: {player.score}")
+print(f"Items collected: {len(player.inventory)}")
+print(f"Health: {player.health}")
+
+if player.hasItem("crown") {
+  print("")
+  print("*** CONGRATULATIONS! You found the Crown of Ages! ***")
+}

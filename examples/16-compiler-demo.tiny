@@ -1,0 +1,235 @@
+// =============================================================
+// Example 16: Compiler and VM Demo
+// =============================================================
+// This program exercises features that the bytecode compiler
+// and VM handle: arithmetic, functions, closures, classes,
+// control flow, and recursion. Run it with both engines:
+//
+//   node dist/cli/index.js run examples/16-compiler-demo.tiny
+//   node dist/cli/index.js exec examples/16-compiler-demo.tiny
+//
+// Both should produce identical output!
+
+print("=== Bytecode Compiler & VM Demo ===")
+print("")
+
+// --- Arithmetic Operations ---
+print("--- Arithmetic ---")
+let a = 42
+let b = 13
+print(f"{a} + {b} = {a + b}")
+print(f"{a} - {b} = {a - b}")
+print(f"{a} * {b} = {a * b}")
+print(f"{a} / {b} = {a / b}")
+print(f"{a} % {b} = {a % b}")
+print(f"2 ** 10 = {2 ** 10}")
+
+// --- Closures (captured upvalues) ---
+print("")
+print("--- Closures ---")
+
+fn makeCounter(start) {
+  let count = start
+  fn increment() {
+    count = count + 1
+    return count
+  }
+  return increment
+}
+
+let counter = makeCounter(0)
+print(f"Counter: {counter()}")
+print(f"Counter: {counter()}")
+print(f"Counter: {counter()}")
+
+fn makeAdder(x) {
+  return (y) => x + y
+}
+let add5 = makeAdder(5)
+let add10 = makeAdder(10)
+print(f"add5(3) = {add5(3)}")
+print(f"add10(7) = {add10(7)}")
+
+// --- Recursion ---
+print("")
+print("--- Recursion ---")
+
+fn factorial(n) {
+  if n <= 1 { return 1 }
+  return n * factorial(n - 1)
+}
+
+for i in 1..11 {
+  print(f"{i}! = {factorial(i)}")
+}
+
+// --- Control Flow ---
+print("")
+print("--- Control Flow ---")
+
+fn fizzbuzz(n) {
+  let result = []
+  for i in 1..n + 1 {
+    if i % 15 == 0 {
+      push(result, "FizzBuzz")
+    } else {
+      if i % 3 == 0 {
+        push(result, "Fizz")
+      } else {
+        if i % 5 == 0 {
+          push(result, "Buzz")
+        } else {
+          push(result, str(i))
+        }
+      }
+    }
+  }
+  return result
+}
+
+let fb = fizzbuzz(20)
+print(f"FizzBuzz(1-20): {fb}")
+
+// --- Classes and Inheritance ---
+print("")
+print("--- Classes ---")
+
+class Shape {
+  fn init(name) {
+    this.name = name
+  }
+  fn describe() {
+    return f"I am a {this.name}"
+  }
+}
+
+class Circle extends Shape {
+  fn init(radius) {
+    this.name = "Circle"
+    this.radius = radius
+  }
+  fn area() {
+    return PI * this.radius * this.radius
+  }
+  fn circumference() {
+    return 2 * PI * this.radius
+  }
+}
+
+class Rectangle extends Shape {
+  fn init(width, height) {
+    this.name = "Rectangle"
+    this.width = width
+    this.height = height
+  }
+  fn area() {
+    return this.width * this.height
+  }
+  fn perimeter() {
+    return 2 * (this.width + this.height)
+  }
+}
+
+let circle = new Circle(5)
+let rect = new Rectangle(4, 7)
+
+print(circle.describe())
+print(f"  Radius: {circle.radius}")
+print(f"  Area: {circle.area()}")
+print(f"  Circumference: {circle.circumference()}")
+
+print(rect.describe())
+print(f"  Width: {rect.width}, Height: {rect.height}")
+print(f"  Area: {rect.area()}")
+print(f"  Perimeter: {rect.perimeter()}")
+
+// --- Array Operations ---
+print("")
+print("--- Array Operations ---")
+
+let numbers = [64, 25, 12, 22, 11, 90, 45, 33]
+print(f"Original: {numbers}")
+
+// Manual insertion sort
+fn insertionSort(arr) {
+  let sorted = [...arr]
+  for i in 1..len(sorted) {
+    let current = sorted[i]
+    let j = i - 1
+    while j >= 0 and sorted[j] > current {
+      sorted[j + 1] = sorted[j]
+      j = j - 1
+    }
+    sorted[j + 1] = current
+  }
+  return sorted
+}
+
+let sorted = insertionSort(numbers)
+print(f"Sorted: {sorted}")
+
+// --- Error Handling ---
+print("")
+print("--- Error Handling ---")
+
+fn safeSqrt(n) {
+  if n < 0 {
+    throw f"Cannot compute sqrt of negative number: {n}"
+  }
+  return sqrt(n)
+}
+
+let testValues = [16, 25, -4, 100, -1, 49]
+for val in testValues {
+  try {
+    let result = safeSqrt(val)
+    print(f"sqrt({val}) = {result}")
+  } catch err {
+    print(f"sqrt({val}) -> Error: {err.message}")
+  }
+}
+
+// --- Match Expressions ---
+print("")
+print("--- Match Expressions ---")
+
+fn dayType(day) {
+  match day {
+    when "Monday" => return "Start of work week"
+    when "Tuesday" => return "Early week"
+    when "Wednesday" => return "Midweek"
+    when "Thursday" => return "Almost there"
+    when "Friday" => return "TGIF!"
+    when "Saturday" => return "Weekend!"
+    when "Sunday" => return "Weekend!"
+    else => return "Unknown day"
+  }
+}
+
+let days = ["Monday", "Wednesday", "Friday", "Saturday", "Holiday"]
+for day in days {
+  print(f"  {day}: {dayType(day)}")
+}
+
+// --- Performance Test (Fibonacci) ---
+print("")
+print("--- Performance: Fibonacci ---")
+
+fn fib(n) {
+  if n <= 1 { return n }
+  let a = 0
+  let b = 1
+  for i in 2..n + 1 {
+    let temp = b
+    b = a + b
+    a = temp
+  }
+  return b
+}
+
+for i in [10, 20, 30, 35, 40] {
+  print(f"fib({i}) = {fib(i)}")
+}
+
+print("")
+print("=== All features work identically on Interpreter and VM! ===")

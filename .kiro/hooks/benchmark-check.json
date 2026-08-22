@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Benchmark Regression Check",
+      "trigger": "PostFileSave",
+      "matcher": "src/(compiler|vm)/.*\\.ts$",
+      "action": {
+        "type": "command",
+        "command": "node dist/cli/index.js bench examples/07-fibonacci.tiny 2>&1 | grep -E '(Interpreter|VM|Speedup)' || echo 'Benchmark not available'"
+      }
+    }
+  ]
+}

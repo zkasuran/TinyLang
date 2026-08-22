@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Pre-commit Lint and Test",
+      "trigger": "PreCommit",
+      "matcher": "src/.*\\.ts$",
+      "action": {
+        "type": "command",
+        "command": "npm run build && npx vitest run --reporter=dot 2>&1 | tail -5"
+      }
+    }
+  ]
+}

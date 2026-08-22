@@ -5,6 +5,47 @@ All notable changes to TinyLang are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-08-22
+
+### Added
+
+#### Language Features
+- String interpolation with f-strings: `f"Hello {name}, you are {age} years old"`
+- Try/catch/throw error handling with error propagation
+- Spread operator in arrays: `[...arr1, ...arr2]`
+- Array and object destructuring: `let [a, b] = [1, 2]`, `let {name, age} = person`
+- "Did you mean?" typo suggestions for undefined variables (Levenshtein distance)
+- Range expressions: `0..10` generates sequential values
+
+#### Examples
+- `13-algorithms.tiny` -- Binary search, quicksort, sieve of Eratosthenes, GCD, matrix multiplication, power set
+- `14-data-structures.tiny` -- Stack, Queue, Linked List, Binary Search Tree, HashMap
+- `15-game.tiny` -- Text adventure game engine with rooms, items, and player inventory
+- `16-compiler-demo.tiny` -- Comprehensive demo of compiler/VM features vs interpreter
+- `17-testing.tiny` -- Built-in test framework showcase with 11 test cases
+
+#### Documentation
+- Expanded `.kiro/steering/` with 4 new steering files:
+  - `error-handling.md` -- Error class hierarchy, message guidelines, recovery strategies
+  - `documentation-standards.md` -- Writing style, code examples, API documentation format
+  - `performance.md` -- Benchmarking, VM optimization, memory management guidelines
+  - `testing-standards.md` -- Test organization, naming, coverage expectations
+- Expanded `.kiro/hooks/` with 3 new automation hooks:
+  - `pre-commit.json` -- Lint and test before commits
+  - `generate-docs.json` -- Reminder to update docs when stdlib changes
+  - `benchmark-check.json` -- Run benchmarks when compiler/VM code changes
+- New `.kiro/specs/testing-framework/` -- Requirements, design, and tasks for the test runner
+- New `.kiro/specs/ide-spec/` -- Requirements, design, and tasks for the Web IDE
+
+### Improved
+- Documentation site now has 8 comprehensive HTML pages with responsive design
+- README badges updated to reflect 399 passing tests
+- All example programs verified to run correctly on both interpreter and VM
+
+### Fixed
+- VM stdlib integration bug resolved (dynamic global extraction from Environment)
+- Playground default code and syntax highlighter corrections
+
 ## [1.0.0] - 2025-07-14
 
 The initial release of TinyLang -- a complete programming language toolchain built from scratch in TypeScript.

@@ -2,7 +2,7 @@
   "id": "FEAT-006",
   "type": "docs",
   "description": "Complete documentation site, expanded .kiro/ configuration for maximum Kiro Usage points, updated README with all features, and expanded examples collection.",
-  "status": "pending",
+  "status": "in_progress",
   "steps": [
     "Create docs/ directory with comprehensive documentation as HTML/Markdown pages: docs/index.html (landing page), docs/getting-started.md, docs/language-reference.md (every language feature), docs/stdlib-api.md (every function with signature, description, examples), docs/compiler-architecture.md (how bytecode compiler and VM work with diagrams), docs/debugger-guide.md, docs/cli-reference.md (all commands), docs/examples-gallery.md, docs/contributing.md.",
     "Create docs/language-reference.md covering: variables (let/const), data types (number, string, boolean, null, array, object), operators (arithmetic, comparison, logical, assignment), control flow (if/else, while, for, match, break, continue), functions (named, arrow, closures, default params), classes (inheritance, methods, properties, this), modules (import/from), test blocks, error handling.",
