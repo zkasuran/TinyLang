@@ -33,7 +33,8 @@ export type Statement =
   | ExpressionStatement
   | PrintStatement
   | ImportStatement
-  | MatchStatement;
+  | MatchStatement
+  | TestDeclaration;
 
 export interface VariableDeclaration extends BaseNode {
   type: 'VariableDeclaration';
@@ -121,6 +122,12 @@ export interface MatchStatement extends BaseNode {
 
 export interface MatchCase {
   pattern: Expression;
+  body: Statement[];
+}
+
+export interface TestDeclaration extends BaseNode {
+  type: 'TestDeclaration';
+  description: Expression;
   body: Statement[];
 }
 

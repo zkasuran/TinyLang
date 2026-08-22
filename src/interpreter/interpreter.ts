@@ -193,6 +193,9 @@ export class Interpreter {
         return this.evalPrintStatement(stmt, env);
       case 'MatchStatement':
         return this.evalMatchStatement(stmt, env);
+      case 'TestDeclaration':
+        // Tests are only run by the test runner, not during normal execution
+        return createNull();
       case 'ImportStatement':
         // Import is handled at a higher level; for now just acknowledge
         return createNull();

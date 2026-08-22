@@ -59,6 +59,7 @@ import {
   ThisExpression,
   NewExpression,
   FunctionExpression,
+  TestDeclaration,
 } from '../types/ast';
 import { ParseError } from './errors';
 
@@ -135,6 +136,8 @@ export class Parser {
         return this.parseImportStatement();
       case TokenType.MATCH:
         return this.parseMatchStatement();
+      case TokenType.TEST:
+        return this.parseTestDeclaration();
       default:
         return this.parseExpressionStatement();
     }
@@ -479,6 +482,21 @@ export class Parser {
     // Single statement case
     const stmt = this.parseStatement();
     return [stmt];
+  }
+
+  private parseTestDeclaration(): TestDeclaration {
+    const token = this.advance(); // consume 'test'
+    const position = token.position;
+
+    const description = this.parseExpression();
+    const body = this.parseBlock();
+
+    return {
+      type: 'TestDeclaration',
+      description,
+      body,
+      position,
+    };
   }
 
   private parseExpressionStatement(): ExpressionStatement {
@@ -1123,6 +1141,7 @@ export class Parser {
         case TokenType.RETURN:
         case TokenType.PRINT:
         case TokenType.IMPORT:
+        case TokenType.TEST:
           return;
       }
 

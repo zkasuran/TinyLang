@@ -40,6 +40,7 @@ export enum TokenType {
   EXTENDS = 'EXTENDS',
   MATCH = 'MATCH',
   WHEN = 'WHEN',
+  TEST = 'TEST',
 
   // Operators
   PLUS = 'PLUS',             // +
@@ -124,4 +125,5 @@ export const KEYWORDS: Record<string, TokenType> = {
   'extends': TokenType.EXTENDS,
   'match': TokenType.MATCH,
   'when': TokenType.WHEN,
+  'test': TokenType.TEST,
 };

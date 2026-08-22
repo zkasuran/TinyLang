@@ -28,3 +28,15 @@ export type { DebugCommand, Breakpoint, DebugFrame, DebugAction, DebugState, Wat
 export * from './types/tokens';
 export * from './types/ast';
 export * from './types/values';
+
+// Formatter
+export { Formatter } from './formatter';
+export type { FormatOptions } from './formatter';
+
+// Linter
+export { Linter } from './linter';
+export type { Diagnostic } from './linter';
+
+// Testing
+export { TestRunner, formatTestResults, AssertionError } from './testing';
+export type { TestResult } from './testing';
