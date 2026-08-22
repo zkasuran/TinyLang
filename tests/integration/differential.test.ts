@@ -805,13 +805,11 @@ describe('Differential: interpreter vs VM', () => {
   describe('example programs', () => {
     const examplesDir = path.join(__dirname, '..', '..', 'examples');
 
-    // Programs excluded from differential comparison, each with a reason.
-    // These must be justified: an unexplained exclusion hides a real bug.
-    const skip = new Set<string>([
-      // Non-deterministic between runs, so outputs cannot be compared.
-      '15-game.tiny',
-    ]);
-
+    // Every example is compared. There are deliberately no exclusions: an
+    // unexplained skip hides exactly the class of bug this file exists to
+    // catch. 15-game.tiny was previously excluded as "non-deterministic",
+    // which was simply wrong — it calls no random/time/input builtin and
+    // hashes identically across repeated runs on both backends.
     const files = fs.existsSync(examplesDir)
       ? fs
           .readdirSync(examplesDir)
@@ -824,8 +822,7 @@ describe('Differential: interpreter vs VM', () => {
     });
 
     for (const file of files) {
-      const testFn = skip.has(file) ? it.skip : it;
-      testFn(`${file} produces identical output on both backends`, () => {
+      it(`${file} produces identical output on both backends`, () => {
         const source = fs.readFileSync(path.join(examplesDir, file), 'utf-8');
 
         let expected: string[];
