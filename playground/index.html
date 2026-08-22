@@ -1079,6 +1079,7 @@ var TinyLangBundle = (() => {
   var TokenType = /* @__PURE__ */ ((TokenType2) => {
     TokenType2["NUMBER"] = "NUMBER";
     TokenType2["STRING"] = "STRING";
+    TokenType2["FSTRING"] = "FSTRING";
     TokenType2["BOOLEAN"] = "BOOLEAN";
     TokenType2["NULL"] = "NULL";
     TokenType2["IDENTIFIER"] = "IDENTIFIER";
@@ -1109,6 +1110,9 @@ var TinyLangBundle = (() => {
     TokenType2["MATCH"] = "MATCH";
     TokenType2["WHEN"] = "WHEN";
     TokenType2["TEST"] = "TEST";
+    TokenType2["TRY"] = "TRY";
+    TokenType2["CATCH"] = "CATCH";
+    TokenType2["THROW"] = "THROW";
     TokenType2["PLUS"] = "PLUS";
     TokenType2["MINUS"] = "MINUS";
     TokenType2["STAR"] = "STAR";
@@ -1138,6 +1142,7 @@ var TinyLangBundle = (() => {
     TokenType2["SEMICOLON"] = "SEMICOLON";
     TokenType2["ARROW"] = "ARROW";
     TokenType2["PIPE"] = "PIPE";
+    TokenType2["SPREAD"] = "SPREAD";
     TokenType2["EOF"] = "EOF";
     TokenType2["NEWLINE"] = "NEWLINE";
     return TokenType2;
@@ -1169,7 +1174,10 @@ var TinyLangBundle = (() => {
     "extends": "EXTENDS" /* EXTENDS */,
     "match": "MATCH" /* MATCH */,
     "when": "WHEN" /* WHEN */,
-    "test": "TEST" /* TEST */
+    "test": "TEST" /* TEST */,
+    "try": "TRY" /* TRY */,
+    "catch": "CATCH" /* CATCH */,
+    "throw": "THROW" /* THROW */
   };
 
   // src/lexer/errors.ts
@@ -1264,7 +1272,13 @@ var TinyLangBundle = (() => {
           this.addToken("COMMA" /* COMMA */);
           break;
         case ".":
-          this.addToken("DOT" /* DOT */);
+          if (!this.isAtEnd() && this.peek() === "." && this.peekNext() === ".") {
+            this.advance();
+            this.advance();
+            this.addToken("SPREAD" /* SPREAD */);
+          } else {
+            this.addToken("DOT" /* DOT */);
+          }
           break;
         case ":":
           this.addToken("COLON" /* COLON */);
@@ -1345,7 +1359,12 @@ var TinyLangBundle = (() => {
           if (this.isDigit(char)) {
             this.number();
           } else if (this.isAlpha(char)) {
-            this.identifier();
+            if (char === "f" && !this.isAtEnd() && (this.peek() === '"' || this.peek() === "'")) {
+              const quote = this.advance();
+              this.fstring(quote);
+            } else {
+              this.identifier();
+            }
           } else {
             throw this.createError(
               `Unexpected character '${char}'`,
@@ -1404,6 +1423,91 @@ var TinyLangBundle = (() => {
       }
       this.advance();
       this.addTokenWithValue("STRING" /* STRING */, value);
+    }
+    /**
+     * Parse an f-string. The content between quotes is stored with {expr} markers.
+     * The raw text (with {expr} sections intact) is stored as the token value.
+     */
+    fstring(quote) {
+      let value = "";
+      const startPos = this.getPosition();
+      while (!this.isAtEnd() && this.peek() !== quote) {
+        if (this.peek() === "\n") {
+          this.line++;
+          this.column = 1;
+        }
+        if (this.peek() === "\\") {
+          this.advance();
+          const escaped = this.advance();
+          switch (escaped) {
+            case "n":
+              value += "\n";
+              break;
+            case "t":
+              value += "	";
+              break;
+            case "r":
+              value += "\r";
+              break;
+            case "\\":
+              value += "\\";
+              break;
+            case "'":
+              value += "'";
+              break;
+            case '"':
+              value += '"';
+              break;
+            case "{":
+              value += "\\{";
+              break;
+            case "0":
+              value += "\0";
+              break;
+            default:
+              value += escaped;
+          }
+        } else if (this.peek() === "{") {
+          value += this.advance();
+          let depth = 1;
+          while (!this.isAtEnd() && depth > 0) {
+            const ch = this.peek();
+            if (ch === "{") depth++;
+            else if (ch === "}") {
+              depth--;
+              if (depth === 0) {
+                value += this.advance();
+                break;
+              }
+            }
+            if (ch === "\n") {
+              this.line++;
+              this.column = 1;
+            }
+            if (depth > 0) {
+              value += this.advance();
+            }
+          }
+          if (depth > 0) {
+            throw new LexerError(
+              "Unterminated interpolation expression in f-string",
+              startPos,
+              "Make sure every { has a matching } in your f-string"
+            );
+          }
+        } else {
+          value += this.advance();
+        }
+      }
+      if (this.isAtEnd()) {
+        throw new LexerError(
+          "Unterminated f-string literal",
+          startPos,
+          `Did you forget the closing ${quote} quote?`
+        );
+      }
+      this.advance();
+      this.addTokenWithValue("FSTRING" /* FSTRING */, value);
     }
     number() {
       while (!this.isAtEnd() && this.isDigit(this.peek())) {
@@ -1465,6 +1569,7 @@ var TinyLangBundle = (() => {
           "IDENTIFIER" /* IDENTIFIER */,
           "NUMBER" /* NUMBER */,
           "STRING" /* STRING */,
+          "FSTRING" /* FSTRING */,
           "BOOLEAN" /* BOOLEAN */,
           "NULL" /* NULL */,
           "RPAREN" /* RPAREN */,
@@ -1595,7 +1700,7 @@ var TinyLangBundle = (() => {
   };
 
   // src/parser/parser.ts
-  var Parser = class {
+  var Parser = class _Parser {
     constructor(tokens) {
       __publicField(this, "tokens");
       __publicField(this, "current", 0);
@@ -1663,6 +1768,10 @@ var TinyLangBundle = (() => {
           return this.parseMatchStatement();
         case "TEST" /* TEST */:
           return this.parseTestDeclaration();
+        case "TRY" /* TRY */:
+          return this.parseTryCatchStatement();
+        case "THROW" /* THROW */:
+          return this.parseThrowStatement();
         default:
           return this.parseExpressionStatement();
       }
@@ -1671,6 +1780,12 @@ var TinyLangBundle = (() => {
       const token = this.advance();
       const constant = token.type === "CONST" /* CONST */;
       const position = token.position;
+      if (this.check("LBRACKET" /* LBRACKET */)) {
+        return this.parseArrayDestructuring(position, constant);
+      }
+      if (this.check("LBRACE" /* LBRACE */)) {
+        return this.parseObjectDestructuring(position, constant);
+      }
       const nameToken = this.expect(
         "IDENTIFIER" /* IDENTIFIER */,
         "a variable name",
@@ -1686,6 +1801,64 @@ var TinyLangBundle = (() => {
       return {
         type: "VariableDeclaration",
         name: nameToken.value,
+        value,
+        constant,
+        position
+      };
+    }
+    parseArrayDestructuring(position, constant) {
+      this.advance();
+      const names = [];
+      if (!this.check("RBRACKET" /* RBRACKET */)) {
+        do {
+          const nameToken = this.expect("IDENTIFIER" /* IDENTIFIER */, "a variable name");
+          names.push(nameToken.value);
+        } while (this.match("COMMA" /* COMMA */));
+      }
+      this.expect(
+        "RBRACKET" /* RBRACKET */,
+        "']'",
+        "Close the destructuring pattern with ]"
+      );
+      this.expect(
+        "ASSIGN" /* ASSIGN */,
+        "'='",
+        "Destructuring declarations must be initialized: let [a, b] = [1, 2]"
+      );
+      const value = this.parseExpression();
+      this.expectEndOfStatement();
+      return {
+        type: "DestructuringDeclaration",
+        pattern: { kind: "array", names },
+        value,
+        constant,
+        position
+      };
+    }
+    parseObjectDestructuring(position, constant) {
+      this.advance();
+      const names = [];
+      if (!this.check("RBRACE" /* RBRACE */)) {
+        do {
+          const nameToken = this.expect("IDENTIFIER" /* IDENTIFIER */, "a property name");
+          names.push(nameToken.value);
+        } while (this.match("COMMA" /* COMMA */));
+      }
+      this.expect(
+        "RBRACE" /* RBRACE */,
+        "'}'",
+        "Close the destructuring pattern with }"
+      );
+      this.expect(
+        "ASSIGN" /* ASSIGN */,
+        "'='",
+        "Destructuring declarations must be initialized: let {x, y} = obj"
+      );
+      const value = this.parseExpression();
+      this.expectEndOfStatement();
+      return {
+        type: "DestructuringDeclaration",
+        pattern: { kind: "object", names },
         value,
         constant,
         position
@@ -1764,7 +1937,15 @@ var TinyLangBundle = (() => {
         if (this.check("FN" /* FN */)) {
           methods.push(this.parseFunctionDeclaration());
         } else if (this.check("LET" /* LET */) || this.check("CONST" /* CONST */)) {
-          properties.push(this.parseVariableDeclaration());
+          const decl = this.parseVariableDeclaration();
+          if (decl.type !== "VariableDeclaration") {
+            throw ParseError.fromToken(
+              this.peek(),
+              "Destructuring is not supported in class properties",
+              "Use simple property declarations: let name = value"
+            );
+          }
+          properties.push(decl);
         } else {
           throw ParseError.unexpected(this.peek(), "'fn' or 'let' for class members");
         }
@@ -1985,6 +2166,41 @@ var TinyLangBundle = (() => {
         type: "TestDeclaration",
         description,
         body,
+        position
+      };
+    }
+    parseTryCatchStatement() {
+      const token = this.advance();
+      const position = token.position;
+      const tryBody = this.parseBlock();
+      this.skipNewlines();
+      this.expect(
+        "CATCH" /* CATCH */,
+        "'catch'",
+        "A try block must be followed by catch: try { ... } catch err { ... }"
+      );
+      const errorVarToken = this.expect(
+        "IDENTIFIER" /* IDENTIFIER */,
+        "an error variable name",
+        "After catch, provide a variable name: catch err { ... }"
+      );
+      const catchBody = this.parseBlock();
+      return {
+        type: "TryCatchStatement",
+        tryBody,
+        catchVariable: errorVarToken.value,
+        catchBody,
+        position
+      };
+    }
+    parseThrowStatement() {
+      const token = this.advance();
+      const position = token.position;
+      const value = this.parseExpression();
+      this.expectEndOfStatement();
+      return {
+        type: "ThrowStatement",
+        value,
         position
       };
     }
@@ -2221,6 +2437,8 @@ var TinyLangBundle = (() => {
           return this.parseNumberLiteral();
         case "STRING" /* STRING */:
           return this.parseStringLiteral();
+        case "FSTRING" /* FSTRING */:
+          return this.parseInterpolatedString();
         case "BOOLEAN" /* BOOLEAN */:
           return this.parseBooleanLiteral();
         case "NULL" /* NULL */:
@@ -2239,6 +2457,8 @@ var TinyLangBundle = (() => {
           return this.parseNew();
         case "FN" /* FN */:
           return this.parseFunctionExpression();
+        case "SPREAD" /* SPREAD */:
+          return this.parseSpreadExpression();
         default:
           throw ParseError.unexpected(token, "an expression");
       }
@@ -2432,6 +2652,65 @@ var TinyLangBundle = (() => {
         position: token.position
       };
     }
+    parseInterpolatedString() {
+      const token = this.advance();
+      const position = token.position;
+      const raw = token.value;
+      const parts = [];
+      let i = 0;
+      let currentLiteral = "";
+      while (i < raw.length) {
+        if (raw[i] === "\\" && i + 1 < raw.length && raw[i + 1] === "{") {
+          currentLiteral += "{";
+          i += 2;
+        } else if (raw[i] === "{") {
+          if (currentLiteral.length > 0) {
+            parts.push({ kind: "literal", value: currentLiteral });
+            currentLiteral = "";
+          }
+          i++;
+          let depth = 1;
+          let exprSource = "";
+          while (i < raw.length && depth > 0) {
+            if (raw[i] === "{") depth++;
+            else if (raw[i] === "}") {
+              depth--;
+              if (depth === 0) {
+                i++;
+                break;
+              }
+            }
+            exprSource += raw[i];
+            i++;
+          }
+          const innerLexer = new Lexer(exprSource);
+          const innerTokens = innerLexer.tokenize();
+          const innerParser = new _Parser(innerTokens);
+          const expr = innerParser.parseExpression();
+          parts.push({ kind: "expression", expression: expr });
+        } else {
+          currentLiteral += raw[i];
+          i++;
+        }
+      }
+      if (currentLiteral.length > 0) {
+        parts.push({ kind: "literal", value: currentLiteral });
+      }
+      return {
+        type: "InterpolatedString",
+        parts,
+        position
+      };
+    }
+    parseSpreadExpression() {
+      const token = this.advance();
+      const argument = this.parseExpression();
+      return {
+        type: "SpreadExpression",
+        argument,
+        position: token.position
+      };
+    }
     // ============ Block Parsing ============
     parseBlock() {
       this.expect(
@@ -2536,6 +2815,8 @@ var TinyLangBundle = (() => {
           case "PRINT" /* PRINT */:
           case "IMPORT" /* IMPORT */:
           case "TEST" /* TEST */:
+          case "TRY" /* TRY */:
+          case "THROW" /* THROW */:
             return;
         }
         this.advance();
@@ -2577,7 +2858,9 @@ var TinyLangBundle = (() => {
       if (this.parent) {
         return this.parent.assign(name, value);
       }
-      throw new RuntimeError(`Variable '${name}' is not defined. Did you forget to declare it with 'let' or 'const'?`);
+      const suggestion = this.findSimilar(name);
+      const hint = suggestion ? `Did you mean '${suggestion}'?` : `Did you forget to declare it with 'let' or 'const'?`;
+      throw new RuntimeError(`Variable '${name}' is not defined. ${hint}`);
     }
     /**
      * Look up a variable's value, traversing up the scope chain
@@ -2589,7 +2872,9 @@ var TinyLangBundle = (() => {
       if (this.parent) {
         return this.parent.lookup(name);
       }
-      throw new RuntimeError(`Variable '${name}' is not defined. Did you forget to declare it with 'let' or 'const'?`);
+      const suggestion = this.findSimilar(name);
+      const hint = suggestion ? `Did you mean '${suggestion}'?` : `Did you forget to declare it with 'let' or 'const'?`;
+      throw new RuntimeError(`Variable '${name}' is not defined. ${hint}`);
     }
     /**
      * Check if a variable exists in any reachable scope
@@ -2604,6 +2889,40 @@ var TinyLangBundle = (() => {
      */
     createChild() {
       return new _Environment(this);
+    }
+    /**
+     * Get all variables defined in this environment (not including parent scopes)
+     * Used by the VM to extract stdlib globals after registration.
+     */
+    getAll() {
+      return new Map(this.variables);
+    }
+    /**
+     * Collect all variable names from this scope and all parent scopes
+     */
+    getAllNames() {
+      const names = Array.from(this.variables.keys());
+      if (this.parent) {
+        names.push(...this.parent.getAllNames());
+      }
+      return names;
+    }
+    /**
+     * Find the most similar variable name using Levenshtein distance.
+     * Returns null if no good match is found (distance > 3).
+     */
+    findSimilar(name) {
+      const allNames = this.getAllNames();
+      let bestMatch = null;
+      let bestDistance = Infinity;
+      for (const candidate of allNames) {
+        const dist = levenshteinDistance(name.toLowerCase(), candidate.toLowerCase());
+        if (dist < bestDistance && dist <= 3) {
+          bestDistance = dist;
+          bestMatch = candidate;
+        }
+      }
+      return bestMatch;
     }
   };
   var RuntimeError = class extends Error {
@@ -2712,6 +3031,26 @@ var TinyLangBundle = (() => {
         return a === b;
     }
   }
+  function levenshteinDistance(a, b) {
+    const m = a.length;
+    const n = b.length;
+    if (m === 0) return n;
+    if (n === 0) return m;
+    const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        dp[i][j] = Math.min(
+          dp[i - 1][j] + 1,
+          dp[i][j - 1] + 1,
+          dp[i - 1][j - 1] + cost
+        );
+      }
+    }
+    return dp[m][n];
+  }
 
   // src/interpreter/interpreter.ts
   var Interpreter = class {
@@ -2806,6 +3145,8 @@ var TinyLangBundle = (() => {
       switch (stmt.type) {
         case "VariableDeclaration":
           return this.evalVariableDeclaration(stmt, env);
+        case "DestructuringDeclaration":
+          return this.evalDestructuringDeclaration(stmt, env);
         case "FunctionDeclaration":
           return this.evalFunctionDeclaration(stmt, env);
         case "ClassDeclaration":
@@ -2832,6 +3173,10 @@ var TinyLangBundle = (() => {
           return createNull();
         case "ImportStatement":
           return this.evalImportStatement(stmt, env);
+        case "TryCatchStatement":
+          return this.evalTryCatchStatement(stmt, env);
+        case "ThrowStatement":
+          return this.evalThrowStatement(stmt, env);
         default:
           throw new RuntimeError(
             `Unknown statement type: ${stmt.type}`,
@@ -2843,6 +3188,35 @@ var TinyLangBundle = (() => {
     evalVariableDeclaration(stmt, env) {
       const value = this.evalExpression(stmt.value, env);
       env.define(stmt.name, value, stmt.constant);
+      return value;
+    }
+    evalDestructuringDeclaration(stmt, env) {
+      const value = this.evalExpression(stmt.value, env);
+      if (stmt.pattern.kind === "array") {
+        if (value.type !== "array") {
+          throw new RuntimeError(
+            `Cannot destructure ${value.type} as an array. Right side must be an array.`,
+            stmt.position.line,
+            stmt.position.column
+          );
+        }
+        for (let i = 0; i < stmt.pattern.names.length; i++) {
+          const elementValue = i < value.elements.length ? value.elements[i] : createNull();
+          env.define(stmt.pattern.names[i], elementValue, stmt.constant);
+        }
+      } else {
+        if (value.type !== "object") {
+          throw new RuntimeError(
+            `Cannot destructure ${value.type} as an object. Right side must be an object.`,
+            stmt.position.line,
+            stmt.position.column
+          );
+        }
+        for (const name of stmt.pattern.names) {
+          const propValue = value.properties.get(name) || createNull();
+          env.define(name, propValue, stmt.constant);
+        }
+      }
       return value;
     }
     evalFunctionDeclaration(stmt, env) {
@@ -3031,6 +3405,8 @@ var TinyLangBundle = (() => {
           return createNumber(expr.value);
         case "StringLiteral":
           return createString(expr.value);
+        case "InterpolatedString":
+          return this.evalInterpolatedString(expr, env);
         case "BooleanLiteral":
           return createBoolean(expr.value);
         case "NullLiteral":
@@ -3082,7 +3458,25 @@ var TinyLangBundle = (() => {
       }
     }
     evalArrayLiteral(expr, env) {
-      const elements = expr.elements.map((el) => this.evalExpression(el, env));
+      const elements = [];
+      for (const el of expr.elements) {
+        if (el.type === "SpreadExpression") {
+          const spread = this.evalExpression(el.argument, env);
+          if (spread.type === "array") {
+            elements.push(...spread.elements);
+          } else if (spread.type === "string") {
+            elements.push(...spread.value.split("").map(createString));
+          } else {
+            throw new RuntimeError(
+              `Cannot spread ${spread.type}. Spread (...) works with arrays and strings.`,
+              el.position.line,
+              el.position.column
+            );
+          }
+        } else {
+          elements.push(this.evalExpression(el, env));
+        }
+      }
       return createArray(elements);
     }
     evalObjectLiteral(expr, env) {
@@ -3786,6 +4180,54 @@ var TinyLangBundle = (() => {
         }
       }
       return void 0;
+    }
+    evalTryCatchStatement(stmt, env) {
+      try {
+        const tryEnv = env.createChild();
+        return this.executeStatements(stmt.tryBody, tryEnv);
+      } catch (error) {
+        const catchEnv = env.createChild();
+        if (error instanceof RuntimeError) {
+          const errProps = /* @__PURE__ */ new Map();
+          errProps.set("message", createString(error.message));
+          errProps.set("line", error.line ? createNumber(error.line) : createNull());
+          catchEnv.define(stmt.catchVariable, { type: "object", properties: errProps });
+        } else if (error instanceof Error) {
+          const errProps = /* @__PURE__ */ new Map();
+          errProps.set("message", createString(error.message));
+          catchEnv.define(stmt.catchVariable, { type: "object", properties: errProps });
+        } else {
+          const errProps = /* @__PURE__ */ new Map();
+          errProps.set("message", createString(String(error)));
+          catchEnv.define(stmt.catchVariable, { type: "object", properties: errProps });
+        }
+        return this.executeStatements(stmt.catchBody, catchEnv);
+      }
+    }
+    evalThrowStatement(stmt, env) {
+      const value = this.evalExpression(stmt.value, env);
+      let message;
+      if (value.type === "string") {
+        message = value.value;
+      } else if (value.type === "object" && value.properties.has("message")) {
+        const msgVal = value.properties.get("message");
+        message = msgVal.type === "string" ? msgVal.value : stringify(msgVal);
+      } else {
+        message = stringify(value);
+      }
+      throw new RuntimeError(message, stmt.position.line, stmt.position.column);
+    }
+    evalInterpolatedString(expr, env) {
+      let result = "";
+      for (const part of expr.parts) {
+        if (part.kind === "literal") {
+          result += part.value;
+        } else {
+          const value = this.evalExpression(part.expression, env);
+          result += stringify(value);
+        }
+      }
+      return createString(result);
     }
     checkStepLimit() {
       this.steps++;
@@ -5745,76 +6187,9 @@ var TinyLangBundle = (() => {
       });
     }
     extractGlobalsFromEnv(env) {
-      const knownNames = [
-        "print",
-        "println",
-        "input",
-        "type",
-        "len",
-        "toString",
-        "toNumber",
-        "isNumber",
-        "isString",
-        "isBool",
-        "isNull",
-        "isArray",
-        "isObject",
-        "isFunction",
-        "push",
-        "pop",
-        "shift",
-        "unshift",
-        "slice",
-        "concat",
-        "join",
-        "reverse",
-        "sort",
-        "map",
-        "filter",
-        "reduce",
-        "find",
-        "includes",
-        "indexOf",
-        "forEach",
-        "split",
-        "trim",
-        "upper",
-        "lower",
-        "replace",
-        "startsWith",
-        "endsWith",
-        "contains",
-        "repeat",
-        "charAt",
-        "substring",
-        "abs",
-        "floor",
-        "ceil",
-        "round",
-        "sqrt",
-        "min",
-        "max",
-        "random",
-        "sin",
-        "cos",
-        "tan",
-        "log",
-        "pow",
-        "PI",
-        "E",
-        "INFINITY",
-        "time",
-        "sleep",
-        "range",
-        "assert"
-      ];
-      for (const name of knownNames) {
-        if (env.has(name)) {
-          try {
-            this.globals.set(name, env.lookup(name));
-          } catch {
-          }
-        }
+      const allVars = env.getAll();
+      for (const [name, value] of allVars) {
+        this.globals.set(name, value);
       }
     }
     /**
@@ -9256,28 +9631,52 @@ window.TinyLangBundle = TinyLangBundle;
     const DEFAULT_CODE = `// Welcome to TinyLang IDE!
 // Try running this program with Ctrl+Enter
 
+// --- String Interpolation (f-strings) ---
+let name = "TinyLang"
+let version = 1.0
+println(f"Welcome to {name} v{version}!")
+println(f"Today's lucky number: {floor(random() * 100)}")
+
 // --- Recursive Fibonacci ---
 fn fibonacci(n) {
-  if n <= 1 {
-    return n
-  }
+  if n <= 1 { return n }
   return fibonacci(n - 1) + fibonacci(n - 2)
 }
 
-// Print the first 10 Fibonacci numbers
 for i in 0..10 {
-  println("fib(" + str(i) + ") = " + str(fibonacci(i)))
+  println(f"fib({i}) = {fibonacci(i)}")
 }
 
-// --- Classes and Objects ---
+// --- Error Handling ---
+fn safeDivide(a, b) {
+  if b == 0 { throw "Cannot divide by zero!" }
+  return a / b
+}
+
+try {
+  println(f"10 / 3 = {safeDivide(10, 3)}")
+  println(f"10 / 0 = {safeDivide(10, 0)}")
+} catch err {
+  println(f"Caught: {err.message}")
+}
+
+// --- Spread & Destructuring ---
+let first = [1, 2, 3]
+let second = [4, 5, 6]
+let all = [...first, ...second]
+println(f"Combined: {all}")
+
+let [a, b, c] = [10, 20, 30]
+println(f"Destructured: a={a}, b={b}, c={c}")
+
+// --- Classes ---
 class Animal {
   fn init(name, sound) {
     this.name = name
     this.sound = sound
   }
-
   fn speak() {
-    println(this.name + " says " + this.sound + "!")
+    println(f"{this.name} says {this.sound}!")
   }
 }
 
@@ -9290,27 +9689,20 @@ cat.speak()
 let numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 let evens = numbers.filter((x) => x % 2 == 0)
 let doubled = evens.map((x) => x * 2)
-println("Doubled evens: " + str(doubled))
+println(f"Doubled evens: {doubled}")
 
 // --- Pattern Matching ---
 fn describe(value) {
   match value {
     when 0 => "zero"
     when 1 => "one"
-    else => "many: " + str(value)
+    else => f"many: {value}"
   }
 }
 
 for i in 0..3 {
   println(describe(i))
 }
-
-// --- Utilities ---
-let start = time()
-let items = range(5)
-println("Range: " + str(items))
-println("Length: " + str(len(items)))
-println("Type: " + type(items))
 `;
 
     // ============ Virtual Filesystem ============

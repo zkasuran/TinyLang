@@ -1,8 +1,9 @@
 {
   "name": "tinylang",
   "version": "1.0.0",
-  "description": "TinyLang - A minimal educational programming language designed to teach programming concepts with friendly error messages",
+  "description": "A complete programming language toolchain: lexer, parser, interpreter, bytecode compiler, VM, debugger, formatter, linter, test runner, and Web IDE - all in TypeScript",
   "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
     "tinylang": "./dist/cli/index.js"
   },
@@ -23,15 +24,29 @@
   "keywords": [
     "programming-language",
     "interpreter",
+    "compiler",
+    "virtual-machine",
+    "bytecode",
+    "debugger",
+    "formatter",
+    "linter",
     "educational",
     "repl",
-    "compiler",
     "tinylang",
     "learning",
-    "beginner-friendly"
+    "beginner-friendly",
+    "language-toolchain"
   ],
   "author": "TinyLang Team",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zkasuran/TinyLang.git"
+  },
+  "homepage": "https://github.com/zkasuran/TinyLang#readme",
+  "bugs": {
+    "url": "https://github.com/zkasuran/TinyLang/issues"
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
@@ -53,6 +68,7 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CONTRIBUTING.md"
   ]
 }

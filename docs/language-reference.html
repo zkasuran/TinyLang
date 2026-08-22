@@ -462,6 +462,90 @@ nums.<span class="fn">forEach</span>((x, i) => {
 
 <span class="bi">print</span>(x)  <span class="cmt">// 1 (outer scope unchanged)</span></code></pre>
 
+        <!-- String Interpolation -->
+        <h2>String Interpolation (F-Strings)</h2>
+        <p>Prefix a string with <code>f</code> to embed expressions inside curly braces. The expressions are evaluated and converted to strings automatically.</p>
+        <pre><code><span class="kw">let</span> name = <span class="str">"World"</span>
+<span class="kw">let</span> x = <span class="num">7</span>
+<span class="bi">print</span>(<span class="str">f"Hello, {name}!"</span>)          <span class="cmt">// "Hello, World!"</span>
+<span class="bi">print</span>(<span class="str">f"{x} * {x} = {x * x}"</span>)    <span class="cmt">// "7 * 7 = 49"</span>
+<span class="bi">print</span>(<span class="str">f"Items: {[1, 2, 3]}"</span>)     <span class="cmt">// "Items: [1, 2, 3]"</span>
+
+<span class="cmt">// Works with any expression</span>
+<span class="kw">let</span> arr = [<span class="num">10</span>, <span class="num">20</span>, <span class="num">30</span>]
+<span class="bi">print</span>(<span class="str">f"Length: {len(arr)}, First: {arr[0]}"</span>)</code></pre>
+
+        <!-- Error Handling -->
+        <h2>Error Handling (Try/Catch/Throw)</h2>
+        <p>TinyLang provides structured error handling with <code>try</code>, <code>catch</code>, and <code>throw</code>.</p>
+
+        <h3>Throwing Errors</h3>
+        <pre><code><span class="kw">fn</span> <span class="fn">divide</span>(a, b) {
+  <span class="kw">if</span> b == <span class="num">0</span> {
+    <span class="kw">throw</span> <span class="str">"Division by zero!"</span>
+  }
+  <span class="kw">return</span> a / b
+}</code></pre>
+
+        <h3>Catching Errors</h3>
+        <pre><code><span class="kw">try</span> {
+  <span class="kw">let</span> result = <span class="fn">divide</span>(<span class="num">10</span>, <span class="num">0</span>)
+  <span class="bi">print</span>(result)
+} <span class="kw">catch</span> err {
+  <span class="bi">print</span>(<span class="str">f"Error: {err.message}"</span>)  <span class="cmt">// "Error: Division by zero!"</span>
+}</code></pre>
+
+        <h3>Error Propagation</h3>
+        <p>Errors propagate up through function calls until caught by a <code>try/catch</code> block. Uncaught errors terminate the program with an error message.</p>
+        <pre><code><span class="kw">fn</span> <span class="fn">validateAge</span>(age) {
+  <span class="kw">if</span> age &lt; <span class="num">0</span> { <span class="kw">throw</span> <span class="str">"Age cannot be negative"</span> }
+  <span class="kw">return</span> age
+}
+
+<span class="kw">fn</span> <span class="fn">createUser</span>(name, age) {
+  <span class="kw">let</span> valid = <span class="fn">validateAge</span>(age)  <span class="cmt">// may throw</span>
+  <span class="kw">return</span> {<span class="prop">name</span>: name, <span class="prop">age</span>: valid}
+}
+
+<span class="kw">try</span> {
+  <span class="kw">let</span> user = <span class="fn">createUser</span>(<span class="str">"Bob"</span>, <span class="num">-5</span>)
+} <span class="kw">catch</span> err {
+  <span class="bi">print</span>(err.<span class="prop">message</span>)  <span class="cmt">// "Age cannot be negative"</span>
+}</code></pre>
+
+        <!-- Destructuring -->
+        <h2>Destructuring</h2>
+        <p>Destructuring lets you unpack values from arrays and objects into distinct variables.</p>
+
+        <h3>Array Destructuring</h3>
+        <pre><code><span class="kw">let</span> [a, b, c] = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]
+<span class="bi">print</span>(a)  <span class="cmt">// 1</span>
+<span class="bi">print</span>(b)  <span class="cmt">// 2</span>
+<span class="bi">print</span>(c)  <span class="cmt">// 3</span>
+
+<span class="cmt">// From function returns</span>
+<span class="kw">fn</span> <span class="fn">getPoint</span>() { <span class="kw">return</span> [<span class="num">3</span>, <span class="num">4</span>] }
+<span class="kw">let</span> [x, y] = <span class="fn">getPoint</span>()</code></pre>
+
+        <h3>Object Destructuring</h3>
+        <pre><code><span class="kw">let</span> config = {<span class="prop">host</span>: <span class="str">"localhost"</span>, <span class="prop">port</span>: <span class="num">8080</span>}
+<span class="kw">let</span> {host, port} = config
+<span class="bi">print</span>(host)  <span class="cmt">// "localhost"</span>
+<span class="bi">print</span>(port)  <span class="cmt">// 8080</span></code></pre>
+
+        <!-- Spread Operator -->
+        <h2>Spread Operator</h2>
+        <p>The spread operator (<code>...</code>) expands an array or string into individual elements within another array.</p>
+
+        <h3>Array Spread</h3>
+        <pre><code><span class="kw">let</span> a = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]
+<span class="kw">let</span> b = [<span class="num">4</span>, <span class="num">5</span>, <span class="num">6</span>]
+<span class="kw">let</span> combined = [...a, ...b]      <span class="cmt">// [1, 2, 3, 4, 5, 6]</span>
+<span class="kw">let</span> withExtra = [<span class="num">0</span>, ...a, <span class="num">99</span>]  <span class="cmt">// [0, 1, 2, 3, 99]</span></code></pre>
+
+        <h3>String Spread</h3>
+        <pre><code><span class="kw">let</span> chars = [...<span class="str">"hello"</span>]  <span class="cmt">// ["h", "e", "l", "l", "o"]</span></code></pre>
+
         <div class="page-nav">
           <a href="getting-started.html" class="page-nav-link">
             <div class="page-nav-label">Previous</div>

@@ -6,7 +6,7 @@
 
 *Lexer, Parser, Interpreter, Bytecode Compiler, Virtual Machine, Debugger, Formatter, Linter, Test Runner, Module System, Web IDE, and Documentation Site -- all in TypeScript.*
 
-[![Tests](https://img.shields.io/badge/tests-338%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-399%20passing-brightgreen)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue)]()
 [![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)]()
 [![License](https://img.shields.io/badge/license-MIT-blue)]()
@@ -21,7 +21,7 @@ TinyLang is a **professional-grade programming language toolchain** implemented 
 
 | Component | Description |
 |-----------|-------------|
-| **Language** | Clean syntax with closures, classes, inheritance, pattern matching |
+| **Language** | Clean syntax with closures, classes, inheritance, pattern matching, f-strings, try/catch, spread, destructuring |
 | **Compiler** | 44-opcode bytecode compiler with constant folding and dead code elimination |
 | **Virtual Machine** | Stack-based VM with call frames, upvalue closures, and execution limits |
 | **Debugger** | Interactive debugger with breakpoints, stepping, watch expressions, call stack |
@@ -29,10 +29,11 @@ TinyLang is a **professional-grade programming language toolchain** implemented 
 | **Linter** | Rule-based static analysis with 5 rules and auto-fix capability |
 | **Test Runner** | Built-in test framework with assertion functions and colored reporting |
 | **Module System** | Import/export with circular dependency detection |
-| **CLI** | 12 commands with colorized output and educational error messages |
+| **CLI** | 14 commands with colorized output and educational error messages |
 | **Web IDE** | Full-featured browser IDE with editor, debugger, AST viewer, bytecode panel |
 | **Documentation** | 8-page documentation site with language reference, stdlib API, architecture guide |
 | **Standard Library** | 60+ functions across 6 modules (IO, Math, Strings, Arrays, Types, Utils) |
+| **Error UX** | "Did you mean?" typo suggestions for undefined variables |
 
 ---
 
@@ -58,6 +59,7 @@ Open `playground/index.html` in any modern browser for a full IDE experience wit
 ### Example Program
 
 ```
+// String interpolation makes output clean and readable
 fn fibonacci(n) {
   if n <= 1 { return n }
   let a = 0
@@ -71,8 +73,25 @@ fn fibonacci(n) {
 }
 
 for i in 0..10 {
-  print("fib(" + str(i) + ") = " + str(fibonacci(i)))
+  print(f"fib({i}) = {fibonacci(i)}")
 }
+
+// Error handling with try/catch
+fn safeDivide(a, b) {
+  if b == 0 { throw "Cannot divide by zero!" }
+  return a / b
+}
+
+try {
+  print(f"Result: {safeDivide(10, 0)}")
+} catch err {
+  print(f"Caught: {err.message}")
+}
+
+// Spread and destructuring
+let [x, y] = [3, 4]
+let combined = [...[1, 2], x, y, ...[5, 6]]
+print(f"Point: ({x}, {y}), All: {combined}")
 ```
 
 ---
@@ -111,6 +130,8 @@ node dist/cli/index.js <command> [options]
 | `repl` | Start interactive Read-Eval-Print Loop |
 | `init` | Create a new TinyLang project |
 | `bench <file>` | Benchmark execution (interpreted vs compiled) |
+| `ast <file>` | Display the Abstract Syntax Tree for a source file |
+| `profile <file>` | Profile execution with timing and memory statistics |
 
 ### Usage Examples
 
@@ -131,6 +152,12 @@ node dist/cli/index.js lint examples/04-arrays.tiny --fix
 
 # Run tests defined in a file
 node dist/cli/index.js test examples/07-fibonacci.tiny
+
+# View the AST of a program
+node dist/cli/index.js ast examples/01-hello.tiny
+
+# Profile execution performance
+node dist/cli/index.js profile examples/07-fibonacci.tiny
 
 # Start REPL
 node dist/cli/index.js repl
@@ -203,6 +230,72 @@ import { sqrt, PI } from "math"
 import { map, filter } from "arrays"
 ```
 
+### String Interpolation (F-Strings)
+
+Embed expressions directly in strings using the `f` prefix:
+
+```
+let name = "World"
+let x = 7
+print(f"Hello, {name}!")         // "Hello, World!"
+print(f"{x} squared = {x * x}") // "7 squared = 49"
+print(f"Array: {[1, 2, 3]}")    // "Array: [1, 2, 3]"
+```
+
+### Try/Catch/Throw (Error Handling)
+
+Structured error handling with throw, try, and catch:
+
+```
+fn divide(a, b) {
+  if b == 0 { throw "Division by zero!" }
+  return a / b
+}
+
+try {
+  let result = divide(10, 0)
+} catch err {
+  print(f"Error: {err.message}")  // "Error: Division by zero!"
+}
+```
+
+### Spread Operator
+
+Expand arrays into other arrays:
+
+```
+let a = [1, 2, 3]
+let b = [4, 5, 6]
+let combined = [...a, ...b]     // [1, 2, 3, 4, 5, 6]
+let chars = [..."hello"]        // ["h", "e", "l", "l", "o"]
+```
+
+### Destructuring
+
+Unpack values from arrays and objects:
+
+```
+// Array destructuring
+let [x, y, z] = [10, 20, 30]
+
+// Object destructuring
+let config = {host: "localhost", port: 8080}
+let {host, port} = config
+
+// From function returns
+fn getPoint() { return [3, 4] }
+let [px, py] = getPoint()
+```
+
+### "Did You Mean?" Suggestions
+
+TinyLang provides intelligent typo suggestions when you reference undefined variables:
+
+```
+let message = "hello"
+print(mesage)  // Error: 'mesage' is not defined. Did you mean 'message'?
+```
+
 ### Built-in Test Framework
 
 ```
@@ -271,10 +364,11 @@ test "fibonacci correctness" {
 │                              Interface Layer                                   │
 │                                                                                │
 │  ┌─────────────────────────────┐  ┌──────────────────────────────────────┐   │
-│  │ CLI (12 commands, colors)   │  │  Web IDE (CodeMirror 6, debugger,    │   │
+│  │ CLI (14 commands, colors)   │  │  Web IDE (CodeMirror 6, debugger,    │   │
 │  │ run, compile, exec, debug,  │  │  AST viewer, bytecode panel,         │   │
 │  │ fmt, lint, test, doc, repl, │  │  file explorer, dark/light theme,    │   │
-│  │ init, bench, check          │  │  share via URL, keyboard shortcuts)  │   │
+│  │ init, bench, check, ast,    │  │  share via URL, keyboard shortcuts)  │   │
+│  │ profile                     │  │                                      │   │
 │  └─────────────────────────────┘  └──────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -326,7 +420,7 @@ The documentation features responsive design, dark/light mode toggle, and syntax
 ## Testing
 
 ```bash
-# Run all 338 tests
+# Run all 399 tests
 npx vitest run
 
 # Run with verbose output
@@ -351,7 +445,8 @@ npx vitest run tests/compiler/compiler.test.ts
 | Test Runner | 12 | Discovery, assertions, reporting |
 | CLI | 18 | All commands, argument parsing, error handling |
 | Integration | 9 | Complete programs (fibonacci, sorting, classes) |
-| **Total** | **338** | **All passing** |
+| New Features | 61 | String interpolation, try/catch, spread, destructuring, did-you-mean |
+| **Total** | **399** | **All passing** |
 
 ---
 
@@ -402,7 +497,7 @@ tinylang/
 │   ├── utils/                      # Shared utilities
 │   ├── tinylang.ts                 # High-level API facade
 │   └── index.ts                    # Barrel exports
-├── tests/                          # Vitest test suites (338 tests)
+├── tests/                          # Vitest test suites (399 tests)
 │   ├── lexer/                      # Lexer unit tests
 │   ├── parser/                     # Parser unit tests
 │   ├── interpreter/                # Interpreter unit tests
@@ -414,7 +509,7 @@ tinylang/
 │   ├── testing/                    # Test runner tests
 │   ├── cli/                        # CLI command tests
 │   └── integration/                # Full program execution tests
-├── examples/                       # 10 example .tiny programs
+├── examples/                       # 12 example .tiny programs
 │   ├── 01-hello.tiny               # Hello World, basics
 │   ├── 02-variables.tiny           # Data types, constants
 │   ├── 03-functions.tiny           # Functions, closures, arrows
@@ -424,7 +519,9 @@ tinylang/
 │   ├── 07-fibonacci.tiny           # Recursive + iterative
 │   ├── 08-sorting.tiny             # Bubble, selection, insertion sort
 │   ├── 09-functional.tiny          # Composition, currying, pipelines
-│   └── 10-match.tiny               # Pattern matching
+│   ├── 10-match.tiny               # Pattern matching
+│   ├── 11-error-handling.tiny      # Try/catch/throw patterns
+│   └── 12-advanced.tiny            # F-strings, destructuring, spread
 ├── playground/                     # Web IDE (browser-based)
 │   ├── index.html                  # Self-contained IDE application
 │   ├── build.js                    # esbuild bundler script
@@ -629,7 +726,7 @@ npm run clean
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/my-feature`)
 3. Follow the coding standards in `.kiro/steering/coding-standards.md`
-4. Ensure all 338 tests pass (`npx vitest run`)
+4. Ensure all 399 tests pass (`npx vitest run`)
 5. Add tests for new functionality
 6. Commit with conventional prefixes (`feat:`, `fix:`, `docs:`, `refactor:`)
 7. Open a Pull Request

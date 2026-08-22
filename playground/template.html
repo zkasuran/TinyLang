@@ -994,28 +994,52 @@
     const DEFAULT_CODE = `// Welcome to TinyLang IDE!
 // Try running this program with Ctrl+Enter
 
+// --- String Interpolation (f-strings) ---
+let name = "TinyLang"
+let version = 1.0
+println(f"Welcome to {name} v{version}!")
+println(f"Today's lucky number: {floor(random() * 100)}")
+
 // --- Recursive Fibonacci ---
 fn fibonacci(n) {
-  if n <= 1 {
-    return n
-  }
+  if n <= 1 { return n }
   return fibonacci(n - 1) + fibonacci(n - 2)
 }
 
-// Print the first 10 Fibonacci numbers
 for i in 0..10 {
-  println("fib(" + str(i) + ") = " + str(fibonacci(i)))
+  println(f"fib({i}) = {fibonacci(i)}")
 }
 
-// --- Classes and Objects ---
+// --- Error Handling ---
+fn safeDivide(a, b) {
+  if b == 0 { throw "Cannot divide by zero!" }
+  return a / b
+}
+
+try {
+  println(f"10 / 3 = {safeDivide(10, 3)}")
+  println(f"10 / 0 = {safeDivide(10, 0)}")
+} catch err {
+  println(f"Caught: {err.message}")
+}
+
+// --- Spread & Destructuring ---
+let first = [1, 2, 3]
+let second = [4, 5, 6]
+let all = [...first, ...second]
+println(f"Combined: {all}")
+
+let [a, b, c] = [10, 20, 30]
+println(f"Destructured: a={a}, b={b}, c={c}")
+
+// --- Classes ---
 class Animal {
   fn init(name, sound) {
     this.name = name
     this.sound = sound
   }
-
   fn speak() {
-    println(this.name + " says " + this.sound + "!")
+    println(f"{this.name} says {this.sound}!")
   }
 }
 
@@ -1028,27 +1052,20 @@ cat.speak()
 let numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 let evens = numbers.filter((x) => x % 2 == 0)
 let doubled = evens.map((x) => x * 2)
-println("Doubled evens: " + str(doubled))
+println(f"Doubled evens: {doubled}")
 
 // --- Pattern Matching ---
 fn describe(value) {
   match value {
     when 0 => "zero"
     when 1 => "one"
-    else => "many: " + str(value)
+    else => f"many: {value}"
   }
 }
 
 for i in 0..3 {
   println(describe(i))
 }
-
-// --- Utilities ---
-let start = time()
-let items = range(5)
-println("Range: " + str(items))
-println("Length: " + str(len(items)))
-println("Type: " + type(items))
 `;
 
     // ============ Virtual Filesystem ============

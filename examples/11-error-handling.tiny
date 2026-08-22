@@ -1,0 +1,162 @@
+// =============================================================
+// Example 11: Error Handling with Try/Catch/Throw
+// =============================================================
+// TinyLang provides structured error handling similar to
+// JavaScript and Python. You can throw errors, catch them,
+// and handle failures gracefully.
+
+// --- Basic Try/Catch ---
+// Wrap risky code in a try block, handle errors in catch
+
+print("=== Basic Try/Catch ===")
+
+try {
+  let result = 10 / 0
+  print("This won't cause a runtime error (infinity)")
+} catch err {
+  print(f"Caught: {err.message}")
+}
+
+// --- Throwing Custom Errors ---
+// Use 'throw' to signal that something went wrong
+
+print("")
+print("=== Throwing Errors ===")
+
+fn divide(a, b) {
+  if b == 0 {
+    throw "Division by zero is not allowed"
+  }
+  return a / b
+}
+
+try {
+  let answer = divide(42, 0)
+  print(f"Answer: {answer}")
+} catch err {
+  print(f"Error caught: {err.message}")
+}
+
+// Successful case (no error thrown)
+try {
+  let answer = divide(42, 7)
+  print(f"42 / 7 = {answer}")
+} catch err {
+  print("This won't execute")
+}
+
+// --- Error Propagation ---
+// Errors bubble up through function calls until caught
+
+print("")
+print("=== Error Propagation ===")
+
+fn validateAge(age) {
+  if age < 0 {
+    throw "Age cannot be negative"
+  }
+  if age > 150 {
+    throw "Age seems unrealistic"
+  }
+  return age
+}
+
+fn createUser(name, age) {
+  let validAge = validateAge(age)
+  return {name: name, age: validAge}
+}
+
+try {
+  let user = createUser("Alice", 25)
+  print(f"Created user: {user.name}, age {user.age}")
+} catch err {
+  print(f"Failed: {err.message}")
+}
+
+try {
+  let user = createUser("Bob", -5)
+  print(f"Created user: {user.name}")
+} catch err {
+  print(f"Failed: {err.message}")
+}
+
+// --- Practical Pattern: Safe Wrapper ---
+// Return a result object instead of throwing
+
+print("")
+print("=== Safe Wrapper Pattern ===")
+
+fn safeDivide(a, b) {
+  try {
+    if b == 0 { throw "division by zero" }
+    return {value: a / b, error: null}
+  } catch err {
+    return {value: null, error: err.message}
+  }
+}
+
+let r1 = safeDivide(100, 4)
+print(f"100 / 4 = {r1.value}")
+
+let r2 = safeDivide(100, 0)
+print(f"100 / 0 -> error: {r2.error}")
+
+// --- Multiple Error Types ---
+// Handle different error conditions
+
+print("")
+print("=== Multiple Error Types ===")
+
+fn parseNumber(input) {
+  if input == null {
+    throw "Input is null"
+  }
+  if type(input) != "string" {
+    throw "Expected a string input"
+  }
+  let result = num(input)
+  if result == null {
+    throw f"Cannot parse '{input}' as a number"
+  }
+  return result
+}
+
+let testInputs = ["42", "3.14", "hello", null]
+for input in testInputs {
+  try {
+    let n = parseNumber(input)
+    print(f"Parsed '{input}' -> {n}")
+  } catch err {
+    print(f"Error for input {input}: {err.message}")
+  }
+}
+
+// --- Nested Try/Catch ---
+// Each try/catch handles its own level of errors
+
+print("")
+print("=== Nested Error Handling ===")
+
+fn processItems(items) {
+  let results = []
+  for item in items {
+    try {
+      if item < 0 {
+        throw f"Negative value: {item}"
+      }
+      push(results, sqrt(item))
+    } catch err {
+      push(results, f"ERR:{err.message}")
+    }
+  }
+  return results
+}
+
+let data = [16, 25, -4, 9, -1, 36]
+let processed = processItems(data)
+print(f"Results: {processed}")
+
+print("")
+print("=== Done! ===")
+print("Try/catch lets you handle errors gracefully")
+print("without crashing your program.")

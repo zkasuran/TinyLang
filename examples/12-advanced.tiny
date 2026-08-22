@@ -1,0 +1,148 @@
+// =============================================================
+// Example 12: Advanced Features
+// =============================================================
+// This example showcases TinyLang's modern language features:
+// string interpolation (f-strings), destructuring, and spread.
+
+// --- String Interpolation (F-Strings) ---
+// Prefix a string with 'f' to embed expressions inside {braces}
+
+print("=== String Interpolation ===")
+
+let language = "TinyLang"
+let version = 1.0
+print(f"Welcome to {language} v{version}!")
+
+// Expressions are evaluated inside braces
+let x = 7
+let y = 8
+print(f"{x} * {y} = {x * y}")
+
+// Works with function calls and method access
+let items = [10, 20, 30, 40, 50]
+print(f"Array has {len(items)} items, first is {items[0]}")
+
+// Great for building messages dynamically
+fn greet(name, time) {
+  return f"Good {time}, {name}! Welcome back."
+}
+print(greet("Alice", "morning"))
+
+// --- Destructuring ---
+// Unpack values from arrays and objects into variables
+
+print("")
+print("=== Array Destructuring ===")
+
+// Basic array destructuring
+let [a, b, c] = [1, 2, 3]
+print(f"a={a}, b={b}, c={c}")
+
+// Destructure function return values
+fn getMinMax(arr) {
+  let lo = arr[0]
+  let hi = arr[0]
+  for val in arr {
+    if val < lo { lo = val }
+    if val > hi { hi = val }
+  }
+  return [lo, hi]
+}
+
+let numbers = [34, 12, 78, 5, 91, 23]
+let [minimum, maximum] = getMinMax(numbers)
+print(f"Min: {minimum}, Max: {maximum}")
+
+// Object destructuring
+print("")
+print("=== Object Destructuring ===")
+
+let config = {host: "localhost", port: 8080, debug: true}
+let {host, port, debug} = config
+print(f"Server: {host}:{port} (debug={debug})")
+
+// Destructuring from function results
+fn createUser(name, role) {
+  return {name: name, role: role, active: true}
+}
+
+let {name, role, active} = createUser("Bob", "admin")
+print(f"User: {name}, Role: {role}, Active: {active}")
+
+// --- Spread Operator ---
+// Expand arrays into other arrays or function arguments
+
+print("")
+print("=== Spread Operator ===")
+
+// Combine arrays
+let front = [1, 2, 3]
+let back = [7, 8, 9]
+let all = [...front, 4, 5, 6, ...back]
+print(f"Combined: {all}")
+
+// Clone and extend arrays
+let original = [10, 20, 30]
+let extended = [...original, 40, 50]
+print(f"Extended: {extended}")
+
+// Spread strings into character arrays
+let chars = [..."hello"]
+print(f"Characters: {chars}")
+
+// --- Combining All Features ---
+// Real-world patterns using these features together
+
+print("")
+print("=== Combined Patterns ===")
+
+// Pattern 1: Config merging with spread
+let defaults = {theme: "dark", fontSize: 14, lang: "en"}
+let userPrefs = {fontSize: 18, lang: "fr"}
+// Merge by spreading both (user overrides defaults)
+print(f"Defaults: {defaults}")
+print(f"User prefs: {userPrefs}")
+
+// Pattern 2: Processing pipelines with destructuring
+fn analyzeData(data) {
+  let total = 0
+  for val in data {
+    total = total + val
+  }
+  let avg = total / len(data)
+  let [lo, hi] = getMinMax(data)
+  return {
+    count: len(data),
+    sum: total,
+    average: avg,
+    min: lo,
+    max: hi
+  }
+}
+
+let dataset = [23, 45, 12, 67, 34, 89, 11, 56]
+let stats = analyzeData(dataset)
+print(f"Dataset analysis:")
+print(f"  Count: {stats.count}")
+print(f"  Sum: {stats.sum}")
+print(f"  Average: {stats.average}")
+print(f"  Range: {stats.min} to {stats.max}")
+
+// Pattern 3: Builder pattern with spread
+fn buildQuery(table, conditions) {
+  let parts = [f"SELECT * FROM {table}"]
+  if len(conditions) > 0 {
+    let clauses = [...conditions]
+    push(parts, "WHERE")
+    push(parts, clauses[0])
+  }
+  return parts
+}
+
+let query = buildQuery("users", ["age > 18", "active = true"])
+print(f"Query parts: {query}")
+
+print("")
+print("=== Done! ===")
+print("F-strings, destructuring, and spread make code")
+print("cleaner and more expressive.")

@@ -192,3 +192,42 @@ Detailed task breakdowns for each major subsystem:
 - [x] Rule-based linter (5 rules)
 - [x] Inline test runner with assertions
 - [x] Module system with caching and circular dependency detection
+
+## Phase 6: Advanced Language Features ✅
+
+### Task 6.1: String Interpolation ✅
+- [x] Implement f-string prefix parsing in lexer
+- [x] Parse interpolation expressions inside {braces}
+- [x] Evaluate interpolated expressions at runtime
+- [x] Support arbitrary expressions including function calls
+- [x] Handle nested braces and edge cases
+- [x] Add tests for all interpolation scenarios
+
+### Task 6.2: Error Handling (Try/Catch/Throw) ✅
+- [x] Add try/catch/throw keywords to lexer
+- [x] Parse try/catch blocks as statements
+- [x] Parse throw expressions
+- [x] Implement try/catch execution in interpreter
+- [x] Error propagation through call stack
+- [x] Error objects with message property
+- [x] Add comprehensive tests
+
+### Task 6.3: Spread Operator ✅
+- [x] Parse spread syntax (...expr) in array literals
+- [x] Evaluate spread in array construction
+- [x] Support spreading arrays and strings
+- [x] Add tests for spread behavior
+
+### Task 6.4: Destructuring ✅
+- [x] Parse array destructuring patterns in let/const
+- [x] Parse object destructuring patterns in let/const
+- [x] Implement array destructuring assignment
+- [x] Implement object destructuring assignment
+- [x] Handle edge cases (missing values, extra values)
+- [x] Add tests for all destructuring patterns
+
+### Task 6.5: Developer Experience ✅
+- [x] "Did you mean?" typo suggestions using Levenshtein distance
+- [x] AST command for CLI (display parse tree)
+- [x] Profile command for CLI (execution statistics)
+- [x] Add tests for typo suggestions
