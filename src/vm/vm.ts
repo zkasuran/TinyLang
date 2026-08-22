@@ -137,11 +137,45 @@ export class VM {
         const start = args[0] as NumberValue;
         const end = args[1] as NumberValue;
         const inclusive = args[2] as BooleanValue;
-        const elements: RuntimeValue[] = [];
-        const limit = inclusive.value ? end.value : end.value;
-        for (let i = start.value; inclusive.value ? i <= limit : i < limit; i++) {
-          elements.push(createNumber(i));
+
+        if (start.type !== 'number' || end.type !== 'number') {
+          throw new RuntimeError(
+            `Range bounds must be numbers. Got ${start.type} and ${end.type}.`,
+            this.currentLine()
+          );
         }
+
+        // Mirrors the interpreter's evalRangeExpression exactly, including the
+        // descending case and the element cap. This only counted upwards
+        // before, so `for i in 5..1` silently produced an empty array and the
+        // loop body never ran, while the interpreter iterated 5 4 3 2.
+        const elements: RuntimeValue[] = [];
+        const startVal = Math.floor(start.value);
+        const endVal = Math.floor(end.value);
+        const limit = inclusive.value ? endVal : endVal - 1;
+
+        const guard = (): void => {
+          if (elements.length > 10000) {
+            throw new RuntimeError(
+              'Range too large! Maximum range size is 10,000 elements. Try a smaller range.',
+              this.currentLine()
+            );
+          }
+        };
+
+        if (startVal <= limit) {
+          for (let i = startVal; i <= limit; i++) {
+            elements.push(createNumber(i));
+            guard();
+          }
+        } else {
+          const floor = inclusive.value ? endVal : endVal + 1;
+          for (let i = startVal; i >= floor; i--) {
+            elements.push(createNumber(i));
+            guard();
+          }
+        }
+
         return createArray(elements);
       },
     });

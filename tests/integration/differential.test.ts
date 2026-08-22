@@ -996,6 +996,43 @@ describe('Differential: interpreter vs VM', () => {
     });
   });
 
+  describe('ranges', () => {
+    // The VM's __range only ever counted upwards, so a descending range
+    // silently produced an empty array and the loop body never ran, while the
+    // interpreter iterated downwards. A silently skipped loop, not an error.
+    it('agrees on descending ranges', () => {
+      const out = expectAgreement(`
+        for i in 5..1 { print(i) }
+      `);
+      expect(out).toEqual(['5', '4', '3', '2']);
+    });
+
+    it('agrees on ascending, empty and single-element ranges', () => {
+      expectAgreement(`
+        for i in 0..4 { print(i) }
+        for i in 3..3 { print("never") }
+        for i in 2..3 { print(i) }
+      `);
+    });
+
+    it('agrees on negative bounds in both directions', () => {
+      expectAgreement(`
+        for i in -3..1 { print(i) }
+        for i in 1..-3 { print(i) }
+      `);
+    });
+
+    it('agrees on the oversized-range guard', () => {
+      expectAgreement(`
+        try {
+          for i in 0..50000 { print(i) }
+        } catch e {
+          print("guard:", e.message)
+        }
+      `);
+    });
+  });
+
   describe('determinism', () => {
     it('produces stable object key ordering across backends', () => {
       // The VM previously reversed insertion order when building objects.
