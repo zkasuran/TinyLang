@@ -5,7 +5,7 @@
  * Handles caching (modules only execute once) and circular dependency detection.
  */
 
-import * as fs from 'fs';
+import { getFs } from './node-host';
 import { Lexer } from '../lexer';
 import { Parser } from '../parser';
 import { Interpreter } from '../interpreter/interpreter';
@@ -57,7 +57,7 @@ export class ModuleLoader {
 
     try {
       // Read and execute the module
-      const source = fs.readFileSync(filePath, 'utf-8');
+      const source = getFs().readFileSync(filePath, 'utf-8');
       const lexer = new Lexer(source);
       const tokens = lexer.tokenize();
       const parser = new Parser(tokens);

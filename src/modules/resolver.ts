@@ -5,8 +5,7 @@
  * Supports relative imports, stdlib modules, and .tiny_modules/ packages.
  */
 
-import * as path from 'path';
-import * as fs from 'fs';
+import { getFs, getPath } from './node-host';
 
 /** Well-known standard library module names */
 const STDLIB_MODULES = new Set(['math', 'strings', 'io', 'arrays', 'types', 'utils']);
@@ -39,51 +38,51 @@ export class ModuleResolver {
   }
 
   private resolveRelative(importSource: string, fromFile: string): string {
-    const dir = path.dirname(fromFile);
+    const dir = getPath().dirname(fromFile);
     // Try exact path, then with .tiny extension
     const candidates = [
-      path.resolve(dir, importSource),
-      path.resolve(dir, importSource + '.tiny'),
-      path.resolve(dir, importSource, 'index.tiny'),
+      getPath().resolve(dir, importSource),
+      getPath().resolve(dir, importSource + '.tiny'),
+      getPath().resolve(dir, importSource, 'index.tiny'),
     ];
 
     for (const candidate of candidates) {
-      if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+      if (getFs().existsSync(candidate) && getFs().statSync(candidate).isFile()) {
         return candidate;
       }
     }
 
     throw new Error(
-      `Module not found: '${importSource}' (imported from ${path.basename(fromFile)})`
+      `Module not found: '${importSource}' (imported from ${getPath().basename(fromFile)})`
     );
   }
 
   private resolvePackage(importSource: string, fromFile: string): string {
-    let dir = path.dirname(fromFile);
+    let dir = getPath().dirname(fromFile);
 
     // Walk up looking for .tiny_modules/
     while (true) {
-      const modulesDir = path.join(dir, '.tiny_modules');
-      if (fs.existsSync(modulesDir)) {
+      const modulesDir = getPath().join(dir, '.tiny_modules');
+      if (getFs().existsSync(modulesDir)) {
         const candidates = [
-          path.join(modulesDir, importSource + '.tiny'),
-          path.join(modulesDir, importSource, 'index.tiny'),
+          getPath().join(modulesDir, importSource + '.tiny'),
+          getPath().join(modulesDir, importSource, 'index.tiny'),
         ];
 
         for (const candidate of candidates) {
-          if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+          if (getFs().existsSync(candidate) && getFs().statSync(candidate).isFile()) {
             return candidate;
           }
         }
       }
 
-      const parentDir = path.dirname(dir);
+      const parentDir = getPath().dirname(dir);
       if (parentDir === dir) break;
       dir = parentDir;
     }
 
     throw new Error(
-      `Module not found: '${importSource}' (imported from ${path.basename(fromFile)})`
+      `Module not found: '${importSource}' (imported from ${getPath().basename(fromFile)})`
     );
   }
 }

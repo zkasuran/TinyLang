@@ -1,8 +1,17 @@
 /**
  * Crypto Standard Library Functions
  *
- * Provides cryptographic utilities for TinyLang programs.
- * Uses Node.js crypto module for hash operations.
+ * Provides hashing, base64 and UUID helpers for TinyLang programs.
+ *
+ * These are built on the platform-independent primitives in ./digest, not on
+ * node:crypto. The Node-only `import * as crypto from 'crypto'` and `Buffer`
+ * this module used to rely on made the interpreter impossible to bundle for the
+ * Web IDE (esbuild: 'Could not resolve "crypto"'), so the shipped playground
+ * silently went stale. Everything here now behaves identically under Node and
+ * in the browser.
+ *
+ * hash() supports sha256 (the default) and md5. Any other algorithm is
+ * rejected by name rather than silently falling back to one of these.
  */
 
 import {
@@ -10,7 +19,19 @@ import {
   createString,
   RuntimeError,
 } from '../types/values';
-import * as crypto from 'crypto';
+import {
+  sha256,
+  md5,
+  base64Encode as encodeBase64,
+  base64Decode as decodeBase64,
+  randomUUID as generateUUID,
+} from './digest';
+
+/** Hash algorithms this module implements, by their canonical lowercase name. */
+const ALGORITHMS: Record<string, (input: string) => string> = {
+  sha256,
+  md5,
+};
 
 export const cryptoFunctions: NativeFunctionValue[] = [
   // randomUUID() - Generate a random UUID v4
@@ -18,12 +39,10 @@ export const cryptoFunctions: NativeFunctionValue[] = [
     type: 'native-function',
     name: 'randomUUID',
     arity: 0,
-    fn: () => {
-      return createString(crypto.randomUUID());
-    },
+    fn: () => createString(generateUUID()),
   },
 
-  // hash(str, algo?) - Hash a string with given algorithm (default: sha256)
+  // hash(str, algo?) - Hash a string with the given algorithm (default: sha256)
   {
     type: 'native-function',
     name: 'hash',
@@ -32,18 +51,21 @@ export const cryptoFunctions: NativeFunctionValue[] = [
       if (args.length === 0 || args[0].type !== 'string') {
         throw new RuntimeError('hash() expects a string as first argument');
       }
-      const algo = args.length > 1 && args[1].type === 'string'
-        ? args[1].value
-        : 'sha256';
-      try {
-        const h = crypto.createHash(algo);
-        h.update(args[0].value);
-        return createString(h.digest('hex'));
-      } catch (e) {
+
+      const requested =
+        args.length > 1 && args[1].type === 'string' ? args[1].value : 'sha256';
+      const algorithm = ALGORITHMS[requested.toLowerCase()];
+
+      if (!algorithm) {
+        // Naming the supported set is more useful than a generic failure, and
+        // far better than quietly hashing with a different algorithm.
         throw new RuntimeError(
-          `hash() failed: ${e instanceof Error ? e.message : String(e)}`
+          `hash() does not support '${requested}'. Supported algorithms: ` +
+            `${Object.keys(ALGORITHMS).sort().join(', ')}.`
         );
       }
+
+      return createString(algorithm(args[0].value));
     },
   },
 
@@ -54,9 +76,11 @@ export const cryptoFunctions: NativeFunctionValue[] = [
     arity: 1,
     fn: (args) => {
       if (args[0].type !== 'string') {
-        throw new RuntimeError(`base64Encode() expects a string argument, got ${args[0].type}`);
+        throw new RuntimeError(
+          `base64Encode() expects a string argument, got ${args[0].type}`
+        );
       }
-      return createString(Buffer.from(args[0].value, 'utf-8').toString('base64'));
+      return createString(encodeBase64(args[0].value));
     },
   },
 
@@ -67,10 +91,12 @@ export const cryptoFunctions: NativeFunctionValue[] = [
     arity: 1,
     fn: (args) => {
       if (args[0].type !== 'string') {
-        throw new RuntimeError(`base64Decode() expects a string argument, got ${args[0].type}`);
+        throw new RuntimeError(
+          `base64Decode() expects a string argument, got ${args[0].type}`
+        );
       }
       try {
-        return createString(Buffer.from(args[0].value, 'base64').toString('utf-8'));
+        return createString(decodeBase64(args[0].value));
       } catch (e) {
         throw new RuntimeError(
           `base64Decode() failed: ${e instanceof Error ? e.message : String(e)}`

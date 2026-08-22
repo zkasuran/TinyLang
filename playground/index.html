@@ -988,11 +988,9 @@
 var process = {env:{NODE_ENV:"production"},argv:[],exit:function(){},stdout:{write:function(){}},stderr:{write:function(){}}};
 "use strict";
 var TinyLangBundle = (() => {
-  var __create = Object.create;
   var __defProp = Object.defineProperty;
   var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
   var __getOwnPropNames = Object.getOwnPropertyNames;
-  var __getProtoOf = Object.getPrototypeOf;
   var __hasOwnProp = Object.prototype.hasOwnProperty;
   var __defNormalProp = (obj, key, value) => key in obj ? __defProp(obj, key, { enumerable: true, configurable: true, writable: true, value }) : obj[key] = value;
   var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, {
@@ -1013,14 +1011,6 @@ var TinyLangBundle = (() => {
     }
     return to;
   };
-  var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
-    // If the importer is in node compatibility mode or this is not an ESM
-    // file that has been converted to a CommonJS file using a Babel-
-    // compatible transform (i.e. "__esModule" has not been set), then set
-    // "default" to the CommonJS "module.exports" for node compatibility.
-    isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
-    mod
-  ));
   var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
   var __publicField = (obj, key, value) => __defNormalProp(obj, typeof key !== "symbol" ? key + "" : key, value);
 
@@ -1048,6 +1038,7 @@ var TinyLangBundle = (() => {
     ReturnSignal: () => ReturnSignal,
     RuntimeError: () => RuntimeError,
     STDLIB_PREFIX: () => STDLIB_PREFIX,
+    StepLimitExceeded: () => StepLimitExceeded,
     TestRunner: () => TestRunner,
     TinyLang: () => TinyLang,
     TokenType: () => TokenType,
@@ -1066,12 +1057,15 @@ var TinyLangBundle = (() => {
     formatWatches: () => formatWatches,
     getHelpText: () => getHelpText,
     getLocalsFromEnv: () => getLocalsFromEnv,
+    hasFileSystem: () => hasFileSystem,
     isTruthy: () => isTruthy,
     opcodeName: () => opcodeName,
     optimize: () => optimize,
     parseCommand: () => parseCommand,
     registerStdlib: () => registerStdlib,
     stringify: () => stringify,
+    suggestSimilarName: () => suggestSimilarName,
+    undefinedVariableMessage: () => undefinedVariableMessage,
     valueEquals: () => valueEquals
   });
 
@@ -1113,6 +1107,7 @@ var TinyLangBundle = (() => {
     TokenType2["TRY"] = "TRY";
     TokenType2["CATCH"] = "CATCH";
     TokenType2["THROW"] = "THROW";
+    TokenType2["ENUM"] = "ENUM";
     TokenType2["PLUS"] = "PLUS";
     TokenType2["MINUS"] = "MINUS";
     TokenType2["STAR"] = "STAR";
@@ -1142,7 +1137,11 @@ var TinyLangBundle = (() => {
     TokenType2["SEMICOLON"] = "SEMICOLON";
     TokenType2["ARROW"] = "ARROW";
     TokenType2["PIPE"] = "PIPE";
+    TokenType2["PIPE_ARROW"] = "PIPE_ARROW";
     TokenType2["SPREAD"] = "SPREAD";
+    TokenType2["QUESTION"] = "QUESTION";
+    TokenType2["QUESTION_DOT"] = "QUESTION_DOT";
+    TokenType2["NULLISH_COALESCE"] = "NULLISH_COALESCE";
     TokenType2["EOF"] = "EOF";
     TokenType2["NEWLINE"] = "NEWLINE";
     return TokenType2;
@@ -1177,7 +1176,8 @@ var TinyLangBundle = (() => {
     "test": "TEST" /* TEST */,
     "try": "TRY" /* TRY */,
     "catch": "CATCH" /* CATCH */,
-    "throw": "THROW" /* THROW */
+    "throw": "THROW" /* THROW */,
+    "enum": "ENUM" /* ENUM */
   };
 
   // src/lexer/errors.ts
@@ -1289,8 +1289,14 @@ var TinyLangBundle = (() => {
         case "%":
           this.addToken("PERCENT" /* PERCENT */);
           break;
+        case "?":
+          if (this.match(".")) this.addToken("QUESTION_DOT" /* QUESTION_DOT */);
+          else if (this.match("?")) this.addToken("NULLISH_COALESCE" /* NULLISH_COALESCE */);
+          else this.addToken("QUESTION" /* QUESTION */);
+          break;
         case "|":
-          this.addToken("PIPE" /* PIPE */);
+          if (this.match(">")) this.addToken("PIPE_ARROW" /* PIPE_ARROW */);
+          else this.addToken("PIPE" /* PIPE */);
           break;
         // Multi-character operators
         case "+":
@@ -1772,6 +1778,8 @@ var TinyLangBundle = (() => {
           return this.parseTryCatchStatement();
         case "THROW" /* THROW */:
           return this.parseThrowStatement();
+        case "ENUM" /* ENUM */:
+          return this.parseEnumDeclaration();
         default:
           return this.parseExpressionStatement();
       }
@@ -2204,6 +2212,40 @@ var TinyLangBundle = (() => {
         position
       };
     }
+    parseEnumDeclaration() {
+      const token = this.advance();
+      const position = token.position;
+      const nameToken = this.expect(
+        "IDENTIFIER" /* IDENTIFIER */,
+        "an enum name",
+        "Enum declarations look like: enum Direction { North South East West }"
+      );
+      this.expect(
+        "LBRACE" /* LBRACE */,
+        "'{'",
+        "Enum body must be enclosed in braces { }"
+      );
+      this.skipNewlines();
+      const variants = [];
+      while (!this.check("RBRACE" /* RBRACE */) && !this.isAtEnd()) {
+        this.skipNewlines();
+        if (this.check("RBRACE" /* RBRACE */)) break;
+        const variantToken = this.expect(
+          "IDENTIFIER" /* IDENTIFIER */,
+          "a variant name",
+          "Enum variants are identifiers listed on separate lines"
+        );
+        variants.push(variantToken.value);
+        this.skipNewlines();
+      }
+      this.expect("RBRACE" /* RBRACE */, "'}'", "Close the enum body with }");
+      return {
+        type: "EnumDeclaration",
+        name: nameToken.value,
+        variants,
+        position
+      };
+    }
     parseExpressionStatement() {
       const position = this.peek().position;
       const expression = this.parseExpression();
@@ -2233,8 +2275,90 @@ var TinyLangBundle = (() => {
       }
       return expr;
     }
+    parsePipe() {
+      let left = this.parseNullishCoalesce();
+      while (this.match("PIPE_ARROW" /* PIPE_ARROW */)) {
+        if (this.check("DOT" /* DOT */)) {
+          this.advance();
+          const methodToken = this.expect(
+            "IDENTIFIER" /* IDENTIFIER */,
+            "a method name",
+            "After |> . provide a method name to call on the piped value"
+          );
+          const args = [];
+          if (this.match("LPAREN" /* LPAREN */)) {
+            if (!this.check("RPAREN" /* RPAREN */)) {
+              args.push(this.parseExpression());
+              while (this.match("COMMA" /* COMMA */)) {
+                args.push(this.parseExpression());
+              }
+            }
+            this.expect("RPAREN" /* RPAREN */, "')'", "Close method call with )");
+          }
+          left = {
+            type: "PipeMethodExpression",
+            left,
+            method: methodToken.value,
+            args,
+            position: left.position
+          };
+        } else {
+          const right = this.parseNullishCoalesce();
+          left = {
+            type: "PipeExpression",
+            left,
+            right,
+            position: left.position
+          };
+        }
+      }
+      return left;
+    }
+    parseNullishCoalesce() {
+      let left = this.parseOr();
+      while (this.match("NULLISH_COALESCE" /* NULLISH_COALESCE */)) {
+        const right = this.parseOr();
+        left = {
+          type: "NullishCoalesceExpression",
+          left,
+          right,
+          position: left.position
+        };
+      }
+      return left;
+    }
+    /**
+     * `cond ? whenTrue : whenFalse`.
+     *
+     * Sits just above assignment and below everything else, so `??`, `|>` and the
+     * binary operators all bind tighter and form the condition. Both arms parse an
+     * assignment expression, which makes the operator right-associative:
+     * `a ? b : c ? d : e` groups as `a ? b : (c ? d : e)`.
+     *
+     * This used to return parseOr() unchanged with a comment saying the language
+     * had no `? :`, which left TernaryExpression - and the interpreter's
+     * evalTernaryExpression and the compiler's compileTernaryExpression - as
+     * unreachable dead code.
+     */
     parseTernary() {
-      return this.parseOr();
+      const condition = this.parsePipe();
+      if (!this.match("QUESTION" /* QUESTION */)) {
+        return condition;
+      }
+      const consequent = this.parseAssignment();
+      this.expect(
+        "COLON" /* COLON */,
+        "':'",
+        "A conditional expression looks like: cond ? whenTrue : whenFalse"
+      );
+      const alternate = this.parseAssignment();
+      return {
+        type: "TernaryExpression",
+        condition,
+        consequent,
+        alternate,
+        position: condition.position
+      };
     }
     parseOr() {
       let left = this.parseAnd();
@@ -2372,8 +2496,42 @@ var TinyLangBundle = (() => {
     parseCallMemberIndex() {
       let expr = this.parsePrimary();
       while (true) {
+        if (this.check("NEWLINE" /* NEWLINE */) && this.nextSignificantIsDot()) {
+          while (this.check("NEWLINE" /* NEWLINE */)) {
+            this.advance();
+          }
+        }
         if (this.check("LPAREN" /* LPAREN */)) {
           expr = this.parseCallExpression(expr);
+        } else if (this.check("QUESTION_DOT" /* QUESTION_DOT */)) {
+          this.advance();
+          if (this.check("LBRACKET" /* LBRACKET */)) {
+            this.advance();
+            const index = this.parseExpression();
+            this.expect(
+              "RBRACKET" /* RBRACKET */,
+              "']'",
+              "Optional index access must be closed with ]"
+            );
+            expr = {
+              type: "OptionalIndexExpression",
+              object: expr,
+              index,
+              position: expr.position
+            };
+          } else {
+            const property = this.expect(
+              "IDENTIFIER" /* IDENTIFIER */,
+              "a property name",
+              "After ?. provide a property or method name"
+            );
+            expr = {
+              type: "OptionalMemberExpression",
+              object: expr,
+              property: property.value,
+              position: expr.position
+            };
+          }
         } else if (this.check("DOT" /* DOT */)) {
           if (this.peekNext()?.type === "DOT" /* DOT */) {
             break;
@@ -2797,7 +2955,27 @@ var TinyLangBundle = (() => {
     /**
      * Error recovery: skip tokens until we reach a likely statement boundary
      */
+    /**
+     * Look past any run of NEWLINE tokens and report whether the next
+     * significant token is a DOT. Used to detect fluent method chains that
+     * continue onto the following line.
+     *
+     * A lone DOT is required; `..` is a range operator, not a continuation.
+     */
+    nextSignificantIsDot() {
+      let i = this.current;
+      while (i < this.tokens.length && this.tokens[i].type === "NEWLINE" /* NEWLINE */) {
+        i++;
+      }
+      if (i >= this.tokens.length || this.tokens[i].type !== "DOT" /* DOT */) {
+        return false;
+      }
+      return this.tokens[i + 1]?.type !== "DOT" /* DOT */;
+    }
     synchronize() {
+      if (!this.isAtEnd()) {
+        this.advance();
+      }
       while (!this.isAtEnd()) {
         const prev = this.current > 0 ? this.tokens[this.current - 1] : void 0;
         if (prev?.type === "NEWLINE" /* NEWLINE */ || prev?.type === "SEMICOLON" /* SEMICOLON */) {
@@ -2817,6 +2995,7 @@ var TinyLangBundle = (() => {
           case "TEST" /* TEST */:
           case "TRY" /* TRY */:
           case "THROW" /* THROW */:
+          case "ENUM" /* ENUM */:
             return;
         }
         this.advance();
@@ -2872,9 +3051,7 @@ var TinyLangBundle = (() => {
       if (this.parent) {
         return this.parent.lookup(name);
       }
-      const suggestion = this.findSimilar(name);
-      const hint = suggestion ? `Did you mean '${suggestion}'?` : `Did you forget to declare it with 'let' or 'const'?`;
-      throw new RuntimeError(`Variable '${name}' is not defined. ${hint}`);
+      throw new RuntimeError(undefinedVariableMessage(name, this.getAllNames()));
     }
     /**
      * Check if a variable exists in any reachable scope
@@ -2912,17 +3089,7 @@ var TinyLangBundle = (() => {
      * Returns null if no good match is found (distance > 3).
      */
     findSimilar(name) {
-      const allNames = this.getAllNames();
-      let bestMatch = null;
-      let bestDistance = Infinity;
-      for (const candidate of allNames) {
-        const dist = levenshteinDistance(name.toLowerCase(), candidate.toLowerCase());
-        if (dist < bestDistance && dist <= 3) {
-          bestDistance = dist;
-          bestMatch = candidate;
-        }
-      }
-      return bestMatch;
+      return suggestSimilarName(name, this.getAllNames());
     }
   };
   var RuntimeError = class extends Error {
@@ -2931,6 +3098,29 @@ var TinyLangBundle = (() => {
       __publicField(this, "line", line);
       __publicField(this, "column", column);
       this.name = "RuntimeError";
+    }
+  };
+  function suggestSimilarName(name, candidates) {
+    let bestMatch = null;
+    let bestDistance = Infinity;
+    for (const candidate of candidates) {
+      const dist = levenshteinDistance(name.toLowerCase(), candidate.toLowerCase());
+      if (dist < bestDistance && dist <= 3) {
+        bestDistance = dist;
+        bestMatch = candidate;
+      }
+    }
+    return bestMatch;
+  }
+  function undefinedVariableMessage(name, candidates) {
+    const suggestion = suggestSimilarName(name, candidates);
+    const hint = suggestion ? `Did you mean '${suggestion}'?` : `Did you forget to declare it with 'let' or 'const'?`;
+    return `Variable '${name}' is not defined. ${hint}`;
+  }
+  var StepLimitExceeded = class extends RuntimeError {
+    constructor(message, line, column) {
+      super(message, line, column);
+      this.name = "StepLimitExceeded";
     }
   };
   var BreakSignal = class {
@@ -2984,6 +3174,10 @@ var TinyLangBundle = (() => {
     }
   }
   function stringify(value) {
+    const asClosure = value;
+    if (asClosure.type === "vm-closure") {
+      return `<fn ${asClosure.fn?.name ?? "<anonymous>"}>`;
+    }
     switch (value.type) {
       case "null":
         return "null";
@@ -3151,6 +3345,8 @@ var TinyLangBundle = (() => {
           return this.evalFunctionDeclaration(stmt, env);
         case "ClassDeclaration":
           return this.evalClassDeclaration(stmt, env);
+        case "EnumDeclaration":
+          return this.evalEnumDeclaration(stmt, env);
         case "ReturnStatement":
           return this.evalReturnStatement(stmt, env);
         case "IfStatement":
@@ -3449,6 +3645,16 @@ var TinyLangBundle = (() => {
             expr.position.line,
             expr.position.column
           );
+        case "PipeExpression":
+          return this.evalPipeExpression(expr, env);
+        case "PipeMethodExpression":
+          return this.evalPipeMethodExpression(expr, env);
+        case "OptionalMemberExpression":
+          return this.evalOptionalMemberExpression(expr, env);
+        case "OptionalIndexExpression":
+          return this.evalOptionalIndexExpression(expr, env);
+        case "NullishCoalesceExpression":
+          return this.evalNullishCoalesceExpression(expr, env);
         default:
           throw new RuntimeError(
             `Unknown expression type: ${expr.type}`,
@@ -4042,6 +4248,9 @@ var TinyLangBundle = (() => {
             return obj.elements.pop() || createNull();
           case "shift":
             return obj.elements.shift() || createNull();
+          case "unshift":
+            obj.elements.unshift(...args);
+            return createNumber(obj.elements.length);
           case "length":
             return createNumber(obj.elements.length);
           case "map": {
@@ -4186,6 +4395,9 @@ var TinyLangBundle = (() => {
         const tryEnv = env.createChild();
         return this.executeStatements(stmt.tryBody, tryEnv);
       } catch (error) {
+        if (error instanceof StepLimitExceeded) {
+          throw error;
+        }
         const catchEnv = env.createChild();
         if (error instanceof RuntimeError) {
           const errProps = /* @__PURE__ */ new Map();
@@ -4229,10 +4441,177 @@ var TinyLangBundle = (() => {
       }
       return createString(result);
     }
+    evalEnumDeclaration(stmt, env) {
+      const properties = /* @__PURE__ */ new Map();
+      for (const variant of stmt.variants) {
+        properties.set(variant, createString(variant));
+      }
+      const enumObj = createObject(properties);
+      env.define(stmt.name, enumObj, true);
+      return enumObj;
+    }
+    evalPipeExpression(expr, env) {
+      const left = this.evalExpression(expr.left, env);
+      if (expr.right.type === "CallExpression") {
+        const callee2 = this.evalExpression(expr.right.callee, env);
+        const args = [left, ...expr.right.args.map((arg) => this.evalExpression(arg, env))];
+        return this.callFunction(callee2, args, null, expr.right, env);
+      }
+      if (expr.right.type === "ArrowFunction" || expr.right.type === "FunctionExpression") {
+        const fn = this.evalExpression(expr.right, env);
+        const syntheticCall = {
+          type: "CallExpression",
+          callee: expr.right,
+          args: [],
+          position: expr.position
+        };
+        return this.callFunction(fn, [left], null, syntheticCall, env);
+      }
+      const callee = this.evalExpression(expr.right, env);
+      if (callee.type === "function" || callee.type === "native-function") {
+        const syntheticCall = {
+          type: "CallExpression",
+          callee: expr.right,
+          args: [],
+          position: expr.position
+        };
+        return this.callFunction(callee, [left], null, syntheticCall, env);
+      }
+      throw new RuntimeError(
+        `Right side of pipe operator (|>) must be a function or function call`,
+        expr.position.line,
+        expr.position.column
+      );
+    }
+    evalPipeMethodExpression(expr, env) {
+      const obj = this.evalExpression(expr.left, env);
+      const args = expr.args.map((arg) => this.evalExpression(arg, env));
+      const syntheticCall = {
+        type: "CallExpression",
+        callee: {
+          type: "MemberExpression",
+          object: expr.left,
+          property: expr.method,
+          position: expr.position
+        },
+        args: expr.args,
+        position: expr.position
+      };
+      const builtinResult = this.tryBuiltinMethod(obj, expr.method, syntheticCall, env);
+      if (builtinResult !== void 0) {
+        return builtinResult;
+      }
+      if (obj.type === "instance") {
+        const method = this.findMethod(obj.classRef, expr.method);
+        if (method) {
+          return this.callFunction(method, args, obj, syntheticCall, env);
+        }
+      }
+      if (obj.type === "object") {
+        const prop = obj.properties.get(expr.method);
+        if (prop && (prop.type === "function" || prop.type === "native-function")) {
+          return this.callFunction(prop, args, obj, syntheticCall, env);
+        }
+      }
+      throw new RuntimeError(
+        `Cannot call method '${expr.method}' on ${obj.type}`,
+        expr.position.line,
+        expr.position.column
+      );
+    }
+    evalOptionalMemberExpression(expr, env) {
+      const obj = this.evalExpression(expr.object, env);
+      if (obj.type === "null") {
+        return createNull();
+      }
+      if (obj.type === "object") {
+        return obj.properties.get(expr.property) || createNull();
+      }
+      if (obj.type === "instance") {
+        if (obj.properties.has(expr.property)) {
+          return obj.properties.get(expr.property);
+        }
+        const method = this.findMethod(obj.classRef, expr.property);
+        if (method) return method;
+        return createNull();
+      }
+      if (obj.type === "array") {
+        if (expr.property === "length") {
+          return createNumber(obj.elements.length);
+        }
+      }
+      if (obj.type === "string") {
+        if (expr.property === "length") {
+          return createNumber(obj.value.length);
+        }
+      }
+      throw new RuntimeError(
+        `Cannot access property '${expr.property}' on ${obj.type}`,
+        expr.position.line,
+        expr.position.column
+      );
+    }
+    evalOptionalIndexExpression(expr, env) {
+      const obj = this.evalExpression(expr.object, env);
+      if (obj.type === "null") {
+        return createNull();
+      }
+      const index = this.evalExpression(expr.index, env);
+      if (obj.type === "array") {
+        if (index.type !== "number") {
+          throw new RuntimeError(
+            `Array index must be a number, got ${index.type}`,
+            expr.position.line,
+            expr.position.column
+          );
+        }
+        const idx = Math.floor(index.value);
+        if (idx < 0 || idx >= obj.elements.length) {
+          return createNull();
+        }
+        return obj.elements[idx];
+      }
+      if (obj.type === "string") {
+        if (index.type !== "number") {
+          throw new RuntimeError(
+            `String index must be a number, got ${index.type}`,
+            expr.position.line,
+            expr.position.column
+          );
+        }
+        const idx = Math.floor(index.value);
+        if (idx < 0 || idx >= obj.value.length) {
+          return createNull();
+        }
+        return createString(obj.value[idx]);
+      }
+      if (obj.type === "object") {
+        if (index.type !== "string") {
+          throw new RuntimeError(
+            `Object keys must be strings, got ${index.type}`,
+            expr.position.line,
+            expr.position.column
+          );
+        }
+        return obj.properties.get(index.value) || createNull();
+      }
+      throw new RuntimeError(
+        `Cannot index into ${obj.type}`,
+        expr.position.line,
+        expr.position.column
+      );
+    }
+    evalNullishCoalesceExpression(expr, env) {
+      const left = this.evalExpression(expr.left, env);
+      if (left.type === "null") {
+        return this.evalExpression(expr.right, env);
+      }
+      return left;
+    }
     checkStepLimit() {
       this.steps++;
       if (this.steps > this.maxSteps) {
-        throw new RuntimeError(
+        throw new StepLimitExceeded(
           `Execution limit exceeded (${this.maxSteps} steps). Your program might have an infinite loop. Check your while/for conditions.`
         );
       }
@@ -5137,6 +5516,726 @@ var TinyLangBundle = (() => {
     }
   }
 
+  // src/stdlib/json.ts
+  function jsToRuntime(value) {
+    if (value === null || value === void 0) {
+      return createNull();
+    }
+    if (typeof value === "number") {
+      return createNumber(value);
+    }
+    if (typeof value === "boolean") {
+      return createBoolean(value);
+    }
+    if (typeof value === "string") {
+      return createString(value);
+    }
+    if (Array.isArray(value)) {
+      return createArray(value.map(jsToRuntime));
+    }
+    if (typeof value === "object") {
+      const props = /* @__PURE__ */ new Map();
+      for (const [k, v] of Object.entries(value)) {
+        props.set(k, jsToRuntime(v));
+      }
+      return { type: "object", properties: props };
+    }
+    return createNull();
+  }
+  function runtimeToJs(value) {
+    switch (value.type) {
+      case "number":
+        return value.value;
+      case "string":
+        return value.value;
+      case "boolean":
+        return value.value;
+      case "null":
+        return null;
+      case "array":
+        return value.elements.map(runtimeToJs);
+      case "object": {
+        const obj = {};
+        for (const [k, v] of value.properties) {
+          obj[k] = runtimeToJs(v);
+        }
+        return obj;
+      }
+      default:
+        return stringify(value);
+    }
+  }
+  var jsonFunctions = [
+    // jsonParse(str) - Parse a JSON string into a TinyLang value
+    {
+      type: "native-function",
+      name: "jsonParse",
+      arity: 1,
+      fn: (args) => {
+        if (args[0].type !== "string") {
+          throw new RuntimeError(`jsonParse() expects a string argument, got ${args[0].type}`);
+        }
+        try {
+          const parsed = JSON.parse(args[0].value);
+          return jsToRuntime(parsed);
+        } catch (e) {
+          throw new RuntimeError(
+            `jsonParse() failed: ${e instanceof Error ? e.message : String(e)}`
+          );
+        }
+      }
+    },
+    // jsonStringify(value, indent?) - Convert a TinyLang value to JSON string
+    {
+      type: "native-function",
+      name: "jsonStringify",
+      arity: -1,
+      fn: (args) => {
+        if (args.length === 0) {
+          throw new RuntimeError("jsonStringify() requires at least 1 argument");
+        }
+        const jsValue = runtimeToJs(args[0]);
+        const indent = args.length > 1 && args[1].type === "number" ? args[1].value : void 0;
+        try {
+          return createString(JSON.stringify(jsValue, null, indent));
+        } catch (e) {
+          throw new RuntimeError(
+            `jsonStringify() failed: ${e instanceof Error ? e.message : String(e)}`
+          );
+        }
+      }
+    }
+  ];
+
+  // src/stdlib/digest.ts
+  function utf8Encode(input) {
+    const bytes = [];
+    for (let i = 0; i < input.length; i++) {
+      let code = input.charCodeAt(i);
+      if (code >= 55296 && code <= 56319 && i + 1 < input.length) {
+        const next = input.charCodeAt(i + 1);
+        if (next >= 56320 && next <= 57343) {
+          code = (code - 55296 << 10) + (next - 56320) + 65536;
+          i++;
+        }
+      }
+      if (code < 128) {
+        bytes.push(code);
+      } else if (code < 2048) {
+        bytes.push(192 | code >> 6, 128 | code & 63);
+      } else if (code < 65536) {
+        bytes.push(224 | code >> 12, 128 | code >> 6 & 63, 128 | code & 63);
+      } else {
+        bytes.push(
+          240 | code >> 18,
+          128 | code >> 12 & 63,
+          128 | code >> 6 & 63,
+          128 | code & 63
+        );
+      }
+    }
+    return bytes;
+  }
+  function utf8Decode(bytes) {
+    let out = "";
+    let i = 0;
+    while (i < bytes.length) {
+      const b = bytes[i];
+      let code;
+      let extra;
+      if (b < 128) {
+        code = b;
+        extra = 0;
+      } else if ((b & 224) === 192) {
+        code = b & 31;
+        extra = 1;
+      } else if ((b & 240) === 224) {
+        code = b & 15;
+        extra = 2;
+      } else if ((b & 248) === 240) {
+        code = b & 7;
+        extra = 3;
+      } else {
+        throw new Error("invalid UTF-8: unexpected continuation byte");
+      }
+      if (i + extra >= bytes.length + (extra === 0 ? 1 : 0) && extra > 0) {
+        throw new Error("invalid UTF-8: truncated sequence");
+      }
+      for (let k = 1; k <= extra; k++) {
+        const cont = bytes[i + k];
+        if (cont === void 0 || (cont & 192) !== 128) {
+          throw new Error("invalid UTF-8: truncated sequence");
+        }
+        code = code << 6 | cont & 63;
+      }
+      i += extra + 1;
+      if (code > 65535) {
+        code -= 65536;
+        out += String.fromCharCode(55296 + (code >> 10), 56320 + (code & 1023));
+      } else {
+        out += String.fromCharCode(code);
+      }
+    }
+    return out;
+  }
+  var B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  function base64Encode(input) {
+    const bytes = utf8Encode(input);
+    let out = "";
+    for (let i = 0; i < bytes.length; i += 3) {
+      const b0 = bytes[i];
+      const b1 = bytes[i + 1];
+      const b2 = bytes[i + 2];
+      out += B64[b0 >> 2];
+      out += B64[(b0 & 3) << 4 | (b1 === void 0 ? 0 : b1 >> 4)];
+      out += b1 === void 0 ? "=" : B64[(b1 & 15) << 2 | (b2 === void 0 ? 0 : b2 >> 6)];
+      out += b2 === void 0 ? "=" : B64[b2 & 63];
+    }
+    return out;
+  }
+  function base64Decode(input) {
+    const cleaned = input.replace(/[\r\n\s]/g, "");
+    if (cleaned.length % 4 !== 0 || /[^A-Za-z0-9+/=]/.test(cleaned)) {
+      throw new Error("invalid base64 input");
+    }
+    const bytes = [];
+    for (let i = 0; i < cleaned.length; i += 4) {
+      const c = [0, 1, 2, 3].map((k) => {
+        const ch = cleaned[i + k];
+        return ch === "=" ? -1 : B64.indexOf(ch);
+      });
+      if (c[0] < 0 || c[1] < 0) {
+        throw new Error("invalid base64 input");
+      }
+      bytes.push(c[0] << 2 | c[1] >> 4);
+      if (c[2] >= 0) bytes.push((c[1] & 15) << 4 | c[2] >> 2);
+      if (c[3] >= 0) bytes.push((c[2] & 3) << 6 | c[3]);
+    }
+    return utf8Decode(bytes);
+  }
+  function toHex(words) {
+    let out = "";
+    for (const w of words) {
+      out += (w >>> 0).toString(16).padStart(8, "0");
+    }
+    return out;
+  }
+  var K256 = [
+    1116352408,
+    1899447441,
+    3049323471,
+    3921009573,
+    961987163,
+    1508970993,
+    2453635748,
+    2870763221,
+    3624381080,
+    310598401,
+    607225278,
+    1426881987,
+    1925078388,
+    2162078206,
+    2614888103,
+    3248222580,
+    3835390401,
+    4022224774,
+    264347078,
+    604807628,
+    770255983,
+    1249150122,
+    1555081692,
+    1996064986,
+    2554220882,
+    2821834349,
+    2952996808,
+    3210313671,
+    3336571891,
+    3584528711,
+    113926993,
+    338241895,
+    666307205,
+    773529912,
+    1294757372,
+    1396182291,
+    1695183700,
+    1986661051,
+    2177026350,
+    2456956037,
+    2730485921,
+    2820302411,
+    3259730800,
+    3345764771,
+    3516065817,
+    3600352804,
+    4094571909,
+    275423344,
+    430227734,
+    506948616,
+    659060556,
+    883997877,
+    958139571,
+    1322822218,
+    1537002063,
+    1747873779,
+    1955562222,
+    2024104815,
+    2227730452,
+    2361852424,
+    2428436474,
+    2756734187,
+    3204031479,
+    3329325298
+  ];
+  function sha256(input) {
+    const bytes = utf8Encode(input);
+    const bitLen = bytes.length * 8;
+    bytes.push(128);
+    while (bytes.length % 64 !== 56) bytes.push(0);
+    const hi = Math.floor(bitLen / 4294967296);
+    const lo = bitLen >>> 0;
+    bytes.push(
+      hi >>> 24 & 255,
+      hi >>> 16 & 255,
+      hi >>> 8 & 255,
+      hi & 255,
+      lo >>> 24 & 255,
+      lo >>> 16 & 255,
+      lo >>> 8 & 255,
+      lo & 255
+    );
+    const h = [
+      1779033703,
+      3144134277,
+      1013904242,
+      2773480762,
+      1359893119,
+      2600822924,
+      528734635,
+      1541459225
+    ];
+    const w = new Array(64);
+    const rotr = (x, n) => x >>> n | x << 32 - n;
+    for (let off = 0; off < bytes.length; off += 64) {
+      for (let i = 0; i < 16; i++) {
+        const j = off + i * 4;
+        w[i] = (bytes[j] << 24 | bytes[j + 1] << 16 | bytes[j + 2] << 8 | bytes[j + 3]) >>> 0;
+      }
+      for (let i = 16; i < 64; i++) {
+        const s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ w[i - 15] >>> 3;
+        const s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ w[i - 2] >>> 10;
+        w[i] = w[i - 16] + s0 + w[i - 7] + s1 >>> 0;
+      }
+      let [a, b, c, d, e, f, g, hh] = h;
+      for (let i = 0; i < 64; i++) {
+        const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+        const ch = e & f ^ ~e & g;
+        const t1 = hh + S1 + ch + K256[i] + w[i] >>> 0;
+        const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+        const maj = a & b ^ a & c ^ b & c;
+        const t2 = S0 + maj >>> 0;
+        hh = g;
+        g = f;
+        f = e;
+        e = d + t1 >>> 0;
+        d = c;
+        c = b;
+        b = a;
+        a = t1 + t2 >>> 0;
+      }
+      h[0] = h[0] + a >>> 0;
+      h[1] = h[1] + b >>> 0;
+      h[2] = h[2] + c >>> 0;
+      h[3] = h[3] + d >>> 0;
+      h[4] = h[4] + e >>> 0;
+      h[5] = h[5] + f >>> 0;
+      h[6] = h[6] + g >>> 0;
+      h[7] = h[7] + hh >>> 0;
+    }
+    return toHex(h);
+  }
+  var MD5_S = [
+    7,
+    12,
+    17,
+    22,
+    7,
+    12,
+    17,
+    22,
+    7,
+    12,
+    17,
+    22,
+    7,
+    12,
+    17,
+    22,
+    5,
+    9,
+    14,
+    20,
+    5,
+    9,
+    14,
+    20,
+    5,
+    9,
+    14,
+    20,
+    5,
+    9,
+    14,
+    20,
+    4,
+    11,
+    16,
+    23,
+    4,
+    11,
+    16,
+    23,
+    4,
+    11,
+    16,
+    23,
+    4,
+    11,
+    16,
+    23,
+    6,
+    10,
+    15,
+    21,
+    6,
+    10,
+    15,
+    21,
+    6,
+    10,
+    15,
+    21,
+    6,
+    10,
+    15,
+    21
+  ];
+  var MD5_K = Array.from(
+    { length: 64 },
+    (_, i) => Math.floor(Math.abs(Math.sin(i + 1)) * 4294967296)
+  );
+  function md5(input) {
+    const bytes = utf8Encode(input);
+    const bitLen = bytes.length * 8;
+    bytes.push(128);
+    while (bytes.length % 64 !== 56) bytes.push(0);
+    const lo = bitLen >>> 0;
+    const hi = Math.floor(bitLen / 4294967296);
+    bytes.push(
+      lo & 255,
+      lo >>> 8 & 255,
+      lo >>> 16 & 255,
+      lo >>> 24 & 255,
+      hi & 255,
+      hi >>> 8 & 255,
+      hi >>> 16 & 255,
+      hi >>> 24 & 255
+    );
+    let a0 = 1732584193, b0 = 4023233417, c0 = 2562383102, d0 = 271733878;
+    const rotl = (x, n) => x << n | x >>> 32 - n;
+    const m = new Array(16);
+    for (let off = 0; off < bytes.length; off += 64) {
+      for (let i = 0; i < 16; i++) {
+        const j = off + i * 4;
+        m[i] = (bytes[j] | bytes[j + 1] << 8 | bytes[j + 2] << 16 | bytes[j + 3] << 24) >>> 0;
+      }
+      let a = a0, b = b0, c = c0, d = d0;
+      for (let i = 0; i < 64; i++) {
+        let f;
+        let g;
+        if (i < 16) {
+          f = b & c | ~b & d;
+          g = i;
+        } else if (i < 32) {
+          f = d & b | ~d & c;
+          g = (5 * i + 1) % 16;
+        } else if (i < 48) {
+          f = b ^ c ^ d;
+          g = (3 * i + 5) % 16;
+        } else {
+          f = c ^ (b | ~d);
+          g = 7 * i % 16;
+        }
+        const tmp = d;
+        d = c;
+        c = b;
+        const sum = a + f + MD5_K[i] + m[g] >>> 0;
+        b = b + rotl(sum, MD5_S[i]) >>> 0;
+        a = tmp;
+      }
+      a0 = a0 + a >>> 0;
+      b0 = b0 + b >>> 0;
+      c0 = c0 + c >>> 0;
+      d0 = d0 + d >>> 0;
+    }
+    const leHex = (x) => [x & 255, x >>> 8 & 255, x >>> 16 & 255, x >>> 24 & 255].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    return leHex(a0) + leHex(b0) + leHex(c0) + leHex(d0);
+  }
+  function randomUUID() {
+    const g = globalThis;
+    if (typeof g.crypto?.randomUUID === "function") {
+      return g.crypto.randomUUID();
+    }
+    const bytes = new Uint8Array(16);
+    if (typeof g.crypto?.getRandomValues === "function") {
+      g.crypto.getRandomValues(bytes);
+    } else {
+      for (let i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
+    }
+    bytes[6] = bytes[6] & 15 | 64;
+    bytes[8] = bytes[8] & 63 | 128;
+    const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+
+  // src/stdlib/crypto.ts
+  var ALGORITHMS = {
+    sha256,
+    md5
+  };
+  var cryptoFunctions = [
+    // randomUUID() - Generate a random UUID v4
+    {
+      type: "native-function",
+      name: "randomUUID",
+      arity: 0,
+      fn: () => createString(randomUUID())
+    },
+    // hash(str, algo?) - Hash a string with the given algorithm (default: sha256)
+    {
+      type: "native-function",
+      name: "hash",
+      arity: -1,
+      fn: (args) => {
+        if (args.length === 0 || args[0].type !== "string") {
+          throw new RuntimeError("hash() expects a string as first argument");
+        }
+        const requested = args.length > 1 && args[1].type === "string" ? args[1].value : "sha256";
+        const algorithm = ALGORITHMS[requested.toLowerCase()];
+        if (!algorithm) {
+          throw new RuntimeError(
+            `hash() does not support '${requested}'. Supported algorithms: ${Object.keys(ALGORITHMS).sort().join(", ")}.`
+          );
+        }
+        return createString(algorithm(args[0].value));
+      }
+    },
+    // base64Encode(str) - Base64 encode a string
+    {
+      type: "native-function",
+      name: "base64Encode",
+      arity: 1,
+      fn: (args) => {
+        if (args[0].type !== "string") {
+          throw new RuntimeError(
+            `base64Encode() expects a string argument, got ${args[0].type}`
+          );
+        }
+        return createString(base64Encode(args[0].value));
+      }
+    },
+    // base64Decode(str) - Base64 decode a string
+    {
+      type: "native-function",
+      name: "base64Decode",
+      arity: 1,
+      fn: (args) => {
+        if (args[0].type !== "string") {
+          throw new RuntimeError(
+            `base64Decode() expects a string argument, got ${args[0].type}`
+          );
+        }
+        try {
+          return createString(base64Decode(args[0].value));
+        } catch (e) {
+          throw new RuntimeError(
+            `base64Decode() failed: ${e instanceof Error ? e.message : String(e)}`
+          );
+        }
+      }
+    }
+  ];
+
+  // src/stdlib/collections.ts
+  var collectionsFunctions = [
+    // ============ Set Operations ============
+    // Set_new() - Create a new empty set (backed by array)
+    {
+      type: "native-function",
+      name: "Set_new",
+      arity: 0,
+      fn: () => {
+        return createArray([]);
+      }
+    },
+    // Set_add(set, value) - Add a value to the set (if not already present)
+    {
+      type: "native-function",
+      name: "Set_add",
+      arity: 2,
+      fn: (args) => {
+        if (args[0].type !== "array") {
+          throw new RuntimeError(`Set_add() expects a set (array) as first argument, got ${args[0].type}`);
+        }
+        const set = args[0];
+        const value = args[1];
+        const exists = set.elements.some((el) => valueEquals(el, value));
+        if (!exists) {
+          set.elements.push(value);
+        }
+        return set;
+      }
+    },
+    // Set_has(set, value) - Check if a value exists in the set
+    {
+      type: "native-function",
+      name: "Set_has",
+      arity: 2,
+      fn: (args) => {
+        if (args[0].type !== "array") {
+          throw new RuntimeError(`Set_has() expects a set (array) as first argument, got ${args[0].type}`);
+        }
+        const exists = args[0].elements.some((el) => valueEquals(el, args[1]));
+        return createBoolean(exists);
+      }
+    },
+    // Set_remove(set, value) - Remove a value from the set
+    {
+      type: "native-function",
+      name: "Set_remove",
+      arity: 2,
+      fn: (args) => {
+        if (args[0].type !== "array") {
+          throw new RuntimeError(`Set_remove() expects a set (array) as first argument, got ${args[0].type}`);
+        }
+        const set = args[0];
+        const idx = set.elements.findIndex((el) => valueEquals(el, args[1]));
+        if (idx !== -1) {
+          set.elements.splice(idx, 1);
+        }
+        return set;
+      }
+    },
+    // Set_size(set) - Get the number of elements in the set
+    {
+      type: "native-function",
+      name: "Set_size",
+      arity: 1,
+      fn: (args) => {
+        if (args[0].type !== "array") {
+          throw new RuntimeError(`Set_size() expects a set (array) as first argument, got ${args[0].type}`);
+        }
+        return createNumber(args[0].elements.length);
+      }
+    },
+    // ============ Map Operations ============
+    // Map_new() - Create a new empty map (backed by object)
+    {
+      type: "native-function",
+      name: "Map_new",
+      arity: 0,
+      fn: () => {
+        return { type: "object", properties: /* @__PURE__ */ new Map() };
+      }
+    },
+    // Map_set(map, key, value) - Set a key-value pair in the map
+    {
+      type: "native-function",
+      name: "Map_set",
+      arity: 3,
+      fn: (args) => {
+        if (args[0].type !== "object") {
+          throw new RuntimeError(`Map_set() expects a map (object) as first argument, got ${args[0].type}`);
+        }
+        if (args[1].type !== "string") {
+          throw new RuntimeError(`Map_set() expects a string key as second argument, got ${args[1].type}`);
+        }
+        args[0].properties.set(args[1].value, args[2]);
+        return args[0];
+      }
+    },
+    // Map_get(map, key) - Get the value for a key in the map
+    {
+      type: "native-function",
+      name: "Map_get",
+      arity: 2,
+      fn: (args) => {
+        if (args[0].type !== "object") {
+          throw new RuntimeError(`Map_get() expects a map (object) as first argument, got ${args[0].type}`);
+        }
+        if (args[1].type !== "string") {
+          throw new RuntimeError(`Map_get() expects a string key as second argument, got ${args[1].type}`);
+        }
+        return args[0].properties.get(args[1].value) || createNull();
+      }
+    },
+    // Map_has(map, key) - Check if a key exists in the map
+    {
+      type: "native-function",
+      name: "Map_has",
+      arity: 2,
+      fn: (args) => {
+        if (args[0].type !== "object") {
+          throw new RuntimeError(`Map_has() expects a map (object) as first argument, got ${args[0].type}`);
+        }
+        if (args[1].type !== "string") {
+          throw new RuntimeError(`Map_has() expects a string key as second argument, got ${args[1].type}`);
+        }
+        return createBoolean(args[0].properties.has(args[1].value));
+      }
+    },
+    // Map_delete(map, key) - Delete a key from the map
+    {
+      type: "native-function",
+      name: "Map_delete",
+      arity: 2,
+      fn: (args) => {
+        if (args[0].type !== "object") {
+          throw new RuntimeError(`Map_delete() expects a map (object) as first argument, got ${args[0].type}`);
+        }
+        if (args[1].type !== "string") {
+          throw new RuntimeError(`Map_delete() expects a string key as second argument, got ${args[1].type}`);
+        }
+        args[0].properties.delete(args[1].value);
+        return args[0];
+      }
+    },
+    // Map_keys(map) - Get all keys in the map
+    {
+      type: "native-function",
+      name: "Map_keys",
+      arity: 1,
+      fn: (args) => {
+        if (args[0].type !== "object") {
+          throw new RuntimeError(`Map_keys() expects a map (object) as first argument, got ${args[0].type}`);
+        }
+        const keys = Array.from(args[0].properties.keys()).map((k) => ({ type: "string", value: k }));
+        return createArray(keys);
+      }
+    },
+    // Map_size(map) - Get the number of entries in the map
+    {
+      type: "native-function",
+      name: "Map_size",
+      arity: 1,
+      fn: (args) => {
+        if (args[0].type !== "object") {
+          throw new RuntimeError(`Map_size() expects a map (object) as first argument, got ${args[0].type}`);
+        }
+        return createNumber(args[0].properties.size);
+      }
+    }
+  ];
+
   // src/stdlib/register.ts
   function registerStdlib(env, options = {}) {
     const outputHandler = options.output || ((msg) => console.log(msg));
@@ -5163,6 +6262,15 @@ var TinyLangBundle = (() => {
     for (const fn of utilFunctions) {
       env.define(fn.name, fn);
     }
+    for (const fn of jsonFunctions) {
+      env.define(fn.name, fn);
+    }
+    for (const fn of cryptoFunctions) {
+      env.define(fn.name, fn);
+    }
+    for (const fn of collectionsFunctions) {
+      env.define(fn.name, fn);
+    }
   }
 
   // src/compiler/opcodes.ts
@@ -5170,6 +6278,8 @@ var TinyLangBundle = (() => {
     OpCode2[OpCode2["CONST"] = 1] = "CONST";
     OpCode2[OpCode2["POP"] = 2] = "POP";
     OpCode2[OpCode2["DUP"] = 3] = "DUP";
+    OpCode2[OpCode2["DUP2"] = 4] = "DUP2";
+    OpCode2[OpCode2["ROT"] = 5] = "ROT";
     OpCode2[OpCode2["ADD"] = 16] = "ADD";
     OpCode2[OpCode2["SUB"] = 17] = "SUB";
     OpCode2[OpCode2["MUL"] = 18] = "MUL";
@@ -5177,6 +6287,7 @@ var TinyLangBundle = (() => {
     OpCode2[OpCode2["MOD"] = 20] = "MOD";
     OpCode2[OpCode2["POW"] = 21] = "POW";
     OpCode2[OpCode2["NEGATE"] = 22] = "NEGATE";
+    OpCode2[OpCode2["COMPOUND"] = 23] = "COMPOUND";
     OpCode2[OpCode2["EQ"] = 32] = "EQ";
     OpCode2[OpCode2["NEQ"] = 33] = "NEQ";
     OpCode2[OpCode2["LT"] = 34] = "LT";
@@ -5190,12 +6301,15 @@ var TinyLangBundle = (() => {
     OpCode2[OpCode2["JMP_IF_FALSE"] = 65] = "JMP_IF_FALSE";
     OpCode2[OpCode2["JMP_IF_TRUE"] = 66] = "JMP_IF_TRUE";
     OpCode2[OpCode2["LOOP"] = 67] = "LOOP";
+    OpCode2[OpCode2["JMP_IF_NULL"] = 68] = "JMP_IF_NULL";
     OpCode2[OpCode2["LOAD_LOCAL"] = 80] = "LOAD_LOCAL";
     OpCode2[OpCode2["STORE_LOCAL"] = 81] = "STORE_LOCAL";
     OpCode2[OpCode2["LOAD_GLOBAL"] = 82] = "LOAD_GLOBAL";
     OpCode2[OpCode2["STORE_GLOBAL"] = 83] = "STORE_GLOBAL";
     OpCode2[OpCode2["LOAD_UPVALUE"] = 84] = "LOAD_UPVALUE";
     OpCode2[OpCode2["STORE_UPVALUE"] = 85] = "STORE_UPVALUE";
+    OpCode2[OpCode2["LOAD_ARGC"] = 86] = "LOAD_ARGC";
+    OpCode2[OpCode2["DECLARE_GLOBAL"] = 87] = "DECLARE_GLOBAL";
     OpCode2[OpCode2["CALL"] = 96] = "CALL";
     OpCode2[OpCode2["RETURN"] = 97] = "RETURN";
     OpCode2[OpCode2["CLOSURE"] = 98] = "CLOSURE";
@@ -5205,20 +6319,80 @@ var TinyLangBundle = (() => {
     OpCode2[OpCode2["SET_INDEX"] = 115] = "SET_INDEX";
     OpCode2[OpCode2["GET_PROP"] = 116] = "GET_PROP";
     OpCode2[OpCode2["SET_PROP"] = 117] = "SET_PROP";
+    OpCode2[OpCode2["CHECK_ITERABLE"] = 124] = "CHECK_ITERABLE";
+    OpCode2[OpCode2["ARRAY_APPEND"] = 118] = "ARRAY_APPEND";
+    OpCode2[OpCode2["ARRAY_SPREAD"] = 119] = "ARRAY_SPREAD";
+    OpCode2[OpCode2["DESTRUCT_ELEM"] = 120] = "DESTRUCT_ELEM";
+    OpCode2[OpCode2["DESTRUCT_PROP"] = 121] = "DESTRUCT_PROP";
+    OpCode2[OpCode2["INDEX_OPTIONAL"] = 122] = "INDEX_OPTIONAL";
+    OpCode2[OpCode2["GET_METHOD"] = 123] = "GET_METHOD";
     OpCode2[OpCode2["CLASS"] = 128] = "CLASS";
     OpCode2[OpCode2["METHOD"] = 129] = "METHOD";
     OpCode2[OpCode2["INHERIT"] = 130] = "INHERIT";
     OpCode2[OpCode2["NEW_INSTANCE"] = 131] = "NEW_INSTANCE";
     OpCode2[OpCode2["GET_THIS"] = 132] = "GET_THIS";
     OpCode2[OpCode2["PRINT"] = 144] = "PRINT";
+    OpCode2[OpCode2["TRY_BEGIN"] = 160] = "TRY_BEGIN";
+    OpCode2[OpCode2["TRY_END"] = 161] = "TRY_END";
+    OpCode2[OpCode2["THROW"] = 162] = "THROW";
+    OpCode2[OpCode2["RAISE"] = 163] = "RAISE";
     OpCode2[OpCode2["HALT"] = 255] = "HALT";
     return OpCode2;
   })(OpCode || {});
+  var TWO_BYTE_OPERAND = /* @__PURE__ */ new Set([
+    1 /* CONST */,
+    5 /* ROT */,
+    23 /* COMPOUND */,
+    64 /* JMP */,
+    65 /* JMP_IF_FALSE */,
+    66 /* JMP_IF_TRUE */,
+    68 /* JMP_IF_NULL */,
+    67 /* LOOP */,
+    80 /* LOAD_LOCAL */,
+    81 /* STORE_LOCAL */,
+    82 /* LOAD_GLOBAL */,
+    83 /* STORE_GLOBAL */,
+    87 /* DECLARE_GLOBAL */,
+    84 /* LOAD_UPVALUE */,
+    85 /* STORE_UPVALUE */,
+    96 /* CALL */,
+    98 /* CLOSURE */,
+    112 /* ARRAY */,
+    113 /* OBJECT */,
+    116 /* GET_PROP */,
+    117 /* SET_PROP */,
+    123 /* GET_METHOD */,
+    120 /* DESTRUCT_ELEM */,
+    121 /* DESTRUCT_PROP */,
+    128 /* CLASS */,
+    129 /* METHOD */,
+    131 /* NEW_INSTANCE */,
+    144 /* PRINT */,
+    160 /* TRY_BEGIN */,
+    163 /* RAISE */
+  ]);
+  var ADDRESS_OPERAND = /* @__PURE__ */ new Set([
+    64 /* JMP */,
+    65 /* JMP_IF_FALSE */,
+    66 /* JMP_IF_TRUE */,
+    68 /* JMP_IF_NULL */,
+    67 /* LOOP */,
+    160 /* TRY_BEGIN */
+  ]);
+  function instructionSize(op) {
+    return TWO_BYTE_OPERAND.has(op) ? 3 : 1;
+  }
+  function hasAddressOperand(op) {
+    return ADDRESS_OPERAND.has(op);
+  }
   function opcodeName(op) {
     const names = {
       [1 /* CONST */]: "CONST",
       [2 /* POP */]: "POP",
       [3 /* DUP */]: "DUP",
+      [4 /* DUP2 */]: "DUP2",
+      [5 /* ROT */]: "ROT",
+      [23 /* COMPOUND */]: "COMPOUND",
       [16 /* ADD */]: "ADD",
       [17 /* SUB */]: "SUB",
       [18 /* MUL */]: "MUL",
@@ -5239,12 +6413,15 @@ var TinyLangBundle = (() => {
       [65 /* JMP_IF_FALSE */]: "JMP_IF_FALSE",
       [66 /* JMP_IF_TRUE */]: "JMP_IF_TRUE",
       [67 /* LOOP */]: "LOOP",
+      [68 /* JMP_IF_NULL */]: "JMP_IF_NULL",
       [80 /* LOAD_LOCAL */]: "LOAD_LOCAL",
       [81 /* STORE_LOCAL */]: "STORE_LOCAL",
       [82 /* LOAD_GLOBAL */]: "LOAD_GLOBAL",
       [83 /* STORE_GLOBAL */]: "STORE_GLOBAL",
+      [87 /* DECLARE_GLOBAL */]: "DECLARE_GLOBAL",
       [84 /* LOAD_UPVALUE */]: "LOAD_UPVALUE",
       [85 /* STORE_UPVALUE */]: "STORE_UPVALUE",
+      [86 /* LOAD_ARGC */]: "LOAD_ARGC",
       [96 /* CALL */]: "CALL",
       [97 /* RETURN */]: "RETURN",
       [98 /* CLOSURE */]: "CLOSURE",
@@ -5254,20 +6431,41 @@ var TinyLangBundle = (() => {
       [115 /* SET_INDEX */]: "SET_INDEX",
       [116 /* GET_PROP */]: "GET_PROP",
       [117 /* SET_PROP */]: "SET_PROP",
+      [124 /* CHECK_ITERABLE */]: "CHECK_ITERABLE",
+      [118 /* ARRAY_APPEND */]: "ARRAY_APPEND",
+      [119 /* ARRAY_SPREAD */]: "ARRAY_SPREAD",
+      [120 /* DESTRUCT_ELEM */]: "DESTRUCT_ELEM",
+      [121 /* DESTRUCT_PROP */]: "DESTRUCT_PROP",
+      [122 /* INDEX_OPTIONAL */]: "INDEX_OPTIONAL",
+      [123 /* GET_METHOD */]: "GET_METHOD",
       [128 /* CLASS */]: "CLASS",
       [129 /* METHOD */]: "METHOD",
       [130 /* INHERIT */]: "INHERIT",
       [131 /* NEW_INSTANCE */]: "NEW_INSTANCE",
       [132 /* GET_THIS */]: "GET_THIS",
       [144 /* PRINT */]: "PRINT",
+      [160 /* TRY_BEGIN */]: "TRY_BEGIN",
+      [161 /* TRY_END */]: "TRY_END",
+      [162 /* THROW */]: "THROW",
+      [163 /* RAISE */]: "RAISE",
       [255 /* HALT */]: "HALT"
     };
     return names[op] || `UNKNOWN(${op})`;
   }
 
+  // src/compiler/errors.ts
+  var CompilerError = class extends Error {
+    constructor(message, line) {
+      super(message);
+      __publicField(this, "line", line);
+      this.name = "CompilerError";
+    }
+  };
+
   // src/compiler/chunk.ts
   var MAGIC_BYTES = [84, 73, 78, 89];
   var FORMAT_VERSION = 1;
+  var MAX_16BIT_OPERAND = 65535;
   var Chunk = class _Chunk {
     constructor(name = "<script>") {
       /** Bytecode instructions */
@@ -5291,10 +6489,28 @@ var TinyLangBundle = (() => {
      * Write a 16-bit value as two bytes (big-endian)
      */
     write16(value, line) {
+      this.checkOperand(value, line);
       this.code.push(value >> 8 & 255);
       this.lines.push(line);
       this.code.push(value & 255);
       this.lines.push(line);
+    }
+    /**
+     * Reject an operand that does not fit in 16 bits.
+     *
+     * Both write16 and patch16 used to mask with `& 0xFF` and no bounds check, so
+     * a program compiling to more than 64KB of bytecode kept compiling: jump
+     * targets silently wrapped and the VM jumped to an address 65536 bytes short
+     * of the intended one, producing arbitrary misbehaviour with no diagnostic.
+     * A clear failure at compile time is the only honest answer.
+     */
+    checkOperand(value, line) {
+      if (!Number.isInteger(value) || value < 0 || value > MAX_16BIT_OPERAND) {
+        throw new CompilerError(
+          `Bytecode operand ${value} does not fit in the 16 bits this format allows (0..${MAX_16BIT_OPERAND}). A single chunk cannot exceed ${MAX_16BIT_OPERAND} bytes of code, ${MAX_16BIT_OPERAND + 1} constants or ${MAX_16BIT_OPERAND + 1} locals. Split the program into smaller functions.`,
+          line
+        );
+      }
     }
     /**
      * Add a constant to the pool and return its index
@@ -5313,6 +6529,7 @@ var TinyLangBundle = (() => {
      * Patch a 16-bit value at a given offset (for backpatching jumps)
      */
     patch16(offset, value) {
+      this.checkOperand(value, this.lines[offset]);
       this.code[offset] = value >> 8 & 255;
       this.code[offset + 1] = value & 255;
     }
@@ -5405,13 +6622,6 @@ var TinyLangBundle = (() => {
   };
 
   // src/compiler/compiler.ts
-  var CompilerError = class extends Error {
-    constructor(message, line) {
-      super(message);
-      __publicField(this, "line", line);
-      this.name = "CompilerError";
-    }
-  };
   var Compiler = class {
     constructor() {
       __publicField(this, "current");
@@ -5424,7 +6634,9 @@ var TinyLangBundle = (() => {
         scopeDepth: 0,
         chunk: new Chunk(name),
         functionName: name,
-        enclosing
+        enclosing,
+        loops: [],
+        tryDepth: 0
       };
     }
     /**
@@ -5485,6 +6697,47 @@ var TinyLangBundle = (() => {
         isCaptured: false
       });
     }
+    /**
+     * Declare `name` as a local, rejecting a genuine redeclaration.
+     *
+     * The interpreter's Environment.define throws when the name already exists in
+     * the *same* environment. The compiler's scopes mirror those environments
+     * one-for-one (beginScope where the interpreter calls createChild), so "already
+     * a local at the current scopeDepth" is the same condition. Shadowing in a
+     * nested scope, and a loop body rebinding its own local on each iteration, both
+     * live at a deeper depth and are untouched.
+     *
+     * The error is emitted as a RAISE instruction rather than thrown here, because
+     * the interpreter reports it at the moment execution reaches the declaration:
+     * a redeclaration inside `if false { }` is never reported, and one inside `try`
+     * is caught. Failing compilation would change both.
+     */
+    declareLocal(name, line) {
+      if (this.isRedeclaredInCurrentScope(name)) {
+        this.emitRaise(`Variable '${name}' is already declared in this scope`, line);
+      }
+      this.addLocal(name);
+    }
+    isRedeclaredInCurrentScope(name) {
+      for (let i = this.current.locals.length - 1; i >= 0; i--) {
+        const local = this.current.locals[i];
+        if (local.depth < this.current.scopeDepth) return false;
+        if (local.name === name) return true;
+      }
+      return false;
+    }
+    /** Emit an instruction that raises `message` when reached. */
+    emitRaise(message, line) {
+      const msgIdx = this.current.chunk.addConstant(createString(message));
+      this.emit(163 /* RAISE */, line);
+      this.emit16(msgIdx, line);
+    }
+    /** Emit the store for a top-level declaration (not an assignment). */
+    emitDeclareGlobal(name, line) {
+      const nameIdx = this.current.chunk.addConstant(createString(name));
+      this.emit(87 /* DECLARE_GLOBAL */, line);
+      this.emit16(nameIdx, line);
+    }
     resolveLocal(scope, name) {
       for (let i = scope.locals.length - 1; i >= 0; i--) {
         if (scope.locals[i].name === name) {
@@ -5541,12 +6794,10 @@ var TinyLangBundle = (() => {
           this.compileForStatement(stmt);
           break;
         case "BreakStatement":
-          this.emit(64 /* JMP */, stmt.position.line);
-          this.emit16(65535, stmt.position.line);
+          this.compileBreakStatement(stmt.position.line);
           break;
         case "ContinueStatement":
-          this.emit(64 /* JMP */, stmt.position.line);
-          this.emit16(65535, stmt.position.line);
+          this.compileContinueStatement(stmt.position.line);
           break;
         case "ExpressionStatement":
           this.compileExpression(stmt.expression);
@@ -5560,18 +6811,78 @@ var TinyLangBundle = (() => {
         case "MatchStatement":
           this.compileMatchStatement(stmt);
           break;
+        case "DestructuringDeclaration":
+          this.compileDestructuringDeclaration(stmt);
+          break;
+        case "EnumDeclaration":
+          this.compileEnumDeclaration(stmt);
+          break;
+        case "TryCatchStatement":
+          this.compileTryCatchStatement(stmt);
+          break;
+        case "ThrowStatement":
+          this.compileThrowStatement(stmt);
+          break;
+        case "TestDeclaration":
+          break;
+        default: {
+          const unhandled = stmt;
+          throw new CompilerError(
+            `Unsupported statement type: ${unhandled.type}`,
+            unhandled.position?.line
+          );
+        }
+      }
+    }
+    /**
+     * `break`: unwind the locals declared inside the loop, then jump past it.
+     */
+    compileBreakStatement(line) {
+      const loop = this.currentLoop();
+      if (!loop) {
+        throw new CompilerError("'break' can only be used inside a loop", line);
+      }
+      this.emitLoopExitPops(loop, line);
+      loop.breakJumps.push(this.emitJump(64 /* JMP */, line));
+    }
+    /**
+     * `continue`: unwind the locals declared inside the loop, then jump to the
+     * loop's next-iteration code (the increment for `for`, the condition for
+     * `while`).
+     */
+    compileContinueStatement(line) {
+      const loop = this.currentLoop();
+      if (!loop) {
+        throw new CompilerError("'continue' can only be used inside a loop", line);
+      }
+      this.emitLoopExitPops(loop, line);
+      loop.continueJumps.push(this.emitJump(64 /* JMP */, line));
+    }
+    currentLoop() {
+      const loops = this.current.loops;
+      return loops.length > 0 ? loops[loops.length - 1] : null;
+    }
+    /**
+     * Emit a POP for every local that is live inside the loop body but not at the
+     * top of the loop. Jumping out of a block skips the `endScope()` that would
+     * normally discard those slots, so they must be discarded here instead or the
+     * loop's own bookkeeping slots end up at the wrong stack offsets.
+     *
+     * The compile-time locals list is deliberately left untouched: control flow
+     * jumps away, but compilation continues with the same set of live locals.
+     */
+    emitLoopExitPops(loop, line) {
+      for (let i = this.current.locals.length; i > loop.localCount; i--) {
+        this.emit(2 /* POP */, line);
+      }
+      for (let i = this.current.tryDepth; i > loop.tryDepth; i--) {
+        this.emit(161 /* TRY_END */, line);
       }
     }
     compileVariableDeclaration(stmt) {
       const line = stmt.position.line;
       this.compileExpression(stmt.value);
-      if (this.current.scopeDepth > 0) {
-        this.addLocal(stmt.name);
-      } else {
-        const nameIdx = this.current.chunk.addConstant(createString(stmt.name));
-        this.emit(83 /* STORE_GLOBAL */, line);
-        this.emit16(nameIdx, line);
-      }
+      this.addLocalOrStoreGlobal(stmt.name, line);
     }
     compileFunctionDeclaration(stmt) {
       const line = stmt.position.line;
@@ -5579,13 +6890,7 @@ var TinyLangBundle = (() => {
       const fnIdx = this.current.chunk.addConstant(fn);
       this.emit(98 /* CLOSURE */, line);
       this.emit16(fnIdx, line);
-      if (this.current.scopeDepth > 0) {
-        this.addLocal(stmt.name);
-      } else {
-        const nameIdx = this.current.chunk.addConstant(createString(stmt.name));
-        this.emit(83 /* STORE_GLOBAL */, line);
-        this.emit16(nameIdx, line);
-      }
+      this.addLocalOrStoreGlobal(stmt.name, line);
     }
     compileFunction(name, params, body, line) {
       const enclosing = this.current;
@@ -5593,10 +6898,26 @@ var TinyLangBundle = (() => {
       this.beginScope();
       let defaultParams = 0;
       for (const param of params) {
-        this.addLocal(param.name);
+        this.declareLocal(param.name, line);
         if (param.defaultValue) {
           defaultParams++;
         }
+      }
+      for (let i = 0; i < params.length; i++) {
+        const param = params[i];
+        if (!param.defaultValue) continue;
+        this.emit(86 /* LOAD_ARGC */, line);
+        this.emitConstant(createNumber(i), line);
+        this.emit(36 /* GT */, line);
+        const suppliedJump = this.emitJump(66 /* JMP_IF_TRUE */, line);
+        this.emit(2 /* POP */, line);
+        this.compileExpression(param.defaultValue);
+        this.emit(81 /* STORE_LOCAL */, line);
+        this.emit16(i, line);
+        const doneJump = this.emitJump(64 /* JMP */, line);
+        this.patchJump(suppliedJump);
+        this.emit(2 /* POP */, line);
+        this.patchJump(doneJump);
       }
       for (const stmt of body) {
         this.compileStatement(stmt);
@@ -5620,12 +6941,7 @@ var TinyLangBundle = (() => {
       const nameIdx = this.current.chunk.addConstant(createString(stmt.name));
       this.emit(128 /* CLASS */, line);
       this.emit16(nameIdx, line);
-      if (this.current.scopeDepth > 0) {
-        this.addLocal(stmt.name);
-      } else {
-        this.emit(83 /* STORE_GLOBAL */, line);
-        this.emit16(nameIdx, line);
-      }
+      this.addLocalOrStoreGlobal(stmt.name, line);
       if (stmt.superClass) {
         this.compileLoadVariable(stmt.superClass, line);
         this.compileLoadVariable(stmt.name, line);
@@ -5643,7 +6959,7 @@ var TinyLangBundle = (() => {
         this.emit(2 /* POP */, line);
       }
       for (const prop of stmt.properties) {
-        const propNameIdx = this.current.chunk.addConstant(createString(`__prop_${prop.name}`));
+        const propNameIdx = this.current.chunk.addConstant(createString(prop.name));
         this.compileLoadVariable(stmt.name, line);
         this.compileExpression(prop.value);
         this.emit(117 /* SET_PROP */, line);
@@ -5692,18 +7008,33 @@ var TinyLangBundle = (() => {
       this.compileExpression(stmt.condition);
       const exitJump = this.emitJump(65 /* JMP_IF_FALSE */, line);
       this.emit(2 /* POP */, line);
+      const loop = {
+        breakJumps: [],
+        continueJumps: [],
+        localCount: this.current.locals.length,
+        tryDepth: this.current.tryDepth
+      };
+      this.current.loops.push(loop);
       this.beginScope();
       for (const s of stmt.body) {
         this.compileStatement(s);
       }
       this.endScope(line);
+      for (const jump of loop.continueJumps) {
+        this.current.chunk.patch16(jump, loopStart);
+      }
       this.emitLoop(loopStart, line);
       this.patchJump(exitJump);
       this.emit(2 /* POP */, line);
+      for (const jump of loop.breakJumps) {
+        this.patchJump(jump);
+      }
+      this.current.loops.pop();
     }
     compileForStatement(stmt) {
       const line = stmt.position.line;
       this.compileExpression(stmt.iterable);
+      this.emit(124 /* CHECK_ITERABLE */, line);
       this.beginScope();
       this.addLocal("__iter");
       this.emitConstant(createNumber(0), line);
@@ -5726,12 +7057,22 @@ var TinyLangBundle = (() => {
       this.emit(80 /* LOAD_LOCAL */, line);
       this.emit16(idxSlot, line);
       this.emit(114 /* INDEX */, line);
-      this.addLocal(stmt.variable);
+      const loop = {
+        breakJumps: [],
+        continueJumps: [],
+        localCount: this.current.locals.length,
+        tryDepth: this.current.tryDepth
+      };
+      this.current.loops.push(loop);
+      this.beginScope();
+      this.declareLocal(stmt.variable, line);
       for (const s of stmt.body) {
         this.compileStatement(s);
       }
-      this.emit(2 /* POP */, line);
-      this.current.locals.pop();
+      this.endScope(line);
+      for (const jump of loop.continueJumps) {
+        this.current.chunk.patch16(jump, this.current.chunk.currentOffset);
+      }
       this.emit(80 /* LOAD_LOCAL */, line);
       this.emit16(idxSlot, line);
       this.emitConstant(createNumber(1), line);
@@ -5741,6 +7082,10 @@ var TinyLangBundle = (() => {
       this.emitLoop(loopStart, line);
       this.patchJump(exitJump);
       this.emit(2 /* POP */, line);
+      for (const jump of loop.breakJumps) {
+        this.patchJump(jump);
+      }
+      this.current.loops.pop();
       this.endScope(line);
     }
     compilePrintStatement(stmt) {
@@ -5783,6 +7128,105 @@ var TinyLangBundle = (() => {
       }
       for (const jump of endJumps) {
         this.patchJump(jump);
+      }
+    }
+    /**
+     * try/catch.
+     *
+     * TRY_BEGIN installs a handler pointing at the catch block. On the normal
+     * path TRY_END removes it and control jumps over the catch. If anything
+     * throws while the handler is installed, the VM unwinds to it and pushes the
+     * error object, which the catch block binds as its variable.
+     */
+    compileTryCatchStatement(stmt) {
+      const line = stmt.position.line;
+      const handlerJump = this.emitJump(160 /* TRY_BEGIN */, line);
+      this.current.tryDepth++;
+      this.beginScope();
+      for (const s of stmt.tryBody) {
+        this.compileStatement(s);
+      }
+      this.endScope(line);
+      this.current.tryDepth--;
+      this.emit(161 /* TRY_END */, line);
+      const overCatch = this.emitJump(64 /* JMP */, line);
+      this.patchJump(handlerJump);
+      this.beginScope();
+      this.addLocalOrStoreGlobal(stmt.catchVariable, line);
+      for (const s of stmt.catchBody) {
+        this.compileStatement(s);
+      }
+      this.endScope(line);
+      this.patchJump(overCatch);
+    }
+    compileThrowStatement(stmt) {
+      const line = stmt.position.line;
+      this.compileExpression(stmt.value);
+      this.emit(162 /* THROW */, line);
+    }
+    /**
+     * `let [a, b] = expr` / `let {x, y} = expr`.
+     *
+     * The right-hand side is evaluated once and kept on the stack while each name
+     * is extracted from it.
+     */
+    compileDestructuringDeclaration(stmt) {
+      const line = stmt.position.line;
+      this.compileExpression(stmt.value);
+      const isArray = stmt.pattern.kind === "array";
+      const names = stmt.pattern.names;
+      if (this.current.scopeDepth > 0) {
+        this.addLocal(`__destructured`);
+        const subjectSlot = this.current.locals.length - 1;
+        for (let i = 0; i < names.length; i++) {
+          this.emit(80 /* LOAD_LOCAL */, line);
+          this.emit16(subjectSlot, line);
+          this.emitDestructureExtract(isArray, names[i], i, line);
+          this.declareLocal(names[i], line);
+        }
+      } else {
+        for (let i = 0; i < names.length; i++) {
+          this.emit(3 /* DUP */, line);
+          this.emitDestructureExtract(isArray, names[i], i, line);
+          this.emitDeclareGlobal(names[i], line);
+        }
+        this.emit(2 /* POP */, line);
+      }
+    }
+    emitDestructureExtract(isArray, name, index, line) {
+      if (isArray) {
+        this.emit(120 /* DESTRUCT_ELEM */, line);
+        this.emit16(index, line);
+      } else {
+        const keyIdx = this.current.chunk.addConstant(createString(name));
+        this.emit(121 /* DESTRUCT_PROP */, line);
+        this.emit16(keyIdx, line);
+      }
+    }
+    /**
+     * `enum Color { Red, Green }` compiles to an object mapping each variant name
+     * to itself as a string, matching the interpreter.
+     */
+    compileEnumDeclaration(stmt) {
+      const line = stmt.position.line;
+      for (const variant of stmt.variants) {
+        this.emitConstant(createString(variant), line);
+        this.emitConstant(createString(variant), line);
+      }
+      this.emit(113 /* OBJECT */, line);
+      this.emit16(stmt.variants.length, line);
+      this.addLocalOrStoreGlobal(stmt.name, line);
+    }
+    /**
+     * Bind the value on top of the stack to `name` as a *declaration*: as a local
+     * it simply stays on the stack in its slot, as a global it is stored and
+     * popped. Either way a redeclaration in the same scope is rejected.
+     */
+    addLocalOrStoreGlobal(name, line) {
+      if (this.current.scopeDepth > 0) {
+        this.declareLocal(name, line);
+      } else {
+        this.emitDeclareGlobal(name, line);
       }
     }
     // ============ Expression Compilation ============
@@ -5851,7 +7295,92 @@ var TinyLangBundle = (() => {
         case "RangeExpression":
           this.compileRangeExpression(expr);
           break;
+        case "PipeExpression":
+          this.compilePipeExpression(expr);
+          break;
+        case "PipeMethodExpression":
+          this.compilePipeMethodExpression(expr);
+          break;
+        case "InterpolatedString":
+          this.compileInterpolatedString(expr);
+          break;
+        case "OptionalMemberExpression":
+          this.compileOptionalMemberExpression(expr);
+          break;
+        case "OptionalIndexExpression":
+          this.compileOptionalIndexExpression(expr);
+          break;
+        case "NullishCoalesceExpression":
+          this.compileNullishCoalesceExpression(expr);
+          break;
+        default: {
+          const unhandled = expr;
+          throw new CompilerError(
+            `Unsupported expression type: ${unhandled.type}`,
+            unhandled.position?.line
+          );
+        }
       }
+    }
+    /**
+     * f-strings. Concatenation starts from a string so that ADD always takes its
+     * string branch and every interpolated value is stringified, exactly as the
+     * interpreter's evalInterpolatedString does.
+     */
+    compileInterpolatedString(expr) {
+      const line = expr.position.line;
+      const parts = expr.parts;
+      if (parts.length === 0) {
+        this.emitConstant(createString(""), line);
+        return;
+      }
+      let start = 0;
+      const first = parts[0];
+      if (first.kind === "literal") {
+        this.emitConstant(createString(first.value), line);
+        start = 1;
+      } else {
+        this.emitConstant(createString(""), line);
+      }
+      for (let i = start; i < parts.length; i++) {
+        const part = parts[i];
+        if (part.kind === "literal") {
+          this.emitConstant(createString(part.value), line);
+        } else {
+          this.compileExpression(part.expression);
+        }
+        this.emit(16 /* ADD */, line);
+      }
+    }
+    /** `obj?.prop` - short-circuits to null when obj is null. */
+    compileOptionalMemberExpression(expr) {
+      const line = expr.position.line;
+      this.compileExpression(expr.object);
+      const skip = this.emitJump(68 /* JMP_IF_NULL */, line);
+      const propIdx = this.current.chunk.addConstant(createString(expr.property));
+      this.emit(116 /* GET_PROP */, line);
+      this.emit16(propIdx, line);
+      this.patchJump(skip);
+    }
+    /** `obj?.[i]` - short-circuits to null without evaluating the index. */
+    compileOptionalIndexExpression(expr) {
+      const line = expr.position.line;
+      this.compileExpression(expr.object);
+      const skip = this.emitJump(68 /* JMP_IF_NULL */, line);
+      this.compileExpression(expr.index);
+      this.emit(122 /* INDEX_OPTIONAL */, line);
+      this.patchJump(skip);
+    }
+    /** `a ?? b` - evaluates b only when a is null. */
+    compileNullishCoalesceExpression(expr) {
+      const line = expr.position.line;
+      this.compileExpression(expr.left);
+      const useRight = this.emitJump(68 /* JMP_IF_NULL */, line);
+      const done = this.emitJump(64 /* JMP */, line);
+      this.patchJump(useRight);
+      this.emit(2 /* POP */, line);
+      this.compileExpression(expr.right);
+      this.patchJump(done);
     }
     compileLoadVariable(name, line) {
       const localIdx = this.resolveLocal(this.current, name);
@@ -5888,11 +7417,26 @@ var TinyLangBundle = (() => {
       }
     }
     compileArrayLiteral(elements, line) {
-      for (const el of elements) {
-        this.compileExpression(el);
+      const hasSpread = elements.some((el) => el.type === "SpreadExpression");
+      if (!hasSpread) {
+        for (const el of elements) {
+          this.compileExpression(el);
+        }
+        this.emit(112 /* ARRAY */, line);
+        this.emit16(elements.length, line);
+        return;
       }
       this.emit(112 /* ARRAY */, line);
-      this.emit16(elements.length, line);
+      this.emit16(0, line);
+      for (const el of elements) {
+        if (el.type === "SpreadExpression") {
+          this.compileExpression(el.argument);
+          this.emit(119 /* ARRAY_SPREAD */, el.position.line);
+        } else {
+          this.compileExpression(el);
+          this.emit(118 /* ARRAY_APPEND */, el.position.line);
+        }
+      }
     }
     compileObjectLiteral(properties, line) {
       for (const prop of properties) {
@@ -5977,96 +7521,94 @@ var TinyLangBundle = (() => {
         this.patchJump(jumpToEnd);
       }
     }
+    /**
+     * Assignment, in all its target forms.
+     *
+     * The right-hand side is always compiled first, because that is the order the
+     * interpreter evaluates in. It is observable: `arr[i()] = v()` must call v()
+     * before i(), and `x += f()` must read x only *after* f() has run, since f
+     * may assign to x. ROT then moves the value from the bottom of the group up
+     * to wherever the store instruction expects it.
+     */
     compileAssignmentExpression(expr) {
       const line = expr.position.line;
       if (expr.target.type === "Identifier") {
-        if (expr.operator === "=") {
-          this.compileExpression(expr.value);
-        } else {
+        this.compileExpression(expr.value);
+        if (expr.operator !== "=") {
           this.compileLoadVariable(expr.target.name, line);
-          this.compileExpression(expr.value);
-          switch (expr.operator) {
-            case "+=":
-              this.emit(16 /* ADD */, line);
-              break;
-            case "-=":
-              this.emit(17 /* SUB */, line);
-              break;
-            case "*=":
-              this.emit(18 /* MUL */, line);
-              break;
-            case "/=":
-              this.emit(19 /* DIV */, line);
-              break;
-            default:
-              throw new CompilerError(`Unknown assignment operator: ${expr.operator}`, line);
-          }
+          this.emitRot(2, line);
+          this.emitCompoundOp(expr.operator, line);
         }
         this.emit(3 /* DUP */, line);
         this.compileStoreVariable(expr.target.name, line);
-      } else if (expr.target.type === "IndexExpression") {
+        return;
+      }
+      if (expr.target.type === "IndexExpression") {
+        this.compileExpression(expr.value);
         this.compileExpression(expr.target.object);
         this.compileExpression(expr.target.index);
         if (expr.operator === "=") {
-          this.compileExpression(expr.value);
+          this.emitRot(3, line);
         } else {
-          this.emit(3 /* DUP */, line);
-          this.compileExpression(expr.target.object);
-          this.compileExpression(expr.target.index);
-          this.emit(114 /* INDEX */, line);
-          this.compileExpression(expr.value);
-          switch (expr.operator) {
-            case "+=":
-              this.emit(16 /* ADD */, line);
-              break;
-            case "-=":
-              this.emit(17 /* SUB */, line);
-              break;
-            case "*=":
-              this.emit(18 /* MUL */, line);
-              break;
-            case "/=":
-              this.emit(19 /* DIV */, line);
-              break;
-            default:
-              throw new CompilerError(`Unknown assignment operator: ${expr.operator}`, line);
-          }
+          this.emit(4 /* DUP2 */, line);
+          this.emit(122 /* INDEX_OPTIONAL */, line);
+          this.emitRot(4, line);
+          this.emitCompoundOp(expr.operator, line);
         }
         this.emit(115 /* SET_INDEX */, line);
-      } else if (expr.target.type === "MemberExpression") {
+        return;
+      }
+      if (expr.target.type === "MemberExpression") {
+        const propIdx = this.current.chunk.addConstant(
+          createString(expr.target.property)
+        );
+        this.compileExpression(expr.value);
         this.compileExpression(expr.target.object);
-        const propIdx = this.current.chunk.addConstant(createString(expr.target.property));
         if (expr.operator === "=") {
-          this.compileExpression(expr.value);
+          this.emitRot(2, line);
         } else {
           this.emit(3 /* DUP */, line);
           this.emit(116 /* GET_PROP */, line);
           this.emit16(propIdx, line);
-          this.compileExpression(expr.value);
-          switch (expr.operator) {
-            case "+=":
-              this.emit(16 /* ADD */, line);
-              break;
-            case "-=":
-              this.emit(17 /* SUB */, line);
-              break;
-            case "*=":
-              this.emit(18 /* MUL */, line);
-              break;
-            case "/=":
-              this.emit(19 /* DIV */, line);
-              break;
-            default:
-              throw new CompilerError(`Unknown assignment operator: ${expr.operator}`, line);
-          }
+          this.emitRot(3, line);
+          this.emitCompoundOp(expr.operator, line);
         }
         this.emit(117 /* SET_PROP */, line);
         this.emit16(propIdx, line);
+        return;
       }
+      throw new CompilerError("Invalid assignment target", line);
+    }
+    emitRot(count, line) {
+      this.emit(5 /* ROT */, line);
+      this.emit16(count, line);
+    }
+    emitCompoundOp(operator, line) {
+      const ops = {
+        "+=": 0 /* ADD */,
+        "-=": 1 /* SUB */,
+        "*=": 2 /* MUL */,
+        "/=": 3 /* DIV */
+      };
+      const op = ops[operator];
+      if (op === void 0) {
+        throw new CompilerError(`Unknown assignment operator: ${operator}`, line);
+      }
+      this.emit(23 /* COMPOUND */, line);
+      this.emit16(op, line);
     }
     compileCallExpression(expr) {
       const line = expr.position.line;
-      this.compileExpression(expr.callee);
+      if (expr.callee.type === "MemberExpression") {
+        this.compileExpression(expr.callee.object);
+        const propIdx = this.current.chunk.addConstant(
+          createString(expr.callee.property)
+        );
+        this.emit(123 /* GET_METHOD */, line);
+        this.emit16(propIdx, line);
+      } else {
+        this.compileExpression(expr.callee);
+      }
       for (const arg of expr.args) {
         this.compileExpression(arg);
       }
@@ -6142,6 +7684,36 @@ var TinyLangBundle = (() => {
       this.emit(96 /* CALL */, line);
       this.emit16(3, line);
     }
+    compilePipeExpression(expr) {
+      const line = expr.position.line;
+      if (expr.right.type === "CallExpression") {
+        const callExpr = expr.right;
+        this.compileExpression(callExpr.callee);
+        this.compileExpression(expr.left);
+        for (const arg of callExpr.args) {
+          this.compileExpression(arg);
+        }
+        this.emit(96 /* CALL */, line);
+        this.emit16(callExpr.args.length + 1, line);
+      } else {
+        this.compileExpression(expr.right);
+        this.compileExpression(expr.left);
+        this.emit(96 /* CALL */, line);
+        this.emit16(1, line);
+      }
+    }
+    compilePipeMethodExpression(expr) {
+      const line = expr.position.line;
+      this.compileExpression(expr.left);
+      const nameIdx = this.current.chunk.addConstant(createString(expr.method));
+      this.emit(123 /* GET_METHOD */, line);
+      this.emit16(nameIdx, line);
+      for (const arg of expr.args) {
+        this.compileExpression(arg);
+      }
+      this.emit(96 /* CALL */, line);
+      this.emit16(expr.args.length, line);
+    }
   };
 
   // src/vm/vm.ts
@@ -6149,6 +7721,7 @@ var TinyLangBundle = (() => {
     constructor(options = {}) {
       __publicField(this, "stack", []);
       __publicField(this, "frames", []);
+      __publicField(this, "handlers", []);
       __publicField(this, "globals", /* @__PURE__ */ new Map());
       __publicField(this, "output");
       __publicField(this, "maxSteps");
@@ -6177,10 +7750,35 @@ var TinyLangBundle = (() => {
           const start = args[0];
           const end = args[1];
           const inclusive = args[2];
+          if (start.type !== "number" || end.type !== "number") {
+            throw new RuntimeError(
+              `Range bounds must be numbers. Got ${start.type} and ${end.type}.`,
+              this.currentLine()
+            );
+          }
           const elements = [];
-          const limit = inclusive.value ? end.value : end.value;
-          for (let i = start.value; inclusive.value ? i <= limit : i < limit; i++) {
-            elements.push(createNumber(i));
+          const startVal = Math.floor(start.value);
+          const endVal = Math.floor(end.value);
+          const limit = inclusive.value ? endVal : endVal - 1;
+          const guard = () => {
+            if (elements.length > 1e4) {
+              throw new RuntimeError(
+                "Range too large! Maximum range size is 10,000 elements. Try a smaller range.",
+                this.currentLine()
+              );
+            }
+          };
+          if (startVal <= limit) {
+            for (let i = startVal; i <= limit; i++) {
+              elements.push(createNumber(i));
+              guard();
+            }
+          } else {
+            const floor = inclusive.value ? endVal : endVal + 1;
+            for (let i = startVal; i >= floor; i--) {
+              elements.push(createNumber(i));
+              guard();
+            }
           }
           return createArray(elements);
         }
@@ -6198,6 +7796,7 @@ var TinyLangBundle = (() => {
     run(chunk) {
       this.stack = [];
       this.frames = [];
+      this.handlers = [];
       this.steps = 0;
       this.outputBuffer = [];
       this.frames.push({
@@ -6205,7 +7804,8 @@ var TinyLangBundle = (() => {
         ip: 0,
         basePointer: 0,
         upvalues: [],
-        thisBinding: null
+        thisBinding: null,
+        argCount: 0
       });
       return this.execute();
     }
@@ -6244,11 +7844,76 @@ var TinyLangBundle = (() => {
       const frame = this.currentFrame;
       return frame.chunk.lines[frame.ip - 1] || 1;
     }
-    execute() {
+    /**
+     * Run the dispatch loop.
+     *
+     * @param stopDepth Frame depth at which to stop and return. 0 means "run to
+     *   completion" (top-level). A non-zero value is used by callFromNative() to
+     *   run a single nested call and hand control back to the native caller.
+     */
+    execute(stopDepth = 0) {
+      while (true) {
+        try {
+          return this.dispatch(stopDepth);
+        } catch (error) {
+          if (!this.unwindToHandler(error, stopDepth)) {
+            throw error;
+          }
+        }
+      }
+    }
+    /**
+     * Rewind to the innermost catch handler that this invocation of the dispatch
+     * loop is responsible for, pushing the error object for the catch block.
+     *
+     * Returns false when no such handler exists, in which case the caller must
+     * let the error propagate. Handlers belonging to frames below `stopDepth` are
+     * deliberately left alone: those frames are owned by an outer dispatch loop,
+     * possibly with native code in between, so unwinding to them has to happen as
+     * a real JS throw rather than a bytecode jump.
+     */
+    unwindToHandler(error, stopDepth) {
+      if (error instanceof StepLimitExceeded) {
+        return false;
+      }
+      while (this.handlers.length > 0) {
+        const handler = this.handlers[this.handlers.length - 1];
+        if (handler.frameIndex < stopDepth) {
+          return false;
+        }
+        this.handlers.pop();
+        if (handler.frameIndex >= this.frames.length) {
+          continue;
+        }
+        this.frames.length = handler.frameIndex + 1;
+        this.frames[handler.frameIndex].ip = handler.handlerIp;
+        this.stack.length = handler.stackHeight;
+        this.push(this.makeErrorValue(error));
+        return true;
+      }
+      return false;
+    }
+    /**
+     * Build the object a `catch` clause binds, mirroring the interpreter: a
+     * `message` string, plus a `line` for errors that carry one.
+     */
+    makeErrorValue(error) {
+      const properties = /* @__PURE__ */ new Map();
+      if (error instanceof RuntimeError) {
+        properties.set("message", createString(error.message));
+        properties.set("line", error.line ? createNumber(error.line) : createNull());
+      } else if (error instanceof Error) {
+        properties.set("message", createString(error.message));
+      } else {
+        properties.set("message", createString(String(error)));
+      }
+      return createObject(properties);
+    }
+    dispatch(stopDepth) {
       while (true) {
         if (this.steps++ > this.maxSteps) {
-          throw new RuntimeError(
-            "Maximum execution steps exceeded (possible infinite loop)",
+          throw new StepLimitExceeded(
+            `Execution limit exceeded (${this.maxSteps} steps). Your program might have an infinite loop. Check your while/for conditions.`,
             this.currentLine()
           );
         }
@@ -6266,6 +7931,30 @@ var TinyLangBundle = (() => {
           case 3 /* DUP */:
             this.push(this.peek());
             break;
+          case 5 /* ROT */: {
+            const count = this.read16();
+            const from = this.stack.length - count;
+            if (from < 0) {
+              throw new RuntimeError("Stack underflow");
+            }
+            const [value] = this.stack.splice(from, 1);
+            this.stack.push(value);
+            break;
+          }
+          case 23 /* COMPOUND */: {
+            const op = this.read16();
+            const value = this.pop();
+            const current = this.pop();
+            this.push(this.applyCompound(current, value, op));
+            break;
+          }
+          case 4 /* DUP2 */: {
+            const b = this.peek(0);
+            const a = this.peek(1);
+            this.push(a);
+            this.push(b);
+            break;
+          }
           case 16 /* ADD */: {
             const b = this.pop();
             const a = this.pop();
@@ -6277,16 +7966,15 @@ var TinyLangBundle = (() => {
               this.push(createArray([...a.elements, ...b.elements]));
             } else {
               throw new RuntimeError(
-                `Cannot add ${a.type} and ${b.type}`,
+                `Cannot add ${a.type} and ${b.type}. The + operator works with numbers, strings, and arrays.`,
                 this.currentLine()
               );
             }
             break;
           }
           case 17 /* SUB */: {
-            const b = this.pop();
-            const a = this.pop();
-            this.push(createNumber(a.value - b.value));
+            const [a, b] = this.popNumericOperands();
+            this.push(createNumber(a - b));
             break;
           }
           case 18 /* MUL */: {
@@ -6295,7 +7983,9 @@ var TinyLangBundle = (() => {
             if (a.type === "number" && b.type === "number") {
               this.push(createNumber(a.value * b.value));
             } else if (a.type === "string" && b.type === "number") {
-              this.push(createString(a.value.repeat(b.value)));
+              this.push(createString(a.value.repeat(Math.floor(b.value))));
+            } else if (a.type === "number" && b.type === "string") {
+              this.push(createString(b.value.repeat(Math.floor(a.value))));
             } else {
               throw new RuntimeError(
                 `Cannot multiply ${a.type} and ${b.type}`,
@@ -6307,26 +7997,39 @@ var TinyLangBundle = (() => {
           case 19 /* DIV */: {
             const b = this.pop();
             const a = this.pop();
+            if (a.type !== "number" || b.type !== "number") {
+              throw new RuntimeError(
+                `Cannot divide ${a.type} by ${b.type}. Division only works with numbers.`,
+                this.currentLine()
+              );
+            }
             if (b.value === 0) {
-              throw new RuntimeError("Division by zero", this.currentLine());
+              throw new RuntimeError(
+                `Division by zero! You tried to divide ${a.value} by 0, which is undefined in mathematics.`,
+                this.currentLine()
+              );
             }
             this.push(createNumber(a.value / b.value));
             break;
           }
           case 20 /* MOD */: {
-            const b = this.pop();
-            const a = this.pop();
-            this.push(createNumber(a.value % b.value));
+            const [a, b] = this.popNumericOperands();
+            this.push(createNumber(a % b));
             break;
           }
           case 21 /* POW */: {
-            const b = this.pop();
-            const a = this.pop();
-            this.push(createNumber(Math.pow(a.value, b.value)));
+            const [a, b] = this.popNumericOperands();
+            this.push(createNumber(Math.pow(a, b)));
             break;
           }
           case 22 /* NEGATE */: {
             const val = this.pop();
+            if (val.type !== "number") {
+              throw new RuntimeError(
+                `Cannot negate ${val.type}. The - operator only works with numbers.`,
+                this.currentLine()
+              );
+            }
             this.push(createNumber(-val.value));
             break;
           }
@@ -6342,30 +8045,18 @@ var TinyLangBundle = (() => {
             this.push(createBoolean(!valueEquals(a, b)));
             break;
           }
-          case 34 /* LT */: {
-            const b = this.pop();
-            const a = this.pop();
-            this.push(createBoolean(a.value < b.value));
+          case 34 /* LT */:
+            this.compareOperands((a, b) => a < b);
             break;
-          }
-          case 35 /* LTE */: {
-            const b = this.pop();
-            const a = this.pop();
-            this.push(createBoolean(a.value <= b.value));
+          case 35 /* LTE */:
+            this.compareOperands((a, b) => a <= b);
             break;
-          }
-          case 36 /* GT */: {
-            const b = this.pop();
-            const a = this.pop();
-            this.push(createBoolean(a.value > b.value));
+          case 36 /* GT */:
+            this.compareOperands((a, b) => a > b);
             break;
-          }
-          case 37 /* GTE */: {
-            const b = this.pop();
-            const a = this.pop();
-            this.push(createBoolean(a.value >= b.value));
+          case 37 /* GTE */:
+            this.compareOperands((a, b) => a >= b);
             break;
-          }
           case 48 /* NOT */: {
             const val = this.pop();
             this.push(createBoolean(!isTruthy(val)));
@@ -6407,6 +8098,13 @@ var TinyLangBundle = (() => {
             this.currentFrame.ip = target;
             break;
           }
+          case 68 /* JMP_IF_NULL */: {
+            const target = this.read16();
+            if (this.peek().type === "null") {
+              this.currentFrame.ip = target;
+            }
+            break;
+          }
           case 80 /* LOAD_LOCAL */: {
             const slot = this.read16();
             const value = this.stack[this.currentFrame.basePointer + slot];
@@ -6425,7 +8123,7 @@ var TinyLangBundle = (() => {
             const value = this.globals.get(name.value);
             if (value === void 0) {
               throw new RuntimeError(
-                `Variable '${name.value}' is not defined`,
+                undefinedVariableMessage(name.value, this.globals.keys()),
                 this.currentLine()
               );
             }
@@ -6438,6 +8136,34 @@ var TinyLangBundle = (() => {
             const value = this.pop();
             this.globals.set(name.value, value);
             break;
+          }
+          // A top-level `let`/`const`/`fn`/`class`/`enum`, as opposed to an
+          // assignment. Declaring a name that is already bound - including a
+          // stdlib name - is an error, exactly as Environment.define is in the
+          // interpreter. Both declaration and assignment used to compile to
+          // STORE_GLOBAL, so the VM silently overwrote.
+          case 87 /* DECLARE_GLOBAL */: {
+            const nameIdx = this.read16();
+            const name = this.currentFrame.chunk.constants[nameIdx];
+            const value = this.pop();
+            if (this.globals.has(name.value)) {
+              throw new RuntimeError(
+                `Variable '${name.value}' is already declared in this scope`,
+                this.currentLine()
+              );
+            }
+            this.globals.set(name.value, value);
+            break;
+          }
+          // Raise a RuntimeError the compiler determined statically but which the
+          // interpreter only reports when execution reaches the offending
+          // statement. Emitting an instruction rather than failing compilation
+          // keeps the timing and catchability identical: `if false { ... }` never
+          // reports it, and a surrounding `catch` catches it.
+          case 163 /* RAISE */: {
+            const msgIdx = this.read16();
+            const message = this.currentFrame.chunk.constants[msgIdx];
+            throw new RuntimeError(message.value, this.currentLine());
           }
           case 84 /* LOAD_UPVALUE */: {
             const idx = this.read16();
@@ -6458,6 +8184,9 @@ var TinyLangBundle = (() => {
             this.pop();
             break;
           }
+          case 86 /* LOAD_ARGC */:
+            this.push(createNumber(this.currentFrame.argCount));
+            break;
           case 96 /* CALL */: {
             const argCount = this.read16();
             const callee = this.stack[this.stack.length - 1 - argCount];
@@ -6467,6 +8196,9 @@ var TinyLangBundle = (() => {
           case 97 /* RETURN */: {
             const result = this.pop();
             const frame = this.frames.pop();
+            while (this.handlers.length > 0 && this.handlers[this.handlers.length - 1].frameIndex >= this.frames.length) {
+              this.handlers.pop();
+            }
             if (this.frames.length === 0) {
               return result;
             }
@@ -6474,6 +8206,9 @@ var TinyLangBundle = (() => {
             const returnValue = isConstructor ? frame.constructorInstance : result;
             this.stack.length = frame.basePointer - 1;
             this.push(returnValue);
+            if (this.frames.length === stopDepth) {
+              return returnValue;
+            }
             break;
           }
           case 98 /* CLOSURE */: {
@@ -6496,6 +8231,10 @@ var TinyLangBundle = (() => {
               fn,
               upvalues
             };
+            const enclosingThis = this.currentFrame.thisBinding;
+            if (enclosingThis) {
+              closure.boundThis = enclosingThis;
+            }
             this.push(closure);
             break;
           }
@@ -6510,19 +8249,87 @@ var TinyLangBundle = (() => {
           }
           case 113 /* OBJECT */: {
             const count = this.read16();
-            const properties = /* @__PURE__ */ new Map();
-            for (let i = 0; i < count; i++) {
+            const pairs = new Array(count);
+            for (let i = count - 1; i >= 0; i--) {
               const value = this.pop();
               const key = this.pop();
-              properties.set(key.value, value);
+              pairs[i] = [key.value, value];
+            }
+            const properties = /* @__PURE__ */ new Map();
+            for (const [key, value] of pairs) {
+              properties.set(key, value);
             }
             this.push(createObject(properties));
+            break;
+          }
+          case 124 /* CHECK_ITERABLE */: {
+            const iterable = this.peek();
+            if (iterable.type !== "array" && iterable.type !== "string") {
+              throw new RuntimeError(
+                `Cannot iterate over ${iterable.type}. For loops work with arrays, strings, and ranges.`,
+                this.currentLine()
+              );
+            }
+            break;
+          }
+          case 118 /* ARRAY_APPEND */: {
+            const value = this.pop();
+            const arr = this.peek();
+            arr.elements.push(value);
+            break;
+          }
+          case 119 /* ARRAY_SPREAD */: {
+            const value = this.pop();
+            const arr = this.peek();
+            if (value.type === "array") {
+              arr.elements.push(...value.elements);
+            } else if (value.type === "string") {
+              arr.elements.push(...value.value.split("").map(createString));
+            } else {
+              throw new RuntimeError(
+                `Cannot spread ${value.type}. Spread (...) works with arrays and strings.`,
+                this.currentLine()
+              );
+            }
+            break;
+          }
+          case 120 /* DESTRUCT_ELEM */: {
+            const index = this.read16();
+            const subject = this.pop();
+            if (subject.type !== "array") {
+              throw new RuntimeError(
+                `Cannot destructure ${subject.type} as an array. Right side must be an array.`,
+                this.currentLine()
+              );
+            }
+            this.push(
+              index < subject.elements.length ? subject.elements[index] : createNull()
+            );
+            break;
+          }
+          case 121 /* DESTRUCT_PROP */: {
+            const keyIdx = this.read16();
+            const key = this.currentFrame.chunk.constants[keyIdx];
+            const subject = this.pop();
+            if (subject.type !== "object") {
+              throw new RuntimeError(
+                `Cannot destructure ${subject.type} as an object. Right side must be an object.`,
+                this.currentLine()
+              );
+            }
+            this.push(subject.properties.get(key.value) || createNull());
             break;
           }
           case 114 /* INDEX */: {
             const index = this.pop();
             const obj = this.pop();
             this.push(this.performIndex(obj, index));
+            break;
+          }
+          case 122 /* INDEX_OPTIONAL */: {
+            const index = this.pop();
+            const obj = this.pop();
+            this.push(this.performIndex(obj, index, true));
             break;
           }
           case 115 /* SET_INDEX */: {
@@ -6538,6 +8345,13 @@ var TinyLangBundle = (() => {
             const propName = this.currentFrame.chunk.constants[propIdx];
             const obj = this.pop();
             this.push(this.performGetProp(obj, propName.value));
+            break;
+          }
+          case 123 /* GET_METHOD */: {
+            const propIdx = this.read16();
+            const propName = this.currentFrame.chunk.constants[propIdx];
+            const obj = this.pop();
+            this.push(this.performGetMethod(obj, propName.value));
             break;
           }
           case 117 /* SET_PROP */: {
@@ -6591,23 +8405,20 @@ var TinyLangBundle = (() => {
             if (classVal.type !== "class") {
               throw new RuntimeError(`'${stringify(classVal)}' is not a class`, this.currentLine());
             }
-            const instance = {
-              type: "instance",
-              className: classVal.name,
-              classRef: classVal,
-              properties: new Map(classVal.properties)
-            };
+            const instance = this.instantiate(classVal);
             const initMethod = classVal.methods.get("init") || classVal.methods.get("constructor");
             if (initMethod) {
               this.stack[this.stack.length - 1 - argCount] = instance;
               if (initMethod.type === "vm-closure") {
                 const closure = initMethod;
+                this.reconcileArity(closure.fn.arity, argCount);
                 const frame = {
                   chunk: closure.fn.chunk,
                   ip: 0,
-                  basePointer: this.stack.length - argCount,
+                  basePointer: this.stack.length - closure.fn.arity,
                   upvalues: closure.upvalues,
-                  thisBinding: instance
+                  thisBinding: instance,
+                  argCount
                 };
                 frame.isConstructor = true;
                 frame.constructorInstance = instance;
@@ -6631,11 +8442,13 @@ var TinyLangBundle = (() => {
           }
           case 132 /* GET_THIS */: {
             const thisVal = this.currentFrame.thisBinding;
-            if (thisVal) {
-              this.push(thisVal);
-            } else {
-              this.push(createNull());
+            if (!thisVal) {
+              throw new RuntimeError(
+                undefinedVariableMessage("this", this.globals.keys()),
+                this.currentLine()
+              );
             }
+            this.push(thisVal);
             break;
           }
           case 144 /* PRINT */: {
@@ -6649,6 +8462,22 @@ var TinyLangBundle = (() => {
             this.output(message);
             break;
           }
+          case 160 /* TRY_BEGIN */: {
+            const handlerIp = this.read16();
+            this.handlers.push({
+              frameIndex: this.frames.length - 1,
+              handlerIp,
+              stackHeight: this.stack.length
+            });
+            break;
+          }
+          case 161 /* TRY_END */:
+            this.handlers.pop();
+            break;
+          case 162 /* THROW */: {
+            const value = this.pop();
+            throw new RuntimeError(this.throwMessage(value), this.currentLine());
+          }
           case 255 /* HALT */: {
             return this.stack.length > 0 ? this.stack[this.stack.length - 1] : createNull();
           }
@@ -6659,6 +8488,82 @@ var TinyLangBundle = (() => {
             );
         }
       }
+    }
+    /**
+     * Message for a thrown value, matching the interpreter's evalThrowStatement.
+     */
+    throwMessage(value) {
+      if (value.type === "string") {
+        return value.value;
+      }
+      if (value.type === "object" && value.properties.has("message")) {
+        const msg = value.properties.get("message");
+        return msg.type === "string" ? msg.value : stringify(msg);
+      }
+      return stringify(value);
+    }
+    /**
+     * Apply a compound-assignment operator, mirroring the interpreter's
+     * evalCompoundAssignment. Deliberately stricter than the equivalent binary
+     * operator: `s += "!"` concatenates for `+` but is an error for `+=`.
+     */
+    applyCompound(current, value, op) {
+      if (current.type !== "number" || value.type !== "number") {
+        throw new RuntimeError(
+          "Compound assignment operators only work with numbers",
+          this.currentLine()
+        );
+      }
+      switch (op) {
+        case 0 /* ADD */:
+          return createNumber(current.value + value.value);
+        case 1 /* SUB */:
+          return createNumber(current.value - value.value);
+        case 2 /* MUL */:
+          return createNumber(current.value * value.value);
+        case 3 /* DIV */:
+          if (value.value === 0) {
+            throw new RuntimeError("Division by zero!", this.currentLine());
+          }
+          return createNumber(current.value / value.value);
+        default:
+          throw new RuntimeError(
+            `Unknown assignment operator: ${op}`,
+            this.currentLine()
+          );
+      }
+    }
+    /** Operands of an arithmetic opcode, validated the way the interpreter does. */
+    popNumericOperands() {
+      const b = this.pop();
+      const a = this.pop();
+      if (a.type !== "number" || b.type !== "number") {
+        throw new RuntimeError(
+          `Cannot perform arithmetic on ${a.type} and ${b.type}. Arithmetic operators only work with numbers.`,
+          this.currentLine()
+        );
+      }
+      return [a.value, b.value];
+    }
+    /**
+     * Comparison, matching the interpreter: numbers compare numerically, strings
+     * by locale, and anything else is an error rather than a silent NaN.
+     */
+    compareOperands(op) {
+      const b = this.pop();
+      const a = this.pop();
+      if (a.type === "number" && b.type === "number") {
+        this.push(createBoolean(op(a.value, b.value)));
+        return;
+      }
+      if (a.type === "string" && b.type === "string") {
+        this.push(createBoolean(op(a.value.localeCompare(b.value), 0)));
+        return;
+      }
+      throw new RuntimeError(
+        `Cannot compare ${a.type} and ${b.type}. Comparison works with numbers and strings.`,
+        this.currentLine()
+      );
     }
     callValue(callee, argCount) {
       if (callee.type === "vm-closure") {
@@ -6676,39 +8581,117 @@ var TinyLangBundle = (() => {
         );
       }
     }
+    /**
+     * Reconcile the arguments on the stack with the callee's arity so the frame's
+     * locals occupy exactly the slots the compiler assigned them.
+     *
+     * Missing arguments are padded with null (the default-parameter prologue then
+     * overwrites them where a default exists). Surplus arguments are discarded:
+     * leaving them would push basePointer below where the compiler expects it and
+     * shift every local index in the callee.
+     */
+    reconcileArity(arity, argCount) {
+      for (let i = argCount; i > arity; i--) {
+        this.pop();
+      }
+      for (let i = argCount; i < arity; i++) {
+        this.push(createNull());
+      }
+    }
     callClosure(closure, argCount) {
       const fn = closure.fn;
-      while (argCount < fn.arity) {
-        this.push(createNull());
-        argCount++;
-      }
+      this.reconcileArity(fn.arity, argCount);
       const boundThis = closure.boundThis || null;
       const frame = {
         chunk: fn.chunk,
         ip: 0,
-        basePointer: this.stack.length - argCount,
+        basePointer: this.stack.length - fn.arity,
         upvalues: closure.upvalues,
-        thisBinding: boundThis
+        thisBinding: boundThis,
+        // The count as written at the call site, so LOAD_ARGC can tell an omitted
+        // argument from an explicit null.
+        argCount
       };
       this.frames.push(frame);
     }
-    callNative(fn, argCount) {
+    /**
+     * Invoke a callable from inside native code, e.g. the callback passed to
+     * array methods like map/filter/reduce/forEach.
+     *
+     * Native functions are called directly. VM closures require re-entering the
+     * dispatch loop: we lay out the callee and arguments on the stack exactly as
+     * a CALL instruction would, push the frame, then run until that frame
+     * returns. This is what makes higher-order array methods work in the VM.
+     */
+    callFromNative(callee, args) {
+      if (callee.type === "native-function") {
+        return callee.fn(args, new Environment());
+      }
+      if (callee.type === "vm-closure") {
+        const closure = callee;
+        const depthBefore = this.frames.length;
+        this.push(callee);
+        for (const arg of args) {
+          this.push(arg);
+        }
+        this.callClosure(closure, args.length);
+        this.execute(depthBefore);
+        return this.pop();
+      }
+      throw new RuntimeError(
+        `'${stringify(callee)}' is not callable`,
+        this.currentLine()
+      );
+    }
+    /**
+     * Invoke a native (stdlib) function.
+     *
+     * `checkArity` mirrors where the interpreter performs the check: its
+     * `callFunction` rejects a wrong argument count for a native function value,
+     * but `tryBuiltinMethod` - the `arr.push(...)` / `s.split(...)` path - runs
+     * before that and does not. Checking unconditionally here would make the VM
+     * stricter than the reference on method calls.
+     */
+    callNative(fn, argCount, checkArity = true) {
       const args = [];
       for (let i = 0; i < argCount; i++) {
         args.unshift(this.pop());
       }
       this.pop();
+      if (checkArity && fn.arity >= 0 && args.length !== fn.arity) {
+        throw new RuntimeError(
+          `'${fn.name}' expects ${fn.arity} argument(s), but got ${args.length}`,
+          this.currentLine()
+        );
+      }
       const env = new Environment();
       const result = fn.fn(args, env);
       this.push(result);
     }
-    callClass(classVal, argCount) {
-      const instance = {
+    /**
+     * Create an instance seeded with the class's declared property defaults, then
+     * any the superclass declares that the subclass does not override. INHERIT
+     * copies methods but not properties, so the chain is walked here, matching the
+     * interpreter's evalNewExpression.
+     */
+    instantiate(classVal) {
+      const properties = new Map(classVal.properties);
+      if (classVal.superClass) {
+        for (const [key, value] of classVal.superClass.properties) {
+          if (!properties.has(key)) {
+            properties.set(key, value);
+          }
+        }
+      }
+      return {
         type: "instance",
         className: classVal.name,
         classRef: classVal,
-        properties: new Map(classVal.properties)
+        properties
       };
+    }
+    callClass(classVal, argCount) {
+      const instance = this.instantiate(classVal);
       const initMethod = classVal.methods.get("init") || classVal.methods.get("constructor");
       if (initMethod) {
         this.stack[this.stack.length - 1 - argCount] = instance;
@@ -6723,61 +8706,99 @@ var TinyLangBundle = (() => {
     callMethod(instance, method, argCount) {
       if (method.type === "vm-closure") {
         const closure = method;
+        this.reconcileArity(closure.fn.arity, argCount);
         const frame = {
           chunk: closure.fn.chunk,
           ip: 0,
-          basePointer: this.stack.length - argCount,
+          basePointer: this.stack.length - closure.fn.arity,
           upvalues: closure.upvalues,
-          thisBinding: instance
+          thisBinding: instance,
+          argCount
         };
         this.frames.push(frame);
       } else if (method.type === "native-function") {
-        this.callNative(method, argCount);
+        this.callNative(method, argCount, false);
       }
     }
-    performIndex(obj, index) {
+    /**
+     * Index into an array, string or object.
+     *
+     * An out-of-range index is an error, matching the interpreter, which reports
+     * it rather than yielding null. Returning null here instead meant a
+     * `try`/`catch` around a bad index saw nothing to catch and the program
+     * carried on with a bogus value.
+     *
+     * @param optional Set for `?.[]`, where the interpreter does yield null
+     *   out of range instead of throwing.
+     */
+    performIndex(obj, index, optional = false) {
       if (obj.type === "array") {
         if (index.type !== "number") {
-          throw new RuntimeError("Array index must be a number", this.currentLine());
+          throw new RuntimeError(
+            `Array index must be a number, got ${index.type}`,
+            this.currentLine()
+          );
         }
         const idx = Math.floor(index.value);
         if (idx < 0 || idx >= obj.elements.length) {
-          return createNull();
+          if (optional) return createNull();
+          throw new RuntimeError(
+            `Array index ${idx} is out of bounds. Array has ${obj.elements.length} elements (valid indices: 0 to ${obj.elements.length - 1}).`,
+            this.currentLine()
+          );
         }
         return obj.elements[idx];
       }
       if (obj.type === "object") {
         if (index.type !== "string") {
-          throw new RuntimeError("Object key must be a string", this.currentLine());
+          throw new RuntimeError(
+            `Object keys must be strings, got ${index.type}`,
+            this.currentLine()
+          );
         }
         return obj.properties.get(index.value) || createNull();
       }
       if (obj.type === "string") {
         if (index.type !== "number") {
-          throw new RuntimeError("String index must be a number", this.currentLine());
+          throw new RuntimeError(
+            `String index must be a number, got ${index.type}`,
+            this.currentLine()
+          );
         }
         const idx = Math.floor(index.value);
         if (idx < 0 || idx >= obj.value.length) {
-          return createNull();
+          if (optional) return createNull();
+          throw new RuntimeError(
+            `String index ${idx} is out of bounds. String has ${obj.value.length} characters.`,
+            this.currentLine()
+          );
         }
         return createString(obj.value[idx]);
       }
-      throw new RuntimeError(`Cannot index into ${obj.type}`, this.currentLine());
-    }
-    performSetIndex(obj, index, value) {
-      if (obj.type === "array") {
-        if (index.type !== "number") {
-          throw new RuntimeError("Array index must be a number", this.currentLine());
-        }
-        obj.elements[Math.floor(index.value)] = value;
-      } else if (obj.type === "object") {
-        if (index.type !== "string") {
-          throw new RuntimeError("Object key must be a string", this.currentLine());
-        }
-        obj.properties.set(index.value, value);
-      } else {
-        throw new RuntimeError(`Cannot set index on ${obj.type}`, this.currentLine());
+      if (optional) {
+        throw new RuntimeError(`Cannot index into ${obj.type}`, this.currentLine());
       }
+      throw new RuntimeError(
+        `Cannot index into ${obj.type}. Indexing works with arrays, strings, and objects.`,
+        this.currentLine()
+      );
+    }
+    /**
+     * Indexed assignment.
+     *
+     * Only arrays with a numeric index are assignable, matching the interpreter's
+     * evalAssignmentExpression. Notably `o["k"] = v` is rejected even though
+     * `o["k"]` reads fine; the VM used to allow it, which made the two engines
+     * disagree on a program the reference implementation refuses to run.
+     */
+    performSetIndex(obj, index, value) {
+      if (obj.type !== "array" || index.type !== "number") {
+        throw new RuntimeError(
+          `Cannot assign to index of ${obj.type}`,
+          this.currentLine()
+        );
+      }
+      obj.elements[index.value] = value;
     }
     performGetProp(obj, prop) {
       if (obj.type === "instance") {
@@ -6786,16 +8807,6 @@ var TinyLangBundle = (() => {
         }
         const method = obj.classRef.methods.get(prop);
         if (method) {
-          if (method.type === "vm-closure") {
-            const closure = method;
-            const boundClosure = {
-              type: "vm-closure",
-              fn: closure.fn,
-              upvalues: closure.upvalues
-            };
-            boundClosure.boundThis = obj;
-            return boundClosure;
-          }
           return method;
         }
         return createNull();
@@ -6807,13 +8818,19 @@ var TinyLangBundle = (() => {
         if (prop === "length") {
           return createNumber(obj.elements.length);
         }
-        return this.getArrayMethod(obj, prop);
+        throw new RuntimeError(
+          `Cannot access property '${prop}' on array`,
+          this.currentLine()
+        );
       }
       if (obj.type === "string") {
         if (prop === "length") {
           return createNumber(obj.value.length);
         }
-        return this.getStringMethod(obj, prop);
+        throw new RuntimeError(
+          `Cannot access property '${prop}' on string`,
+          this.currentLine()
+        );
       }
       if (obj.type === "class") {
         if (obj.properties.has(prop)) {
@@ -6822,9 +8839,88 @@ var TinyLangBundle = (() => {
         if (obj.methods.has(prop)) {
           return obj.methods.get(prop);
         }
-        return createNull();
       }
-      return createNull();
+      throw new RuntimeError(
+        `Cannot access property '${prop}' on ${obj.type}`,
+        this.currentLine()
+      );
+    }
+    /**
+     * Resolve `prop` on `receiver` for use as the callee of a method call.
+     *
+     * Mirrors the interpreter's evalCallExpression: builtin methods on arrays,
+     * strings and objects win over anything else, then instance methods, then
+     * static methods, then callable object properties. Notably this is not the
+     * same as reading the property: `arr.length` is a number while `arr.length()`
+     * invokes a builtin, and an instance's function-valued *property* is not
+     * callable as a method.
+     */
+    performGetMethod(receiver, prop) {
+      if (receiver.type === "array") {
+        const method = this.getArrayMethod(receiver, prop);
+        if (method) return method;
+        throw new RuntimeError(
+          `Cannot call method '${prop}' on array`,
+          this.currentLine()
+        );
+      }
+      if (receiver.type === "string") {
+        const method = this.getStringMethod(receiver, prop);
+        if (method) return method;
+        throw new RuntimeError(
+          `Cannot call method '${prop}' on string`,
+          this.currentLine()
+        );
+      }
+      if (receiver.type === "object") {
+        const builtin = this.getObjectMethod(receiver, prop);
+        if (builtin) return builtin;
+        const value = receiver.properties.get(prop);
+        if (!value || value.type !== "function" && value.type !== "native-function") {
+          if (value && value.type === "vm-closure") {
+            return value;
+          }
+          throw new RuntimeError(
+            `'${prop}' is not a callable method on this object`,
+            this.currentLine()
+          );
+        }
+        return value;
+      }
+      if (receiver.type === "instance") {
+        const method = receiver.classRef.methods.get(prop);
+        if (!method) {
+          throw new RuntimeError(
+            `'${receiver.className}' has no method '${prop}'`,
+            this.currentLine()
+          );
+        }
+        if (method.type === "vm-closure") {
+          const closure = method;
+          const bound = {
+            type: "vm-closure",
+            fn: closure.fn,
+            upvalues: closure.upvalues
+          };
+          bound.boundThis = receiver;
+          return bound;
+        }
+        return method;
+      }
+      if (receiver.type === "class") {
+        const method = receiver.methods.get(prop);
+        if (!method) {
+          throw new RuntimeError(
+            `Class '${receiver.name}' has no static method '${prop}'`,
+            this.currentLine()
+          );
+        }
+        return method;
+      }
+      throw new RuntimeError(
+        `Cannot call method '${prop}' on ${receiver.type}`,
+        this.currentLine()
+      );
     }
     performSetProp(obj, prop, value) {
       if (obj.type === "instance") {
@@ -6837,6 +8933,7 @@ var TinyLangBundle = (() => {
         throw new RuntimeError(`Cannot set property on ${obj.type}`, this.currentLine());
       }
     }
+    /** Builtin array methods, or null if there is no such method. */
     getArrayMethod(arr, method) {
       const self = arr;
       switch (method) {
@@ -6844,9 +8941,9 @@ var TinyLangBundle = (() => {
           return {
             type: "native-function",
             name: "push",
-            arity: 1,
+            arity: -1,
             fn: (args) => {
-              self.elements.push(args[0]);
+              self.elements.push(...args);
               return createNumber(self.elements.length);
             }
           };
@@ -6857,70 +8954,300 @@ var TinyLangBundle = (() => {
             arity: 0,
             fn: () => self.elements.pop() || createNull()
           };
+        case "shift":
+          return {
+            type: "native-function",
+            name: "shift",
+            arity: 0,
+            fn: () => self.elements.shift() || createNull()
+          };
+        case "unshift":
+          return {
+            type: "native-function",
+            name: "unshift",
+            arity: -1,
+            fn: (args) => {
+              self.elements.unshift(...args);
+              return createNumber(self.elements.length);
+            }
+          };
+        case "length":
+          return {
+            type: "native-function",
+            name: "length",
+            arity: 0,
+            fn: () => createNumber(self.elements.length)
+          };
         case "map":
           return {
             type: "native-function",
             name: "map",
             arity: 1,
-            fn: (_args) => createArray([...self.elements])
+            fn: (args) => {
+              const cb = args[0];
+              const out = self.elements.map(
+                (el, i) => this.callFromNative(cb, [el, createNumber(i)])
+              );
+              return createArray(out);
+            }
           };
         case "filter":
           return {
             type: "native-function",
             name: "filter",
             arity: 1,
-            fn: (_args) => createArray([...self.elements])
-          };
-        default:
-          return createNull();
-      }
-    }
-    getStringMethod(_str, method) {
-      const self = _str;
-      switch (method) {
-        case "split":
-          return {
-            type: "native-function",
-            name: "split",
-            arity: 1,
             fn: (args) => {
-              const sep = args[0];
-              return createArray(self.value.split(sep.value).map(createString));
+              const cb = args[0];
+              const out = self.elements.filter(
+                (el, i) => isTruthy(this.callFromNative(cb, [el, createNumber(i)]))
+              );
+              return createArray(out);
             }
           };
-        case "trim":
+        case "reduce":
           return {
             type: "native-function",
-            name: "trim",
-            arity: 0,
-            fn: () => createString(self.value.trim())
+            name: "reduce",
+            arity: -1,
+            fn: (args) => {
+              const cb = args[0];
+              let acc = args.length > 1 ? args[1] : self.elements[0] || createNull();
+              const start = args.length > 1 ? 0 : 1;
+              for (let i = start; i < self.elements.length; i++) {
+                acc = this.callFromNative(cb, [acc, self.elements[i], createNumber(i)]);
+              }
+              return acc;
+            }
           };
-        case "upper":
+        case "forEach":
           return {
             type: "native-function",
-            name: "upper",
-            arity: 0,
-            fn: () => createString(self.value.toUpperCase())
+            name: "forEach",
+            arity: 1,
+            fn: (args) => {
+              const cb = args[0];
+              self.elements.forEach((el, i) => {
+                this.callFromNative(cb, [el, createNumber(i)]);
+              });
+              return createNull();
+            }
           };
-        case "lower":
+        case "sort":
           return {
             type: "native-function",
-            name: "lower",
+            name: "sort",
             arity: 0,
-            fn: () => createString(self.value.toLowerCase())
+            fn: () => createArray(
+              [...self.elements].sort(
+                (a, b) => a.type === "number" && b.type === "number" ? a.value - b.value : stringify(a).localeCompare(stringify(b))
+              )
+            )
+          };
+        case "reverse":
+          return {
+            type: "native-function",
+            name: "reverse",
+            arity: 0,
+            fn: () => createArray([...self.elements].reverse())
+          };
+        case "slice":
+          return {
+            type: "native-function",
+            name: "slice",
+            arity: -1,
+            fn: (args) => {
+              const start = args[0]?.type === "number" ? args[0].value : 0;
+              const end = args[1]?.type === "number" ? args[1].value : self.elements.length;
+              return createArray(self.elements.slice(start, end));
+            }
+          };
+        case "indexOf":
+          return {
+            type: "native-function",
+            name: "indexOf",
+            arity: 1,
+            fn: (args) => createNumber(self.elements.findIndex((el) => valueEquals(el, args[0])))
+          };
+        case "includes":
+          return {
+            type: "native-function",
+            name: "includes",
+            arity: 1,
+            fn: (args) => createBoolean(self.elements.some((el) => valueEquals(el, args[0])))
+          };
+        case "join":
+          return {
+            type: "native-function",
+            name: "join",
+            arity: -1,
+            fn: (args) => {
+              const sep = args[0]?.type === "string" ? args[0].value : ",";
+              return createString(self.elements.map(stringify).join(sep));
+            }
           };
         default:
-          return createNull();
+          return null;
+      }
+    }
+    /**
+     * Builtin string methods, or null if there is no such method.
+     *
+     * Kept at parity with the interpreter's tryBuiltinMethod; the VM previously
+     * offered only split/trim/upper/lower and silently returned null for the rest,
+     * so `"a,b".contains("a")` produced a "not callable" failure under the VM but
+     * worked under the interpreter.
+     */
+    getStringMethod(_str, method) {
+      const self = _str;
+      const native = (name, arity, fn) => ({ type: "native-function", name, arity, fn });
+      switch (method) {
+        case "split":
+          return native("split", -1, (args) => {
+            const sep = args[0]?.type === "string" ? args[0].value : "";
+            return createArray(self.value.split(sep).map(createString));
+          });
+        case "trim":
+          return native("trim", 0, () => createString(self.value.trim()));
+        case "upper":
+          return native("upper", 0, () => createString(self.value.toUpperCase()));
+        case "lower":
+          return native("lower", 0, () => createString(self.value.toLowerCase()));
+        case "contains":
+          return native("contains", -1, (args) => {
+            if (args.length === 0 || args[0].type !== "string") {
+              return createBoolean(false);
+            }
+            return createBoolean(self.value.includes(args[0].value));
+          });
+        case "replace":
+          return native("replace", -1, (args) => {
+            if (args.length < 2) {
+              throw new RuntimeError(
+                "replace() needs 2 arguments: pattern and replacement",
+                this.currentLine()
+              );
+            }
+            return createString(
+              self.value.replace(stringify(args[0]), stringify(args[1]))
+            );
+          });
+        case "startsWith":
+          return native("startsWith", -1, (args) => {
+            if (args.length === 0 || args[0].type !== "string") {
+              return createBoolean(false);
+            }
+            return createBoolean(self.value.startsWith(args[0].value));
+          });
+        case "endsWith":
+          return native("endsWith", -1, (args) => {
+            if (args.length === 0 || args[0].type !== "string") {
+              return createBoolean(false);
+            }
+            return createBoolean(self.value.endsWith(args[0].value));
+          });
+        case "charAt":
+          return native("charAt", -1, (args) => {
+            if (args.length === 0 || args[0].type !== "number") {
+              return createString("");
+            }
+            return createString(self.value[Math.floor(args[0].value)] || "");
+          });
+        case "indexOf":
+          return native("indexOf", -1, (args) => {
+            if (args.length === 0 || args[0].type !== "string") {
+              return createNumber(-1);
+            }
+            return createNumber(self.value.indexOf(args[0].value));
+          });
+        case "slice":
+          return native("slice", -1, (args) => {
+            const start = args[0]?.type === "number" ? args[0].value : 0;
+            const end = args[1]?.type === "number" ? args[1].value : self.value.length;
+            return createString(self.value.slice(start, end));
+          });
+        case "repeat":
+          return native("repeat", -1, (args) => {
+            if (args.length === 0 || args[0].type !== "number") {
+              return createString(self.value);
+            }
+            return createString(self.value.repeat(Math.floor(args[0].value)));
+          });
+        default:
+          return null;
+      }
+    }
+    /** Builtin object methods, or null if there is no such method. */
+    getObjectMethod(obj, method) {
+      switch (method) {
+        case "keys":
+          return {
+            type: "native-function",
+            name: "keys",
+            arity: 0,
+            fn: () => createArray(Array.from(obj.properties.keys()).map(createString))
+          };
+        case "values":
+          return {
+            type: "native-function",
+            name: "values",
+            arity: 0,
+            fn: () => createArray(Array.from(obj.properties.values()))
+          };
+        case "has":
+          return {
+            type: "native-function",
+            name: "has",
+            arity: -1,
+            fn: (args) => {
+              if (args.length === 0 || args[0].type !== "string") {
+                return createBoolean(false);
+              }
+              return createBoolean(obj.properties.has(args[0].value));
+            }
+          };
+        default:
+          return null;
       }
     }
   };
 
-  // src/modules/loader.ts
-  var fs2 = __toESM(__require("fs"));
+  // src/modules/node-host.ts
+  function unavailable(what) {
+    throw new Error(
+      `File-backed modules are unavailable in this environment: Node's '${what}' module could not be loaded. Importing from a file path requires a filesystem, so it works under the CLI but not in the browser.`
+    );
+  }
+  var cachedFs = null;
+  var cachedPath = null;
+  function getFs() {
+    if (cachedFs) return cachedFs;
+    try {
+      cachedFs = __require("fs");
+    } catch {
+      unavailable("fs");
+    }
+    return cachedFs;
+  }
+  function getPath() {
+    if (cachedPath) return cachedPath;
+    try {
+      cachedPath = __require("path");
+    } catch {
+      unavailable("path");
+    }
+    return cachedPath;
+  }
+  function hasFileSystem() {
+    try {
+      getFs();
+      getPath();
+      return true;
+    } catch {
+      return false;
+    }
+  }
 
   // src/modules/resolver.ts
-  var path = __toESM(__require("path"));
-  var fs = __toESM(__require("fs"));
   var STDLIB_MODULES = /* @__PURE__ */ new Set(["math", "strings", "io", "arrays", "types", "utils"]);
   var STDLIB_PREFIX = "__stdlib__:";
   var ModuleResolver = class {
@@ -6942,42 +9269,42 @@ var TinyLangBundle = (() => {
       return this.resolvePackage(importSource, fromFile);
     }
     resolveRelative(importSource, fromFile) {
-      const dir = path.dirname(fromFile);
+      const dir = getPath().dirname(fromFile);
       const candidates = [
-        path.resolve(dir, importSource),
-        path.resolve(dir, importSource + ".tiny"),
-        path.resolve(dir, importSource, "index.tiny")
+        getPath().resolve(dir, importSource),
+        getPath().resolve(dir, importSource + ".tiny"),
+        getPath().resolve(dir, importSource, "index.tiny")
       ];
       for (const candidate of candidates) {
-        if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+        if (getFs().existsSync(candidate) && getFs().statSync(candidate).isFile()) {
           return candidate;
         }
       }
       throw new Error(
-        `Module not found: '${importSource}' (imported from ${path.basename(fromFile)})`
+        `Module not found: '${importSource}' (imported from ${getPath().basename(fromFile)})`
       );
     }
     resolvePackage(importSource, fromFile) {
-      let dir = path.dirname(fromFile);
+      let dir = getPath().dirname(fromFile);
       while (true) {
-        const modulesDir = path.join(dir, ".tiny_modules");
-        if (fs.existsSync(modulesDir)) {
+        const modulesDir = getPath().join(dir, ".tiny_modules");
+        if (getFs().existsSync(modulesDir)) {
           const candidates = [
-            path.join(modulesDir, importSource + ".tiny"),
-            path.join(modulesDir, importSource, "index.tiny")
+            getPath().join(modulesDir, importSource + ".tiny"),
+            getPath().join(modulesDir, importSource, "index.tiny")
           ];
           for (const candidate of candidates) {
-            if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+            if (getFs().existsSync(candidate) && getFs().statSync(candidate).isFile()) {
               return candidate;
             }
           }
         }
-        const parentDir = path.dirname(dir);
+        const parentDir = getPath().dirname(dir);
         if (parentDir === dir) break;
         dir = parentDir;
       }
       throw new Error(
-        `Module not found: '${importSource}' (imported from ${path.basename(fromFile)})`
+        `Module not found: '${importSource}' (imported from ${getPath().basename(fromFile)})`
       );
     }
   };
@@ -7015,7 +9342,7 @@ var TinyLangBundle = (() => {
       }
       this.loadingStack.add(filePath);
       try {
-        const source = fs2.readFileSync(filePath, "utf-8");
+        const source = getFs().readFileSync(filePath, "utf-8");
         const lexer = new Lexer(source);
         const tokens = lexer.tokenize();
         const parser = new Parser(tokens);
@@ -7284,6 +9611,7 @@ var TinyLangBundle = (() => {
       // Simple instructions (no operands)
       case 2 /* POP */:
       case 3 /* DUP */:
+      case 4 /* DUP2 */:
       case 16 /* ADD */:
       case 17 /* SUB */:
       case 18 /* MUL */:
@@ -7301,9 +9629,16 @@ var TinyLangBundle = (() => {
       case 49 /* AND */:
       case 50 /* OR */:
       case 114 /* INDEX */:
+      case 122 /* INDEX_OPTIONAL */:
       case 115 /* SET_INDEX */:
       case 130 /* INHERIT */:
       case 132 /* GET_THIS */:
+      case 124 /* CHECK_ITERABLE */:
+      case 118 /* ARRAY_APPEND */:
+      case 119 /* ARRAY_SPREAD */:
+      case 86 /* LOAD_ARGC */:
+      case 161 /* TRY_END */:
+      case 162 /* THROW */:
       case 97 /* RETURN */:
       case 255 /* HALT */:
         return {
@@ -7325,7 +9660,10 @@ var TinyLangBundle = (() => {
       case 80 /* LOAD_LOCAL */:
       case 81 /* STORE_LOCAL */:
       case 84 /* LOAD_UPVALUE */:
-      case 85 /* STORE_UPVALUE */: {
+      case 85 /* STORE_UPVALUE */:
+      case 120 /* DESTRUCT_ELEM */:
+      case 5 /* ROT */:
+      case 23 /* COMPOUND */: {
         const slot = chunk.code[offset + 1] << 8 | chunk.code[offset + 2];
         return {
           text: `${offsetStr} ${lineStr} ${opcodeName(op).padEnd(16)} ${slot}`,
@@ -7334,7 +9672,9 @@ var TinyLangBundle = (() => {
         };
       }
       case 82 /* LOAD_GLOBAL */:
-      case 83 /* STORE_GLOBAL */: {
+      case 83 /* STORE_GLOBAL */:
+      case 87 /* DECLARE_GLOBAL */:
+      case 163 /* RAISE */: {
         const idx = chunk.code[offset + 1] << 8 | chunk.code[offset + 2];
         const name = chunk.constants[idx];
         const nameStr = name && name.type === "string" ? name.value : String(idx);
@@ -7347,7 +9687,9 @@ var TinyLangBundle = (() => {
       case 64 /* JMP */:
       case 65 /* JMP_IF_FALSE */:
       case 66 /* JMP_IF_TRUE */:
-      case 67 /* LOOP */: {
+      case 68 /* JMP_IF_NULL */:
+      case 67 /* LOOP */:
+      case 160 /* TRY_BEGIN */: {
         const target = chunk.code[offset + 1] << 8 | chunk.code[offset + 2];
         return {
           text: `${offsetStr} ${lineStr} ${opcodeName(op).padEnd(16)} -> ${target}`,
@@ -7380,7 +9722,9 @@ var TinyLangBundle = (() => {
       case 128 /* CLASS */:
       case 129 /* METHOD */:
       case 116 /* GET_PROP */:
-      case 117 /* SET_PROP */: {
+      case 117 /* SET_PROP */:
+      case 123 /* GET_METHOD */:
+      case 121 /* DESTRUCT_PROP */: {
         const idx = chunk.code[offset + 1] << 8 | chunk.code[offset + 2];
         const name = chunk.constants[idx];
         const nameStr = name && name.type === "string" ? name.value : String(idx);
@@ -7393,7 +9737,7 @@ var TinyLangBundle = (() => {
       default:
         return {
           text: `${offsetStr} ${lineStr} UNKNOWN(0x${op.toString(16)})`,
-          nextOffset: offset + 1,
+          nextOffset: offset + instructionSize(op),
           line
         };
     }
@@ -7409,151 +9753,154 @@ var TinyLangBundle = (() => {
 
   // src/compiler/optimizer.ts
   function optimize(chunk) {
-    let result = constantFolding(chunk);
-    result = deadCodeElimination(result);
-    result = peepholeOptimize(result);
-    return result;
+    const constants = chunk.constants.map((constant) => {
+      const fn = constant;
+      if (fn && fn.type === "compiled-function") {
+        return { ...fn, chunk: optimize(fn.chunk) };
+      }
+      return constant;
+    });
+    let instructions = decode(chunk);
+    instructions = constantFolding(instructions, constants);
+    instructions = deadCodeElimination(instructions);
+    instructions = peepholeOptimize(instructions);
+    return encode(chunk.name, instructions, constants, chunk.code.length);
   }
-  function constantFolding(chunk) {
-    const newChunk = new Chunk(chunk.name);
-    newChunk.constants = [...chunk.constants];
+  function decode(chunk) {
+    const instructions = [];
+    let offset = 0;
+    while (offset < chunk.code.length) {
+      const op = chunk.code[offset];
+      const size = instructionSize(op);
+      instructions.push({
+        offset,
+        op,
+        operand: size === 3 ? chunk.read16(offset + 1) : void 0,
+        line: chunk.lines[offset]
+      });
+      offset += size;
+    }
+    return instructions;
+  }
+  function encode(name, instructions, constants, originalLength) {
+    const newOffsets = /* @__PURE__ */ new Map();
+    let cursor = 0;
+    for (const instr of instructions) {
+      newOffsets.set(instr.offset, cursor);
+      cursor += instructionSize(instr.op);
+    }
+    const remap = /* @__PURE__ */ new Map();
+    let next = cursor;
+    for (let offset = originalLength; offset >= 0; offset--) {
+      if (newOffsets.has(offset)) {
+        next = newOffsets.get(offset);
+      }
+      remap.set(offset, next);
+    }
+    const chunk = new Chunk(name);
+    chunk.constants = constants;
+    for (const instr of instructions) {
+      chunk.write(instr.op, instr.line);
+      if (instr.operand !== void 0) {
+        const operand = hasAddressOperand(instr.op) ? remap.get(instr.operand) ?? instr.operand : instr.operand;
+        chunk.write16(operand, instr.line);
+      }
+    }
+    return chunk;
+  }
+  function jumpTargets(instructions) {
+    const targets = /* @__PURE__ */ new Set();
+    for (const instr of instructions) {
+      if (hasAddressOperand(instr.op) && instr.operand !== void 0) {
+        targets.add(instr.operand);
+      }
+    }
+    return targets;
+  }
+  function constantFolding(instructions, constants) {
+    const targets = jumpTargets(instructions);
+    const result = [];
     let i = 0;
-    while (i < chunk.code.length) {
-      if (i + 6 < chunk.code.length && chunk.code[i] === 1 /* CONST */ && chunk.code[i + 3] === 1 /* CONST */) {
-        const idx1 = chunk.code[i + 1] << 8 | chunk.code[i + 2];
-        const idx2 = chunk.code[i + 4] << 8 | chunk.code[i + 5];
-        const op = chunk.code[i + 6];
-        const val1 = chunk.constants[idx1];
-        const val2 = chunk.constants[idx2];
-        const folded = tryFoldBinary(val1, val2, op);
+    while (i < instructions.length) {
+      const first = instructions[i];
+      const second = instructions[i + 1];
+      const third = instructions[i + 2];
+      if (second && third && first.op === 1 /* CONST */ && second.op === 1 /* CONST */ && !targets.has(second.offset) && !targets.has(third.offset)) {
+        const folded = tryFoldBinary(
+          constants[first.operand],
+          constants[second.operand],
+          third.op
+        );
         if (folded !== null) {
-          const newIdx = newChunk.constants.length;
-          newChunk.constants.push(folded);
-          const line = chunk.lines[i];
-          newChunk.write(1 /* CONST */, line);
-          newChunk.write16(newIdx, line);
-          i += 7;
+          constants.push(folded);
+          result.push({
+            offset: first.offset,
+            op: 1 /* CONST */,
+            operand: constants.length - 1,
+            line: first.line
+          });
+          i += 3;
           continue;
         }
       }
-      if (i + 3 < chunk.code.length && chunk.code[i] === 1 /* CONST */ && chunk.code[i + 3] === 22 /* NEGATE */) {
-        const idx = chunk.code[i + 1] << 8 | chunk.code[i + 2];
-        const val = chunk.constants[idx];
-        if (val && val.type === "number") {
-          const newIdx = newChunk.constants.length;
-          newChunk.constants.push(createNumber(-val.value));
-          const line = chunk.lines[i];
-          newChunk.write(1 /* CONST */, line);
-          newChunk.write16(newIdx, line);
-          i += 4;
+      if (second && first.op === 1 /* CONST */ && (second.op === 22 /* NEGATE */ || second.op === 48 /* NOT */) && !targets.has(second.offset)) {
+        const value = constants[first.operand];
+        const folded = tryFoldUnary(value, second.op);
+        if (folded !== null) {
+          constants.push(folded);
+          result.push({
+            offset: first.offset,
+            op: 1 /* CONST */,
+            operand: constants.length - 1,
+            line: first.line
+          });
+          i += 2;
           continue;
         }
       }
-      if (i + 3 < chunk.code.length && chunk.code[i] === 1 /* CONST */ && chunk.code[i + 3] === 48 /* NOT */) {
-        const idx = chunk.code[i + 1] << 8 | chunk.code[i + 2];
-        const val = chunk.constants[idx];
-        if (val && val.type === "boolean") {
-          const newIdx = newChunk.constants.length;
-          newChunk.constants.push(createBoolean(!val.value));
-          const line = chunk.lines[i];
-          newChunk.write(1 /* CONST */, line);
-          newChunk.write16(newIdx, line);
-          i += 4;
-          continue;
-        }
-      }
-      newChunk.write(chunk.code[i], chunk.lines[i]);
+      result.push(first);
       i++;
     }
-    return newChunk;
+    return result;
   }
-  function deadCodeElimination(chunk) {
-    const jumpTargets = /* @__PURE__ */ new Set();
-    let i = 0;
-    while (i < chunk.code.length) {
-      const op = chunk.code[i];
-      switch (op) {
-        case 64 /* JMP */:
-        case 65 /* JMP_IF_FALSE */:
-        case 66 /* JMP_IF_TRUE */:
-        case 67 /* LOOP */: {
-          const target = chunk.code[i + 1] << 8 | chunk.code[i + 2];
-          jumpTargets.add(target);
-          i += 3;
-          break;
-        }
-        case 1 /* CONST */:
-        case 80 /* LOAD_LOCAL */:
-        case 81 /* STORE_LOCAL */:
-        case 82 /* LOAD_GLOBAL */:
-        case 83 /* STORE_GLOBAL */:
-        case 84 /* LOAD_UPVALUE */:
-        case 85 /* STORE_UPVALUE */:
-        case 96 /* CALL */:
-        case 98 /* CLOSURE */:
-        case 112 /* ARRAY */:
-        case 113 /* OBJECT */:
-        case 144 /* PRINT */:
-        case 131 /* NEW_INSTANCE */:
-        case 128 /* CLASS */:
-        case 129 /* METHOD */:
-        case 116 /* GET_PROP */:
-        case 117 /* SET_PROP */:
-          i += 3;
-          break;
-        default:
-          i += 1;
-          break;
-      }
-    }
-    const newChunk = new Chunk(chunk.name);
-    newChunk.constants = [...chunk.constants];
+  function deadCodeElimination(instructions) {
+    const targets = jumpTargets(instructions);
+    const result = [];
     let dead = false;
-    i = 0;
-    while (i < chunk.code.length) {
-      if (jumpTargets.has(i)) {
+    for (const instr of instructions) {
+      if (targets.has(instr.offset)) {
         dead = false;
       }
       if (dead) {
-        const op2 = chunk.code[i];
-        i += instructionSize(op2);
         continue;
       }
-      const op = chunk.code[i];
-      const size = instructionSize(op);
-      for (let j = 0; j < size; j++) {
-        newChunk.write(chunk.code[i + j], chunk.lines[i + j]);
-      }
-      if (op === 97 /* RETURN */ || op === 64 /* JMP */) {
+      result.push(instr);
+      if (instr.op === 97 /* RETURN */ || instr.op === 64 /* JMP */ || instr.op === 67 /* LOOP */ || instr.op === 162 /* THROW */ || instr.op === 255 /* HALT */) {
         dead = true;
       }
-      i += size;
     }
-    return newChunk;
+    return result;
   }
-  function peepholeOptimize(chunk) {
-    const newChunk = new Chunk(chunk.name);
-    newChunk.constants = [...chunk.constants];
+  function peepholeOptimize(instructions) {
+    const targets = jumpTargets(instructions);
+    const result = [];
     let i = 0;
-    while (i < chunk.code.length) {
-      if (i + 3 < chunk.code.length && chunk.code[i] === 1 /* CONST */ && chunk.code[i + 3] === 2 /* POP */) {
-        i += 4;
-        continue;
-      }
-      if (i + 1 < chunk.code.length && chunk.code[i] === 3 /* DUP */ && chunk.code[i + 1] === 2 /* POP */) {
+    while (i < instructions.length) {
+      const first = instructions[i];
+      const second = instructions[i + 1];
+      if (second && second.op === 2 /* POP */ && (first.op === 1 /* CONST */ || first.op === 3 /* DUP */) && !targets.has(first.offset) && !targets.has(second.offset)) {
         i += 2;
         continue;
       }
-      const op = chunk.code[i];
-      const size = instructionSize(op);
-      for (let j = 0; j < size; j++) {
-        newChunk.write(chunk.code[i + j], chunk.lines[i + j]);
-      }
-      i += size;
+      result.push(first);
+      i++;
     }
-    return newChunk;
+    return result;
   }
   function tryFoldBinary(a, b, op) {
+    if (a === void 0 || b === void 0) {
+      return null;
+    }
     if (a.type === "number" && b.type === "number") {
       const av = a.value;
       const bv = b.value;
@@ -7599,33 +9946,17 @@ var TinyLangBundle = (() => {
     }
     return null;
   }
-  function instructionSize(op) {
-    switch (op) {
-      case 1 /* CONST */:
-      case 80 /* LOAD_LOCAL */:
-      case 81 /* STORE_LOCAL */:
-      case 82 /* LOAD_GLOBAL */:
-      case 83 /* STORE_GLOBAL */:
-      case 84 /* LOAD_UPVALUE */:
-      case 85 /* STORE_UPVALUE */:
-      case 64 /* JMP */:
-      case 65 /* JMP_IF_FALSE */:
-      case 66 /* JMP_IF_TRUE */:
-      case 67 /* LOOP */:
-      case 96 /* CALL */:
-      case 98 /* CLOSURE */:
-      case 112 /* ARRAY */:
-      case 113 /* OBJECT */:
-      case 144 /* PRINT */:
-      case 131 /* NEW_INSTANCE */:
-      case 128 /* CLASS */:
-      case 129 /* METHOD */:
-      case 116 /* GET_PROP */:
-      case 117 /* SET_PROP */:
-        return 3;
-      default:
-        return 1;
+  function tryFoldUnary(value, op) {
+    if (value === void 0) {
+      return null;
     }
+    if (op === 22 /* NEGATE */ && value.type === "number") {
+      return createNumber(-value.value);
+    }
+    if (op === 48 /* NOT */ && value.type === "boolean") {
+      return createBoolean(!value.value);
+    }
+    return null;
   }
 
   // src/debugger/inspector.ts
@@ -9453,6 +11784,128 @@ ${close}`;
         );
       }
       return { type: "null", value: null };
+    }),
+    createAssertionFn("expect", 1, (args) => {
+      const actual = args[0];
+      const methods = /* @__PURE__ */ new Map();
+      methods.set("toBe", {
+        type: "native-function",
+        name: "toBe",
+        arity: 1,
+        fn: (innerArgs) => {
+          if (!valuesEqual(actual, innerArgs[0])) {
+            throw new AssertionError(
+              `Expected ${stringify(actual)} to be ${stringify(innerArgs[0])}`
+            );
+          }
+          return { type: "null", value: null };
+        }
+      });
+      methods.set("toBeGreaterThan", {
+        type: "native-function",
+        name: "toBeGreaterThan",
+        arity: 1,
+        fn: (innerArgs) => {
+          const n = innerArgs[0];
+          if (actual.type !== "number" || n.type !== "number") {
+            throw new AssertionError(
+              `toBeGreaterThan requires numbers, got ${actual.type} and ${n.type}`
+            );
+          }
+          if (!(actual.value > n.value)) {
+            throw new AssertionError(
+              `Expected ${actual.value} to be greater than ${n.value}`
+            );
+          }
+          return { type: "null", value: null };
+        }
+      });
+      methods.set("toBeLessThan", {
+        type: "native-function",
+        name: "toBeLessThan",
+        arity: 1,
+        fn: (innerArgs) => {
+          const n = innerArgs[0];
+          if (actual.type !== "number" || n.type !== "number") {
+            throw new AssertionError(
+              `toBeLessThan requires numbers, got ${actual.type} and ${n.type}`
+            );
+          }
+          if (!(actual.value < n.value)) {
+            throw new AssertionError(
+              `Expected ${actual.value} to be less than ${n.value}`
+            );
+          }
+          return { type: "null", value: null };
+        }
+      });
+      methods.set("toContain", {
+        type: "native-function",
+        name: "toContain",
+        arity: 1,
+        fn: (innerArgs) => {
+          const needle = innerArgs[0];
+          if (actual.type === "array") {
+            const found = actual.elements.some((el) => valuesEqual(el, needle));
+            if (!found) {
+              throw new AssertionError(
+                `Expected ${stringify(actual)} to contain ${stringify(needle)}`
+              );
+            }
+          } else if (actual.type === "string" && needle.type === "string") {
+            if (!actual.value.includes(needle.value)) {
+              throw new AssertionError(
+                `Expected "${actual.value}" to contain "${needle.value}"`
+              );
+            }
+          } else {
+            throw new AssertionError(
+              `toContain requires an array or string, got ${actual.type}`
+            );
+          }
+          return { type: "null", value: null };
+        }
+      });
+      methods.set("toBeNull", {
+        type: "native-function",
+        name: "toBeNull",
+        arity: 0,
+        fn: () => {
+          if (actual.type !== "null") {
+            throw new AssertionError(
+              `Expected ${stringify(actual)} to be null`
+            );
+          }
+          return { type: "null", value: null };
+        }
+      });
+      methods.set("toBeTrue", {
+        type: "native-function",
+        name: "toBeTrue",
+        arity: 0,
+        fn: () => {
+          if (!isTruthy(actual)) {
+            throw new AssertionError(
+              `Expected ${stringify(actual)} to be truthy`
+            );
+          }
+          return { type: "null", value: null };
+        }
+      });
+      methods.set("toBeFalse", {
+        type: "native-function",
+        name: "toBeFalse",
+        arity: 0,
+        fn: () => {
+          if (isTruthy(actual)) {
+            throw new AssertionError(
+              `Expected ${stringify(actual)} to be falsy`
+            );
+          }
+          return { type: "null", value: null };
+        }
+      });
+      return { type: "object", properties: methods };
     }),
     createAssertionFn("expectToThrow", 1, (args) => {
       const [fn] = args;

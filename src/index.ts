@@ -43,3 +43,6 @@ export type { TestResult } from './testing';
 
 // Module System
 export { ModuleResolver, ModuleLoader, STDLIB_PREFIX } from './modules';
+// Exposed so an embedder (notably the Web IDE) can tell whether file-backed
+// imports are usable before attempting one.
+export { hasFileSystem } from './modules/node-host';
