@@ -11,7 +11,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { TinyLang } from '../tinylang';
 import { Repl } from '../repl';
-import { Compiler, Chunk, disassemble, optimize, WasmCompiler } from '../compiler';
+import {
+  Compiler,
+  Chunk,
+  disassemble,
+  optimize,
+  WasmCompiler,
+  summarizeWasmResult,
+} from '../compiler';
 import { VM } from '../vm';
 import { Debugger, getHelpText } from '../debugger';
 import { Formatter } from '../formatter';
@@ -993,19 +1000,39 @@ function cmdWasm(filePath: string, flags: Record<string, string | boolean>): voi
     const compiler = new WasmCompiler();
     const result = compiler.compile(source);
 
-    if (result.errors.length > 0) {
-      console.log(yellow('Warnings:'));
-      for (const err of result.errors) {
-        console.log(yellow(`  - ${err}`));
-      }
-      console.log('');
+    // A function that hit an unsupported construct is left out of the module
+    // entirely. These are not warnings: the function does not exist in the
+    // output and nothing can call it, so they are reported as errors and the
+    // command fails.
+    const report = summarizeWasmResult(result, filePath);
+
+    if (report.writeOutput) {
+      fs.writeFileSync(outputPath, result.wat);
     }
 
-    fs.writeFileSync(outputPath, result.wat);
-    const bytes = Buffer.byteLength(result.wat, 'utf-8');
-    console.log(green(`Compiled to WebAssembly: ${outputPath} (${bytes} bytes)`));
-    if (result.exports.length > 0) {
-      console.log(dim(`Exports: ${result.exports.join(', ')}`));
+    for (const line of report.lines) {
+      switch (line.level) {
+        case 'error':
+          console.log(red(line.text));
+          break;
+        case 'note':
+          console.log(yellow(line.text));
+          break;
+        case 'detail':
+          console.log(dim(line.text));
+          break;
+        case 'ok':
+          if (report.writeOutput) {
+            const bytes = Buffer.byteLength(result.wat, 'utf-8');
+            console.log(green(`Compiled to WebAssembly: ${outputPath} (${bytes} bytes)`));
+          }
+          console.log(dim(line.text));
+          break;
+      }
+    }
+
+    if (report.exitCode !== 0) {
+      process.exit(report.exitCode);
     }
   } catch (e) {
     showError(e instanceof Error ? e.message : String(e));

@@ -9,4 +9,12 @@ export { Chunk } from './chunk';
 export { OpCode, opcodeName } from './opcodes';
 export { disassemble } from './disassembler';
 export { optimize } from './optimizer';
-export { WasmCompiler, WasmCompileResult } from './wasm-compiler';
+export {
+  WasmCompiler,
+  WasmCompileResult,
+  WasmSkippedFunction,
+  WasmReport,
+  WasmReportLine,
+  WasmReportLevel,
+  summarizeWasmResult,
+} from './wasm-compiler';
