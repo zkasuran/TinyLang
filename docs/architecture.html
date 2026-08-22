@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Architecture - TinyLang Documentation</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+  <div class="layout">
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <a href="index.html" class="sidebar-logo">
+          <img src="assets/logo.svg" alt="TinyLang" width="32" height="32">
+          <div>
+            <div class="sidebar-logo-text">TinyLang</div>
+            <div class="sidebar-version">v1.0.0</div>
+          </div>
+        </a>
+      </div>
+      <div class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Getting Started</div>
+          <a href="index.html" class="sidebar-link">Overview</a>
+          <a href="getting-started.html" class="sidebar-link">Quick Start</a>
+          <a href="cli-reference.html" class="sidebar-link">CLI Reference</a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Language</div>
+          <a href="language-reference.html" class="sidebar-link">Language Reference</a>
+          <a href="stdlib.html" class="sidebar-link">Standard Library</a>
+          <a href="examples.html" class="sidebar-link">Examples</a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Internals</div>
+          <a href="architecture.html" class="sidebar-link active">Architecture</a>
+          <a href="contributing.html" class="sidebar-link">Contributing</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="main-content">
+      <div class="top-bar">
+        <button class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12h18M3 6h18M3 18h18"/>
+          </svg>
+        </button>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+          <span>Theme</span>
+        </button>
+      </div>
+
+      <main class="content">
+        <div class="breadcrumb">
+          <a href="index.html">Docs</a>
+          <span class="breadcrumb-separator">/</span>
+          <span>Architecture</span>
+        </div>
+
+        <h1>Architecture</h1>
+        <p>TinyLang is a complete language implementation featuring both a tree-walk interpreter and a bytecode compiler with virtual machine. This guide explains how each component works together.</p>
+
+        <!-- Pipeline Diagram -->
+        <h2>Compilation Pipeline</h2>
+        <div class="diagram">
+          <img src="assets/architecture.svg" alt="TinyLang Architecture Diagram" style="max-width: 100%; height: auto;">
+        </div>
+
+        <p>TinyLang supports two execution paths:</p>
+        <ol>
+          <li><strong>Interpreter path:</strong> Source &rarr; Lexer &rarr; Parser &rarr; AST &rarr; Tree-walk Interpreter &rarr; Output</li>
+          <li><strong>Compiler path:</strong> Source &rarr; Lexer &rarr; Parser &rarr; AST &rarr; Compiler &rarr; Optimizer &rarr; Bytecode &rarr; VM &rarr; Output</li>
+        </ol>
+
+        <!-- Lexer -->
+        <h2>Lexer (Tokenizer)</h2>
+        <p>The lexer (<code>src/lexer/</code>) converts raw source text into a stream of tokens. It handles:</p>
+
+        <ul>
+          <li><strong>Keywords:</strong> <code>let</code>, <code>const</code>, <code>fn</code>, <code>class</code>, <code>if</code>, <code>else</code>, <code>while</code>, <code>for</code>, <code>in</code>, <code>return</code>, <code>match</code>, <code>when</code>, <code>import</code>, <code>from</code>, <code>new</code>, <code>this</code>, <code>extends</code>, <code>test</code>, <code>break</code>, <code>continue</code>, <code>and</code>, <code>or</code>, <code>not</code>, <code>true</code>, <code>false</code>, <code>null</code></li>
+          <li><strong>Literals:</strong> Numbers (integers, floats), strings (single/double quoted)</li>
+          <li><strong>Operators:</strong> <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>%</code>, <code>**</code>, <code>==</code>, <code>!=</code>, <code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code>, <code>=</code>, <code>+=</code>, <code>-=</code>, <code>*=</code>, <code>/=</code>, <code>=&gt;</code>, <code>..</code></li>
+          <li><strong>Delimiters:</strong> <code>(</code>, <code>)</code>, <code>{</code>, <code>}</code>, <code>[</code>, <code>]</code>, <code>,</code>, <code>.</code>, <code>:</code>, <code>;</code></li>
+          <li><strong>Comments:</strong> Single-line (<code>//</code>)</li>
+        </ul>
+
+        <p>Each token carries its <strong>source position</strong> (line and column), enabling precise error messages:</p>
+        <pre><code><span class="cmt">// Token structure</span>
+{
+  <span class="prop">type</span>: TokenType,      <span class="cmt">// e.g. "NUMBER", "IDENTIFIER", "KEYWORD"</span>
+  <span class="prop">value</span>: <span class="kw">string</span>,       <span class="cmt">// raw text: "42", "let", "hello"</span>
+  <span class="prop">line</span>: <span class="kw">number</span>,         <span class="cmt">// 1-based line number</span>
+  <span class="prop">column</span>: <span class="kw">number</span>       <span class="cmt">// 1-based column number</span>
+}</code></pre>
+
+        <!-- Parser -->
+        <h2>Parser (Pratt Parsing)</h2>
+        <p>The parser (<code>src/parser/</code>) uses a <strong>Pratt parser</strong> (top-down operator precedence) to convert tokens into an Abstract Syntax Tree (AST). This approach elegantly handles:</p>
+
+        <ul>
+          <li><strong>Operator precedence:</strong> <code>2 + 3 * 4</code> correctly parses as <code>2 + (3 * 4)</code></li>
+          <li><strong>Associativity:</strong> <code>a = b = c</code> associates right-to-left</li>
+          <li><strong>Prefix operators:</strong> <code>-x</code>, <code>not y</code></li>
+          <li><strong>Postfix/infix:</strong> Function calls, index access, property access</li>
+          <li><strong>Mixed expressions:</strong> <code>obj.method(args)[0]</code></li>
+        </ul>
+
+        <h3>Operator Precedence (low to high)</h3>
+        <table>
+          <thead><tr><th>Level</th><th>Operators</th><th>Associativity</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><code>=</code>, <code>+=</code>, <code>-=</code>, <code>*=</code>, <code>/=</code></td><td>Right</td></tr>
+            <tr><td>2</td><td><code>or</code></td><td>Left</td></tr>
+            <tr><td>3</td><td><code>and</code></td><td>Left</td></tr>
+            <tr><td>4</td><td><code>==</code>, <code>!=</code></td><td>Left</td></tr>
+            <tr><td>5</td><td><code>&lt;</code>, <code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code></td><td>Left</td></tr>
+            <tr><td>6</td><td><code>..</code> (range)</td><td>Left</td></tr>
+            <tr><td>7</td><td><code>+</code>, <code>-</code></td><td>Left</td></tr>
+            <tr><td>8</td><td><code>*</code>, <code>/</code>, <code>%</code></td><td>Left</td></tr>
+            <tr><td>9</td><td><code>**</code></td><td>Right</td></tr>
+            <tr><td>10</td><td><code>not</code>, <code>-</code> (unary)</td><td>Prefix</td></tr>
+            <tr><td>11</td><td><code>.</code>, <code>[]</code>, <code>()</code></td><td>Left</td></tr>
+          </tbody>
+        </table>
+
+        <h3>AST Node Types</h3>
+        <p>The AST (<code>src/types/ast.ts</code>) represents every syntactic construct:</p>
+        <pre><code><span class="cmt">// Example AST for: let x = 2 + 3</span>
+{
+  <span class="prop">type</span>: <span class="str">"VariableDeclaration"</span>,
+  <span class="prop">name</span>: <span class="str">"x"</span>,
+  <span class="prop">mutable</span>: <span class="kw">true</span>,
+  <span class="prop">initializer</span>: {
+    <span class="prop">type</span>: <span class="str">"BinaryExpression"</span>,
+    <span class="prop">operator</span>: <span class="str">"+"</span>,
+    <span class="prop">left</span>: { <span class="prop">type</span>: <span class="str">"NumberLiteral"</span>, <span class="prop">value</span>: <span class="num">2</span> },
+    <span class="prop">right</span>: { <span class="prop">type</span>: <span class="str">"NumberLiteral"</span>, <span class="prop">value</span>: <span class="num">3</span> }
+  }
+}</code></pre>
+
+        <!-- Interpreter -->
+        <h2>Tree-Walk Interpreter</h2>
+        <p>The interpreter (<code>src/interpreter/</code>) recursively visits each AST node and evaluates it directly. It uses an <strong>Environment</strong> class with parent chain for lexical scoping:</p>
+
+        <pre><code><span class="cmt">// Environment chain for closure support</span>
+<span class="kw">class</span> <span class="cls">Environment</span> {
+  <span class="prop">values</span>: Map&lt;string, RuntimeValue&gt;
+  <span class="prop">parent</span>: Environment | <span class="kw">null</span>
+
+  <span class="fn">get</span>(name)    <span class="cmt">// Look up variable, walk parent chain</span>
+  <span class="fn">set</span>(name, v) <span class="cmt">// Set variable in current scope</span>
+  <span class="fn">define</span>(name) <span class="cmt">// Create new binding in current scope</span>
+}</code></pre>
+
+        <h3>Runtime Values</h3>
+        <p>Values in the interpreter are represented as discriminated unions (<code>src/types/values.ts</code>):</p>
+        <table>
+          <thead><tr><th>Type Tag</th><th>Value Field</th></tr></thead>
+          <tbody>
+            <tr><td><code>number</code></td><td><code>value: number</code></td></tr>
+            <tr><td><code>string</code></td><td><code>value: string</code></td></tr>
+            <tr><td><code>boolean</code></td><td><code>value: boolean</code></td></tr>
+            <tr><td><code>null</code></td><td>(no value field)</td></tr>
+            <tr><td><code>array</code></td><td><code>elements: RuntimeValue[]</code></td></tr>
+            <tr><td><code>object</code></td><td><code>properties: Map&lt;string, RuntimeValue&gt;</code></td></tr>
+            <tr><td><code>function</code></td><td><code>params, body, closure (Environment)</code></td></tr>
+            <tr><td><code>native-function</code></td><td><code>fn: (args) =&gt; RuntimeValue</code></td></tr>
+            <tr><td><code>class</code></td><td><code>name, methods, superClass</code></td></tr>
+            <tr><td><code>instance</code></td><td><code>class, properties</code></td></tr>
+          </tbody>
+        </table>
+
+        <!-- Bytecode Compiler -->
+        <h2>Bytecode Compiler</h2>
+        <p>The compiler (<code>src/compiler/compiler.ts</code>) translates AST nodes into a linear sequence of bytecode instructions stored in a <strong>Chunk</strong>.</p>
+
+        <h3>Chunk Structure</h3>
+        <pre><code><span class="cmt">// A compiled bytecode chunk</span>
+{
+  <span class="prop">code</span>: Uint8Array,         <span class="cmt">// Bytecode instructions</span>
+  <span class="prop">constants</span>: RuntimeValue[], <span class="cmt">// Constant pool</span>
+  <span class="prop">lines</span>: number[]           <span class="cmt">// Source line mapping</span>
+}</code></pre>
+
+        <h3>Opcode Reference</h3>
+        <p>TinyLang uses 44 bytecode instructions organized into categories:</p>
+
+        <h4>Stack Operations</h4>
+        <table>
+          <thead><tr><th>Opcode</th><th>Hex</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>CONST</code></td><td><code>0x01</code></td><td>Push a constant from the constant pool</td></tr>
+            <tr><td><code>POP</code></td><td><code>0x02</code></td><td>Pop the top of stack</td></tr>
+            <tr><td><code>DUP</code></td><td><code>0x03</code></td><td>Duplicate the top of stack</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Arithmetic Operations</h4>
+        <table>
+          <thead><tr><th>Opcode</th><th>Hex</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>ADD</code></td><td><code>0x10</code></td><td>Pop two values, push their sum</td></tr>
+            <tr><td><code>SUB</code></td><td><code>0x11</code></td><td>Subtraction</td></tr>
+            <tr><td><code>MUL</code></td><td><code>0x12</code></td><td>Multiplication</td></tr>
+            <tr><td><code>DIV</code></td><td><code>0x13</code></td><td>Division</td></tr>
+            <tr><td><code>MOD</code></td><td><code>0x14</code></td><td>Modulo</td></tr>
+            <tr><td><code>POW</code></td><td><code>0x15</code></td><td>Exponentiation</td></tr>
+            <tr><td><code>NEGATE</code></td><td><code>0x16</code></td><td>Unary negation</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Comparison Operations</h4>
+        <table>
+          <thead><tr><th>Opcode</th><th>Hex</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>EQ</code></td><td><code>0x20</code></td><td>Equal</td></tr>
+            <tr><td><code>NEQ</code></td><td><code>0x21</code></td><td>Not equal</td></tr>
+            <tr><td><code>LT</code></td><td><code>0x22</code></td><td>Less than</td></tr>
+            <tr><td><code>LTE</code></td><td><code>0x23</code></td><td>Less than or equal</td></tr>
+            <tr><td><code>GT</code></td><td><code>0x24</code></td><td>Greater than</td></tr>
+            <tr><td><code>GTE</code></td><td><code>0x25</code></td><td>Greater than or equal</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Logical Operations</h4>
+        <table>
+          <thead><tr><th>Opcode</th><th>Hex</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>NOT</code></td><td><code>0x30</code></td><td>Logical NOT</td></tr>
+            <tr><td><code>AND</code></td><td><code>0x31</code></td><td>Logical AND</td></tr>
+            <tr><td><code>OR</code></td><td><code>0x32</code></td><td>Logical OR</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Control Flow</h4>
+        <table>
+          <thead><tr><th>Opcode</th><th>Hex</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>JMP</code></td><td><code>0x40</code></td><td>Unconditional jump</td></tr>
+            <tr><td><code>JMP_IF_FALSE</code></td><td><code>0x41</code></td><td>Jump if top of stack is falsy</td></tr>
+            <tr><td><code>JMP_IF_TRUE</code></td><td><code>0x42</code></td><td>Jump if top of stack is truthy</td></tr>
+            <tr><td><code>LOOP</code></td><td><code>0x43</code></td><td>Jump backwards (loop back)</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Variable Access</h4>
+        <table>
+          <thead><tr><th>Opcode</th><th>Hex</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>LOAD_LOCAL</code></td><td><code>0x50</code></td><td>Push local variable onto stack</td></tr>
+            <tr><td><code>STORE_LOCAL</code></td><td><code>0x51</code></td><td>Store top of stack in local</td></tr>
+            <tr><td><code>LOAD_GLOBAL</code></td><td><code>0x52</code></td><td>Push global variable onto stack</td></tr>
+            <tr><td><code>STORE_GLOBAL</code></td><td><code>0x53</code></td><td>Store top of stack in global</td></tr>
+            <tr><td><code>LOAD_UPVALUE</code></td><td><code>0x54</code></td><td>Load captured closure variable</td></tr>
+            <tr><td><code>STORE_UPVALUE</code></td><td><code>0x55</code></td><td>Store into captured closure variable</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Functions</h4>
+        <table>
+          <thead><tr><th>Opcode</th><th>Hex</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>CALL</code></td><td><code>0x60</code></td><td>Call function with N arguments</td></tr>
+            <tr><td><code>RETURN</code></td><td><code>0x61</code></td><td>Return from function</td></tr>
+            <tr><td><code>CLOSURE</code></td><td><code>0x62</code></td><td>Create closure capturing upvalues</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Data Structures</h4>
+        <table>
+          <thead><tr><th>Opcode</th><th>Hex</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>ARRAY</code></td><td><code>0x70</code></td><td>Create array from N stack elements</td></tr>
+            <tr><td><code>OBJECT</code></td><td><code>0x71</code></td><td>Create object from key-value pairs</td></tr>
+            <tr><td><code>INDEX</code></td><td><code>0x72</code></td><td>Read value at index/key</td></tr>
+            <tr><td><code>SET_INDEX</code></td><td><code>0x73</code></td><td>Set value at index/key</td></tr>
+            <tr><td><code>GET_PROP</code></td><td><code>0x74</code></td><td>Get object property</td></tr>
+            <tr><td><code>SET_PROP</code></td><td><code>0x75</code></td><td>Set object property</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Object-Oriented Programming</h4>
+        <table>
+          <thead><tr><th>Opcode</th><th>Hex</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>CLASS</code></td><td><code>0x80</code></td><td>Define a class</td></tr>
+            <tr><td><code>METHOD</code></td><td><code>0x81</code></td><td>Define a method on a class</td></tr>
+            <tr><td><code>INHERIT</code></td><td><code>0x82</code></td><td>Set up inheritance</td></tr>
+            <tr><td><code>NEW_INSTANCE</code></td><td><code>0x83</code></td><td>Create new class instance</td></tr>
+            <tr><td><code>GET_THIS</code></td><td><code>0x84</code></td><td>Push this reference onto stack</td></tr>
+          </tbody>
+        </table>
+
+        <h4>I/O and Control</h4>
+        <table>
+          <thead><tr><th>Opcode</th><th>Hex</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>PRINT</code></td><td><code>0x90</code></td><td>Print top of stack</td></tr>
+            <tr><td><code>HALT</code></td><td><code>0xFF</code></td><td>Stop execution</td></tr>
+          </tbody>
+        </table>
+
+        <!-- Optimizer -->
+        <h2>Optimizer</h2>
+        <p>The optimizer runs peephole optimizations on the bytecode before execution:</p>
+        <ul>
+          <li><strong>Constant folding:</strong> <code>CONST 2; CONST 3; ADD</code> &rarr; <code>CONST 5</code></li>
+          <li><strong>Dead code elimination:</strong> Removes unreachable instructions after unconditional jumps</li>
+          <li><strong>Redundant pop removal:</strong> Eliminates push-then-pop sequences</li>
+          <li><strong>Jump threading:</strong> Collapses chains of jumps to their final target</li>
+        </ul>
+
+        <!-- Virtual Machine -->
+        <h2>Virtual Machine (VM)</h2>
+        <p>The VM (<code>src/vm/vm.ts</code>) is a <strong>stack-based</strong> virtual machine that executes compiled bytecode:</p>
+
+        <h3>VM Components</h3>
+        <ul>
+          <li><strong>Value Stack:</strong> Holds operands and intermediate results</li>
+          <li><strong>Call Frame Stack:</strong> Tracks function calls (return address, local variables offset)</li>
+          <li><strong>Instruction Pointer (IP):</strong> Points to the next instruction to execute</li>
+          <li><strong>Globals Table:</strong> Stores global variables (including stdlib functions)</li>
+        </ul>
+
+        <h3>Execution Example</h3>
+        <pre><code><span class="cmt">// Source: print(2 + 3 * 4)</span>
+<span class="cmt">// Compiles to:</span>
+CONST 2         <span class="cmt">// Push 2        Stack: [2]</span>
+CONST 3         <span class="cmt">// Push 3        Stack: [2, 3]</span>
+CONST 4         <span class="cmt">// Push 4        Stack: [2, 3, 4]</span>
+MUL             <span class="cmt">// 3 * 4 = 12    Stack: [2, 12]</span>
+ADD             <span class="cmt">// 2 + 12 = 14   Stack: [14]</span>
+PRINT           <span class="cmt">// Output: 14    Stack: []</span>
+HALT            <span class="cmt">// Stop</span></code></pre>
+
+        <h3>Closure Implementation</h3>
+        <p>Closures are implemented using <strong>upvalues</strong>. When a function captures a variable from an outer scope, the compiler generates <code>LOAD_UPVALUE</code>/<code>STORE_UPVALUE</code> instructions. The VM maintains upvalue references that can outlive their original stack frame.</p>
+
+        <!-- Debugger -->
+        <h2>Debugger</h2>
+        <p>The debugger (<code>src/debugger/</code>) provides step-through execution with:</p>
+        <ul>
+          <li><strong>Breakpoints:</strong> Set at specific source lines, with optional conditions</li>
+          <li><strong>Step/Step-into/Step-out:</strong> Fine-grained execution control</li>
+          <li><strong>Variable inspection:</strong> View local variables at any point</li>
+          <li><strong>Expression evaluation:</strong> Evaluate expressions in the current context</li>
+          <li><strong>Source display:</strong> Shows current position in source code</li>
+        </ul>
+
+        <!-- Other Tools -->
+        <h2>Supporting Tools</h2>
+
+        <h3>Formatter</h3>
+        <p>The formatter (<code>src/formatter/</code>) parses source code and re-emits it with consistent style. It handles indentation, spacing, line breaks, and trailing newlines based on configurable rules.</p>
+
+        <h3>Linter</h3>
+        <p>The linter (<code>src/linter/</code>) performs static analysis by walking the AST and checking for common issues:</p>
+        <ul>
+          <li><code>prefer-const</code> - Variables that could be const</li>
+          <li><code>no-unused-variables</code> - Declared but never referenced variables</li>
+          <li><code>no-empty-blocks</code> - Empty function/loop bodies</li>
+          <li><code>unreachable-code</code> - Code after return/break</li>
+          <li><code>no-shadow</code> - Variable shadowing in nested scopes</li>
+        </ul>
+
+        <h3>Test Runner</h3>
+        <p>The test runner (<code>src/testing/</code>) executes <code>test</code> blocks and reports results. It provides assertion functions like <code>expectToBe</code> and tracks pass/fail status.</p>
+
+        <h3>Module Loader</h3>
+        <p>The module loader (<code>src/modules/</code>) resolves import paths, reads module files, parses them, and makes exported bindings available to the importing module.</p>
+
+        <!-- Project Structure -->
+        <h2>Project Structure</h2>
+        <pre><code>src/
+  lexer/        <span class="cmt">- Tokenization</span>
+  parser/       <span class="cmt">- Pratt parser, AST construction</span>
+  interpreter/  <span class="cmt">- Tree-walk evaluation</span>
+  compiler/     <span class="cmt">- Bytecode compilation &amp; optimization</span>
+  vm/           <span class="cmt">- Stack-based virtual machine</span>
+  debugger/     <span class="cmt">- Interactive debugger</span>
+  formatter/    <span class="cmt">- Code formatter</span>
+  linter/       <span class="cmt">- Static analysis</span>
+  testing/      <span class="cmt">- Test runner</span>
+  modules/      <span class="cmt">- Module system &amp; loader</span>
+  stdlib/       <span class="cmt">- Standard library (60+ functions)</span>
+  repl/         <span class="cmt">- Interactive REPL</span>
+  cli/          <span class="cmt">- Command-line interface</span>
+  types/        <span class="cmt">- AST nodes, tokens, runtime values</span>
+tests/          <span class="cmt">- Mirrors src/ structure</span>
+examples/       <span class="cmt">- 10 example programs</span>
+playground/     <span class="cmt">- Web IDE (CodeMirror + bundled TinyLang)</span>
+docs/           <span class="cmt">- Documentation site</span></code></pre>
+
+        <div class="page-nav">
+          <a href="examples.html" class="page-nav-link">
+            <div class="page-nav-label">Previous</div>
+            <div class="page-nav-title">&larr; Examples</div>
+          </a>
+          <a href="contributing.html" class="page-nav-link next">
+            <div class="page-nav-label">Next</div>
+            <div class="page-nav-title">Contributing &rarr;</div>
+          </a>
+        </div>
+
+        <footer class="page-footer">
+          <span>TinyLang v1.0.0</span>
+          <a href="https://github.com/tinylang/tinylang">GitHub</a>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme');
+      if (current === 'dark') {
+        html.setAttribute('data-theme', 'light');
+        localStorage.setItem('theme', 'light');
+      } else {
+        html.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+      }
+    }
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.querySelector('.sidebar-overlay').classList.toggle('active');
+    }
+    (function() {
+      const saved = localStorage.getItem('theme');
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+    })();
+  </script>
+</body>
+</html>

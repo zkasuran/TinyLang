@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Standard Library - TinyLang Documentation</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+  <div class="layout">
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <a href="index.html" class="sidebar-logo">
+          <img src="assets/logo.svg" alt="TinyLang" width="32" height="32">
+          <div>
+            <div class="sidebar-logo-text">TinyLang</div>
+            <div class="sidebar-version">v1.0.0</div>
+          </div>
+        </a>
+      </div>
+      <div class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Getting Started</div>
+          <a href="index.html" class="sidebar-link">Overview</a>
+          <a href="getting-started.html" class="sidebar-link">Quick Start</a>
+          <a href="cli-reference.html" class="sidebar-link">CLI Reference</a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Language</div>
+          <a href="language-reference.html" class="sidebar-link">Language Reference</a>
+          <a href="stdlib.html" class="sidebar-link active">Standard Library</a>
+          <a href="examples.html" class="sidebar-link">Examples</a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Internals</div>
+          <a href="architecture.html" class="sidebar-link">Architecture</a>
+          <a href="contributing.html" class="sidebar-link">Contributing</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="main-content">
+      <div class="top-bar">
+        <button class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12h18M3 6h18M3 18h18"/>
+          </svg>
+        </button>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+          <span>Theme</span>
+        </button>
+      </div>
+
+      <main class="content">
+        <div class="breadcrumb">
+          <a href="index.html">Docs</a>
+          <span class="breadcrumb-separator">/</span>
+          <span>Standard Library</span>
+        </div>
+
+        <h1>Standard Library</h1>
+        <p>TinyLang provides 60+ built-in functions organized into 6 modules. All functions are available globally without importing.</p>
+
+        <div class="info-box tip">
+          <div class="info-box-title">Quick Navigation</div>
+          <p>
+            <a href="#io">I/O</a> |
+            <a href="#math">Math</a> |
+            <a href="#strings">Strings</a> |
+            <a href="#arrays">Arrays</a> |
+            <a href="#types">Types</a> |
+            <a href="#utils">Utils</a>
+          </p>
+        </div>
+
+        <!-- ==================== I/O Module ==================== -->
+        <h2 id="io">I/O Module</h2>
+        <p>Functions for input and output.</p>
+
+        <h3><code>print(...args)</code></h3>
+        <p>Output values to the console, separated by spaces.</p>
+        <div class="fn-signature"><span class="kw">print</span>(value1, value2, ...) &rarr; <span class="kw">null</span></div>
+        <pre><code><span class="bi">print</span>(<span class="str">"Hello"</span>)             <span class="cmt">// Hello</span>
+<span class="bi">print</span>(<span class="str">"x ="</span>, <span class="num">42</span>)          <span class="cmt">// x = 42</span>
+<span class="bi">print</span>(<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>)             <span class="cmt">// 1 2 3</span></code></pre>
+
+        <h3><code>println(...args)</code></h3>
+        <p>Same as <code>print</code> - outputs values followed by a newline.</p>
+        <div class="fn-signature"><span class="kw">println</span>(value1, value2, ...) &rarr; <span class="kw">null</span></div>
+        <pre><code><span class="bi">println</span>(<span class="str">"Line 1"</span>)
+<span class="bi">println</span>(<span class="str">"Line 2"</span>)</code></pre>
+
+        <h3><code>input(prompt?)</code></h3>
+        <p>Read user input from stdin. Optionally display a prompt.</p>
+        <div class="fn-signature"><span class="kw">input</span>(prompt?: string) &rarr; string</div>
+        <pre><code><span class="kw">let</span> name = <span class="bi">input</span>(<span class="str">"Enter your name: "</span>)
+<span class="bi">print</span>(<span class="str">"Hello, "</span> + name)</code></pre>
+
+        <!-- ==================== Math Module ==================== -->
+        <h2 id="math">Math Module</h2>
+        <p>Mathematical operations and constants.</p>
+
+        <h3>Constants</h3>
+        <table>
+          <thead><tr><th>Name</th><th>Value</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>PI</code></td><td><code>3.141592653589793</code></td><td>Ratio of circumference to diameter</td></tr>
+            <tr><td><code>E</code></td><td><code>2.718281828459045</code></td><td>Euler's number</td></tr>
+            <tr><td><code>TAU</code></td><td><code>6.283185307179586</code></td><td>2 * PI (full circle in radians)</td></tr>
+            <tr><td><code>INFINITY</code></td><td><code>Infinity</code></td><td>Positive infinity</td></tr>
+          </tbody>
+        </table>
+
+        <h3><code>abs(n)</code></h3>
+        <p>Returns the absolute value of a number.</p>
+        <div class="fn-signature"><span class="kw">abs</span>(n: number) &rarr; number</div>
+        <pre><code><span class="bi">abs</span>(<span class="num">-5</span>)   <span class="cmt">// 5</span>
+<span class="bi">abs</span>(<span class="num">3</span>)    <span class="cmt">// 3</span>
+<span class="bi">abs</span>(<span class="num">0</span>)    <span class="cmt">// 0</span></code></pre>
+
+        <h3><code>floor(n)</code></h3>
+        <p>Rounds down to the nearest integer.</p>
+        <div class="fn-signature"><span class="kw">floor</span>(n: number) &rarr; number</div>
+        <pre><code><span class="bi">floor</span>(<span class="num">3.7</span>)   <span class="cmt">// 3</span>
+<span class="bi">floor</span>(<span class="num">-2.3</span>)  <span class="cmt">// -3</span></code></pre>
+
+        <h3><code>ceil(n)</code></h3>
+        <p>Rounds up to the nearest integer.</p>
+        <div class="fn-signature"><span class="kw">ceil</span>(n: number) &rarr; number</div>
+        <pre><code><span class="bi">ceil</span>(<span class="num">3.2</span>)   <span class="cmt">// 4</span>
+<span class="bi">ceil</span>(<span class="num">-2.7</span>)  <span class="cmt">// -2</span></code></pre>
+
+        <h3><code>round(n)</code></h3>
+        <p>Rounds to the nearest integer.</p>
+        <div class="fn-signature"><span class="kw">round</span>(n: number) &rarr; number</div>
+        <pre><code><span class="bi">round</span>(<span class="num">3.5</span>)   <span class="cmt">// 4</span>
+<span class="bi">round</span>(<span class="num">3.4</span>)   <span class="cmt">// 3</span></code></pre>
+
+        <h3><code>sqrt(n)</code></h3>
+        <p>Returns the square root. Throws an error for negative numbers.</p>
+        <div class="fn-signature"><span class="kw">sqrt</span>(n: number) &rarr; number</div>
+        <pre><code><span class="bi">sqrt</span>(<span class="num">16</span>)   <span class="cmt">// 4</span>
+<span class="bi">sqrt</span>(<span class="num">2</span>)    <span class="cmt">// 1.4142135623730951</span></code></pre>
+
+        <h3><code>pow(base, exp)</code></h3>
+        <p>Returns base raised to the power of exp.</p>
+        <div class="fn-signature"><span class="kw">pow</span>(base: number, exp: number) &rarr; number</div>
+        <pre><code><span class="bi">pow</span>(<span class="num">2</span>, <span class="num">10</span>)  <span class="cmt">// 1024</span>
+<span class="bi">pow</span>(<span class="num">3</span>, <span class="num">3</span>)   <span class="cmt">// 27</span></code></pre>
+
+        <h3><code>random()</code></h3>
+        <p>Returns a random number between 0 (inclusive) and 1 (exclusive).</p>
+        <div class="fn-signature"><span class="kw">random</span>() &rarr; number</div>
+        <pre><code><span class="kw">let</span> r = <span class="bi">random</span>()  <span class="cmt">// e.g. 0.7234...</span></code></pre>
+
+        <h3><code>randomInt(min, max)</code></h3>
+        <p>Returns a random integer between min and max (both inclusive).</p>
+        <div class="fn-signature"><span class="kw">randomInt</span>(min: number, max: number) &rarr; number</div>
+        <pre><code><span class="bi">randomInt</span>(<span class="num">1</span>, <span class="num">6</span>)  <span class="cmt">// e.g. 4 (dice roll)</span></code></pre>
+
+        <h3><code>min(...args)</code></h3>
+        <p>Returns the smallest value. Accepts multiple numbers or an array.</p>
+        <div class="fn-signature"><span class="kw">min</span>(...numbers) &rarr; number</div>
+        <pre><code><span class="bi">min</span>(<span class="num">3</span>, <span class="num">1</span>, <span class="num">4</span>)      <span class="cmt">// 1</span>
+<span class="bi">min</span>([<span class="num">5</span>, <span class="num">2</span>, <span class="num">8</span>])     <span class="cmt">// 2</span></code></pre>
+
+        <h3><code>max(...args)</code></h3>
+        <p>Returns the largest value. Accepts multiple numbers or an array.</p>
+        <div class="fn-signature"><span class="kw">max</span>(...numbers) &rarr; number</div>
+        <pre><code><span class="bi">max</span>(<span class="num">3</span>, <span class="num">1</span>, <span class="num">4</span>)      <span class="cmt">// 4</span>
+<span class="bi">max</span>([<span class="num">5</span>, <span class="num">2</span>, <span class="num">8</span>])     <span class="cmt">// 8</span></code></pre>
+
+        <h3><code>sin(n)</code></h3>
+        <p>Returns the sine of a number (in radians).</p>
+        <div class="fn-signature"><span class="kw">sin</span>(n: number) &rarr; number</div>
+        <pre><code><span class="bi">sin</span>(<span class="num">0</span>)         <span class="cmt">// 0</span>
+<span class="bi">sin</span>(PI / <span class="num">2</span>)   <span class="cmt">// 1</span></code></pre>
+
+        <h3><code>cos(n)</code></h3>
+        <p>Returns the cosine of a number (in radians).</p>
+        <div class="fn-signature"><span class="kw">cos</span>(n: number) &rarr; number</div>
+        <pre><code><span class="bi">cos</span>(<span class="num">0</span>)    <span class="cmt">// 1</span>
+<span class="bi">cos</span>(PI)   <span class="cmt">// -1</span></code></pre>
+
+        <h3><code>tan(n)</code></h3>
+        <p>Returns the tangent of a number (in radians).</p>
+        <div class="fn-signature"><span class="kw">tan</span>(n: number) &rarr; number</div>
+        <pre><code><span class="bi">tan</span>(<span class="num">0</span>)         <span class="cmt">// 0</span>
+<span class="bi">tan</span>(PI / <span class="num">4</span>)   <span class="cmt">// ~1</span></code></pre>
+
+        <h3><code>log(n)</code></h3>
+        <p>Returns the natural logarithm (base e). Throws for non-positive numbers.</p>
+        <div class="fn-signature"><span class="kw">log</span>(n: number) &rarr; number</div>
+        <pre><code><span class="bi">log</span>(E)     <span class="cmt">// 1</span>
+<span class="bi">log</span>(<span class="num">10</span>)    <span class="cmt">// 2.302585...</span></code></pre>
+
+        <!-- ==================== Strings Module ==================== -->
+        <h2 id="strings">Strings Module</h2>
+        <p>String manipulation functions. These can also be called as methods on string values.</p>
+
+        <h3><code>len(value)</code></h3>
+        <p>Returns the length of a string, array, or object (number of keys).</p>
+        <div class="fn-signature"><span class="kw">len</span>(value: string | array | object) &rarr; number</div>
+        <pre><code><span class="bi">len</span>(<span class="str">"hello"</span>)        <span class="cmt">// 5</span>
+<span class="bi">len</span>([<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>])     <span class="cmt">// 3</span>
+<span class="bi">len</span>({<span class="prop">a</span>: <span class="num">1</span>, <span class="prop">b</span>: <span class="num">2</span>}) <span class="cmt">// 2</span></code></pre>
+
+        <h3><code>split(str, delimiter)</code></h3>
+        <p>Splits a string into an array by a delimiter.</p>
+        <div class="fn-signature"><span class="kw">split</span>(str: string, delimiter: string) &rarr; array</div>
+        <pre><code><span class="bi">split</span>(<span class="str">"a,b,c"</span>, <span class="str">","</span>)        <span class="cmt">// ["a", "b", "c"]</span>
+<span class="bi">split</span>(<span class="str">"hello world"</span>, <span class="str">" "</span>)  <span class="cmt">// ["hello", "world"]</span></code></pre>
+
+        <h3><code>join(array, delimiter)</code></h3>
+        <p>Joins array elements into a string with a delimiter.</p>
+        <div class="fn-signature"><span class="kw">join</span>(arr: array, delimiter: string) &rarr; string</div>
+        <pre><code><span class="bi">join</span>([<span class="str">"a"</span>, <span class="str">"b"</span>, <span class="str">"c"</span>], <span class="str">","</span>)  <span class="cmt">// "a,b,c"</span>
+<span class="bi">join</span>([<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>], <span class="str">" - "</span>)     <span class="cmt">// "1 - 2 - 3"</span></code></pre>
+
+        <h3><code>upper(str)</code></h3>
+        <p>Converts a string to uppercase.</p>
+        <div class="fn-signature"><span class="kw">upper</span>(str: string) &rarr; string</div>
+        <pre><code><span class="bi">upper</span>(<span class="str">"hello"</span>)  <span class="cmt">// "HELLO"</span></code></pre>
+
+        <h3><code>lower(str)</code></h3>
+        <p>Converts a string to lowercase.</p>
+        <div class="fn-signature"><span class="kw">lower</span>(str: string) &rarr; string</div>
+        <pre><code><span class="bi">lower</span>(<span class="str">"HELLO"</span>)  <span class="cmt">// "hello"</span></code></pre>
+
+        <h3><code>trim(str)</code></h3>
+        <p>Removes whitespace from both ends of a string.</p>
+        <div class="fn-signature"><span class="kw">trim</span>(str: string) &rarr; string</div>
+        <pre><code><span class="bi">trim</span>(<span class="str">"  hello  "</span>)  <span class="cmt">// "hello"</span></code></pre>
+
+        <h3><code>contains(str, substr)</code></h3>
+        <p>Returns true if the string contains the substring.</p>
+        <div class="fn-signature"><span class="kw">contains</span>(str: string, substr: string) &rarr; boolean</div>
+        <pre><code><span class="bi">contains</span>(<span class="str">"hello world"</span>, <span class="str">"world"</span>)  <span class="cmt">// true</span>
+<span class="bi">contains</span>(<span class="str">"hello"</span>, <span class="str">"xyz"</span>)          <span class="cmt">// false</span></code></pre>
+
+        <h3><code>replace(str, pattern, replacement)</code></h3>
+        <p>Replaces all occurrences of pattern with replacement.</p>
+        <div class="fn-signature"><span class="kw">replace</span>(str: string, pattern: string, replacement: string) &rarr; string</div>
+        <pre><code><span class="bi">replace</span>(<span class="str">"hello world"</span>, <span class="str">"world"</span>, <span class="str">"TinyLang"</span>)
+<span class="cmt">// "hello TinyLang"</span></code></pre>
+
+        <h3><code>charAt(str, index)</code></h3>
+        <p>Returns the character at the specified index.</p>
+        <div class="fn-signature"><span class="kw">charAt</span>(str: string, index: number) &rarr; string</div>
+        <pre><code><span class="bi">charAt</span>(<span class="str">"hello"</span>, <span class="num">0</span>)  <span class="cmt">// "h"</span>
+<span class="bi">charAt</span>(<span class="str">"hello"</span>, <span class="num">4</span>)  <span class="cmt">// "o"</span></code></pre>
+
+        <h3><code>startsWith(str, prefix)</code></h3>
+        <p>Returns true if the string starts with the given prefix.</p>
+        <div class="fn-signature"><span class="kw">startsWith</span>(str: string, prefix: string) &rarr; boolean</div>
+        <pre><code><span class="bi">startsWith</span>(<span class="str">"hello"</span>, <span class="str">"hel"</span>)  <span class="cmt">// true</span>
+<span class="bi">startsWith</span>(<span class="str">"hello"</span>, <span class="str">"xyz"</span>)  <span class="cmt">// false</span></code></pre>
+
+        <h3><code>endsWith(str, suffix)</code></h3>
+        <p>Returns true if the string ends with the given suffix.</p>
+        <div class="fn-signature"><span class="kw">endsWith</span>(str: string, suffix: string) &rarr; boolean</div>
+        <pre><code><span class="bi">endsWith</span>(<span class="str">"hello"</span>, <span class="str">"llo"</span>)  <span class="cmt">// true</span>
+<span class="bi">endsWith</span>(<span class="str">"hello"</span>, <span class="str">"xyz"</span>)  <span class="cmt">// false</span></code></pre>
+
+        <h3><code>repeat(str, count)</code></h3>
+        <p>Repeats a string a specified number of times.</p>
+        <div class="fn-signature"><span class="kw">repeat</span>(str: string, count: number) &rarr; string</div>
+        <pre><code><span class="bi">repeat</span>(<span class="str">"ha"</span>, <span class="num">3</span>)     <span class="cmt">// "hahaha"</span>
+<span class="bi">repeat</span>(<span class="str">"-"</span>, <span class="num">10</span>)      <span class="cmt">// "----------"</span></code></pre>
+
+        <h3><code>padStart(str, length, padChar?)</code></h3>
+        <p>Pads the string from the start to reach the target length.</p>
+        <div class="fn-signature"><span class="kw">padStart</span>(str: string, length: number, padChar?: string) &rarr; string</div>
+        <pre><code><span class="bi">padStart</span>(<span class="str">"5"</span>, <span class="num">3</span>, <span class="str">"0"</span>)   <span class="cmt">// "005"</span>
+<span class="bi">padStart</span>(<span class="str">"hi"</span>, <span class="num">5</span>)        <span class="cmt">// "   hi"</span></code></pre>
+
+        <h3><code>padEnd(str, length, padChar?)</code></h3>
+        <p>Pads the string from the end to reach the target length.</p>
+        <div class="fn-signature"><span class="kw">padEnd</span>(str: string, length: number, padChar?: string) &rarr; string</div>
+        <pre><code><span class="bi">padEnd</span>(<span class="str">"hi"</span>, <span class="num">5</span>, <span class="str">"."</span>)  <span class="cmt">// "hi..."</span>
+<span class="bi">padEnd</span>(<span class="str">"hi"</span>, <span class="num">5</span>)        <span class="cmt">// "hi   "</span></code></pre>
+
+        <!-- ==================== Arrays Module ==================== -->
+        <h2 id="arrays">Arrays Module</h2>
+        <p>Array manipulation functions. Many also available as methods on array values.</p>
+
+        <h3><code>push(array, value)</code></h3>
+        <p>Adds an element to the end of the array. Returns the new length.</p>
+        <div class="fn-signature"><span class="kw">push</span>(arr: array, value: any) &rarr; number</div>
+        <pre><code><span class="kw">let</span> arr = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]
+<span class="bi">push</span>(arr, <span class="num">4</span>)  <span class="cmt">// arr is now [1, 2, 3, 4]</span></code></pre>
+
+        <h3><code>pop(array)</code></h3>
+        <p>Removes and returns the last element.</p>
+        <div class="fn-signature"><span class="kw">pop</span>(arr: array) &rarr; any</div>
+        <pre><code><span class="kw">let</span> arr = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]
+<span class="kw">let</span> last = <span class="bi">pop</span>(arr)  <span class="cmt">// last = 3, arr = [1, 2]</span></code></pre>
+
+        <h3><code>shift(array)</code></h3>
+        <p>Removes and returns the first element.</p>
+        <div class="fn-signature"><span class="kw">shift</span>(arr: array) &rarr; any</div>
+        <pre><code><span class="kw">let</span> arr = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>]
+<span class="kw">let</span> first = <span class="bi">shift</span>(arr)  <span class="cmt">// first = 1, arr = [2, 3]</span></code></pre>
+
+        <h3><code>unshift(array, value)</code></h3>
+        <p>Adds an element to the beginning. Returns the new length.</p>
+        <div class="fn-signature"><span class="kw">unshift</span>(arr: array, value: any) &rarr; number</div>
+        <pre><code><span class="kw">let</span> arr = [<span class="num">2</span>, <span class="num">3</span>]
+<span class="bi">unshift</span>(arr, <span class="num">1</span>)  <span class="cmt">// arr is now [1, 2, 3]</span></code></pre>
+
+        <h3><code>slice(array, start, end?)</code></h3>
+        <p>Returns a shallow copy of a portion of the array.</p>
+        <div class="fn-signature"><span class="kw">slice</span>(arr: array, start: number, end?: number) &rarr; array</div>
+        <pre><code><span class="kw">let</span> arr = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>]
+<span class="bi">slice</span>(arr, <span class="num">1</span>, <span class="num">3</span>)   <span class="cmt">// [2, 3]</span>
+<span class="bi">slice</span>(arr, <span class="num">2</span>)       <span class="cmt">// [3, 4, 5]</span></code></pre>
+
+        <h3><code>concat(array1, array2)</code></h3>
+        <p>Returns a new array combining both arrays.</p>
+        <div class="fn-signature"><span class="kw">concat</span>(arr1: array, arr2: array) &rarr; array</div>
+        <pre><code><span class="bi">concat</span>([<span class="num">1</span>, <span class="num">2</span>], [<span class="num">3</span>, <span class="num">4</span>])  <span class="cmt">// [1, 2, 3, 4]</span></code></pre>
+
+        <h3><code>indexOf(array, value)</code></h3>
+        <p>Returns the first index of the value, or -1 if not found.</p>
+        <div class="fn-signature"><span class="kw">indexOf</span>(arr: array, value: any) &rarr; number</div>
+        <pre><code><span class="bi">indexOf</span>([<span class="num">10</span>, <span class="num">20</span>, <span class="num">30</span>], <span class="num">20</span>)  <span class="cmt">// 1</span>
+<span class="bi">indexOf</span>([<span class="num">10</span>, <span class="num">20</span>, <span class="num">30</span>], <span class="num">99</span>)  <span class="cmt">// -1</span></code></pre>
+
+        <h3><code>includes(array, value)</code></h3>
+        <p>Returns true if the array contains the value.</p>
+        <div class="fn-signature"><span class="kw">includes</span>(arr: array, value: any) &rarr; boolean</div>
+        <pre><code><span class="bi">includes</span>([<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>], <span class="num">2</span>)  <span class="cmt">// true</span>
+<span class="bi">includes</span>([<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>], <span class="num">9</span>)  <span class="cmt">// false</span></code></pre>
+
+        <h3><code>reverse(array)</code></h3>
+        <p>Returns a new array with elements in reversed order.</p>
+        <div class="fn-signature"><span class="kw">reverse</span>(arr: array) &rarr; array</div>
+        <pre><code><span class="bi">reverse</span>([<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>])  <span class="cmt">// [3, 2, 1]</span></code></pre>
+
+        <h3><code>sort(array)</code></h3>
+        <p>Returns a new sorted array. Numbers sort numerically; others sort lexicographically.</p>
+        <div class="fn-signature"><span class="kw">sort</span>(arr: array) &rarr; array</div>
+        <pre><code><span class="bi">sort</span>([<span class="num">3</span>, <span class="num">1</span>, <span class="num">4</span>, <span class="num">1</span>, <span class="num">5</span>])          <span class="cmt">// [1, 1, 3, 4, 5]</span>
+<span class="bi">sort</span>([<span class="str">"banana"</span>, <span class="str">"apple"</span>, <span class="str">"cherry"</span>])  <span class="cmt">// ["apple", "banana", "cherry"]</span></code></pre>
+
+        <h3><code>flatten(array)</code></h3>
+        <p>Flattens one level of nesting.</p>
+        <div class="fn-signature"><span class="kw">flatten</span>(arr: array) &rarr; array</div>
+        <pre><code><span class="bi">flatten</span>([[<span class="num">1</span>, <span class="num">2</span>], [<span class="num">3</span>, <span class="num">4</span>], [<span class="num">5</span>]])  <span class="cmt">// [1, 2, 3, 4, 5]</span></code></pre>
+
+        <h3><code>zip(array1, array2)</code></h3>
+        <p>Combines two arrays into an array of pairs.</p>
+        <div class="fn-signature"><span class="kw">zip</span>(arr1: array, arr2: array) &rarr; array</div>
+        <pre><code><span class="bi">zip</span>([<span class="str">"a"</span>, <span class="str">"b"</span>], [<span class="num">1</span>, <span class="num">2</span>])  <span class="cmt">// [["a", 1], ["b", 2]]</span></code></pre>
+
+        <h3><code>enumerate(array)</code></h3>
+        <p>Returns an array of [index, value] pairs.</p>
+        <div class="fn-signature"><span class="kw">enumerate</span>(arr: array) &rarr; array</div>
+        <pre><code><span class="bi">enumerate</span>([<span class="str">"a"</span>, <span class="str">"b"</span>, <span class="str">"c"</span>])
+<span class="cmt">// [[0, "a"], [1, "b"], [2, "c"]]</span></code></pre>
+
+        <h3><code>unique(array)</code></h3>
+        <p>Returns a new array with duplicate values removed.</p>
+        <div class="fn-signature"><span class="kw">unique</span>(arr: array) &rarr; array</div>
+        <pre><code><span class="bi">unique</span>([<span class="num">1</span>, <span class="num">2</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">3</span>, <span class="num">3</span>])  <span class="cmt">// [1, 2, 3]</span></code></pre>
+
+        <!-- ==================== Types Module ==================== -->
+        <h2 id="types">Types Module</h2>
+        <p>Type checking and conversion functions.</p>
+
+        <h3><code>type(value)</code></h3>
+        <p>Returns the type of a value as a string.</p>
+        <div class="fn-signature"><span class="kw">type</span>(value: any) &rarr; string</div>
+        <pre><code><span class="bi">type</span>(<span class="num">42</span>)          <span class="cmt">// "number"</span>
+<span class="bi">type</span>(<span class="str">"hello"</span>)     <span class="cmt">// "string"</span>
+<span class="bi">type</span>(<span class="kw">true</span>)        <span class="cmt">// "boolean"</span>
+<span class="bi">type</span>(<span class="kw">null</span>)        <span class="cmt">// "null"</span>
+<span class="bi">type</span>([<span class="num">1</span>, <span class="num">2</span>])     <span class="cmt">// "array"</span>
+<span class="bi">type</span>({<span class="prop">a</span>: <span class="num">1</span>})     <span class="cmt">// "object"</span>
+<span class="bi">type</span>(<span class="fn">print</span>)      <span class="cmt">// "function"</span></code></pre>
+
+        <h3><code>str(value)</code></h3>
+        <p>Converts any value to its string representation.</p>
+        <div class="fn-signature"><span class="kw">str</span>(value: any) &rarr; string</div>
+        <pre><code><span class="bi">str</span>(<span class="num">42</span>)          <span class="cmt">// "42"</span>
+<span class="bi">str</span>(<span class="kw">true</span>)        <span class="cmt">// "true"</span>
+<span class="bi">str</span>([<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>])  <span class="cmt">// "[1, 2, 3]"</span></code></pre>
+
+        <h3><code>num(value)</code></h3>
+        <p>Converts a value to a number. Throws if conversion is not possible.</p>
+        <div class="fn-signature"><span class="kw">num</span>(value: string | boolean | null) &rarr; number</div>
+        <pre><code><span class="bi">num</span>(<span class="str">"42"</span>)     <span class="cmt">// 42</span>
+<span class="bi">num</span>(<span class="str">"3.14"</span>)   <span class="cmt">// 3.14</span>
+<span class="bi">num</span>(<span class="kw">true</span>)     <span class="cmt">// 1</span>
+<span class="bi">num</span>(<span class="kw">false</span>)    <span class="cmt">// 0</span></code></pre>
+
+        <h3><code>bool(value)</code></h3>
+        <p>Converts a value to boolean (truthiness check).</p>
+        <div class="fn-signature"><span class="kw">bool</span>(value: any) &rarr; boolean</div>
+        <pre><code><span class="bi">bool</span>(<span class="num">0</span>)       <span class="cmt">// false</span>
+<span class="bi">bool</span>(<span class="num">1</span>)       <span class="cmt">// true</span>
+<span class="bi">bool</span>(<span class="str">""</span>)      <span class="cmt">// false</span>
+<span class="bi">bool</span>(<span class="str">"hi"</span>)   <span class="cmt">// true</span>
+<span class="bi">bool</span>(<span class="kw">null</span>)    <span class="cmt">// false</span>
+<span class="bi">bool</span>([])      <span class="cmt">// false</span>
+<span class="bi">bool</span>([<span class="num">1</span>])    <span class="cmt">// true</span></code></pre>
+
+        <h3><code>isNumber(value)</code></h3>
+        <p>Returns true if the value is a number.</p>
+        <div class="fn-signature"><span class="kw">isNumber</span>(value: any) &rarr; boolean</div>
+        <pre><code><span class="bi">isNumber</span>(<span class="num">42</span>)       <span class="cmt">// true</span>
+<span class="bi">isNumber</span>(<span class="str">"42"</span>)     <span class="cmt">// false</span></code></pre>
+
+        <h3><code>isString(value)</code></h3>
+        <p>Returns true if the value is a string.</p>
+        <div class="fn-signature"><span class="kw">isString</span>(value: any) &rarr; boolean</div>
+        <pre><code><span class="bi">isString</span>(<span class="str">"hi"</span>)    <span class="cmt">// true</span>
+<span class="bi">isString</span>(<span class="num">42</span>)      <span class="cmt">// false</span></code></pre>
+
+        <h3><code>isArray(value)</code></h3>
+        <p>Returns true if the value is an array.</p>
+        <div class="fn-signature"><span class="kw">isArray</span>(value: any) &rarr; boolean</div>
+        <pre><code><span class="bi">isArray</span>([<span class="num">1</span>, <span class="num">2</span>])   <span class="cmt">// true</span>
+<span class="bi">isArray</span>(<span class="str">"hi"</span>)      <span class="cmt">// false</span></code></pre>
+
+        <h3><code>isNull(value)</code></h3>
+        <p>Returns true if the value is null.</p>
+        <div class="fn-signature"><span class="kw">isNull</span>(value: any) &rarr; boolean</div>
+        <pre><code><span class="bi">isNull</span>(<span class="kw">null</span>)    <span class="cmt">// true</span>
+<span class="bi">isNull</span>(<span class="num">0</span>)       <span class="cmt">// false</span></code></pre>
+
+        <h3><code>isFunction(value)</code></h3>
+        <p>Returns true if the value is a function.</p>
+        <div class="fn-signature"><span class="kw">isFunction</span>(value: any) &rarr; boolean</div>
+        <pre><code><span class="bi">isFunction</span>(<span class="fn">print</span>)         <span class="cmt">// true</span>
+<span class="bi">isFunction</span>((x) => x)      <span class="cmt">// true</span>
+<span class="bi">isFunction</span>(<span class="num">42</span>)            <span class="cmt">// false</span></code></pre>
+
+        <!-- ==================== Utils Module ==================== -->
+        <h2 id="utils">Utils Module</h2>
+        <p>General-purpose utility functions.</p>
+
+        <h3><code>range(end)</code> / <code>range(start, end, step?)</code></h3>
+        <p>Generates an array of numbers. Similar to Python's range().</p>
+        <div class="fn-signature"><span class="kw">range</span>(end: number) &rarr; array
+<span class="kw">range</span>(start: number, end: number, step?: number) &rarr; array</div>
+        <pre><code><span class="bi">range</span>(<span class="num">5</span>)          <span class="cmt">// [0, 1, 2, 3, 4]</span>
+<span class="bi">range</span>(<span class="num">2</span>, <span class="num">6</span>)       <span class="cmt">// [2, 3, 4, 5]</span>
+<span class="bi">range</span>(<span class="num">0</span>, <span class="num">10</span>, <span class="num">2</span>)   <span class="cmt">// [0, 2, 4, 6, 8]</span>
+<span class="bi">range</span>(<span class="num">10</span>, <span class="num">0</span>, <span class="num">-2</span>)  <span class="cmt">// [10, 8, 6, 4, 2]</span></code></pre>
+
+        <h3><code>keys(object)</code></h3>
+        <p>Returns an array of the object's keys.</p>
+        <div class="fn-signature"><span class="kw">keys</span>(obj: object) &rarr; array</div>
+        <pre><code><span class="bi">keys</span>({<span class="prop">a</span>: <span class="num">1</span>, <span class="prop">b</span>: <span class="num">2</span>})  <span class="cmt">// ["a", "b"]</span></code></pre>
+
+        <h3><code>values(object)</code></h3>
+        <p>Returns an array of the object's values.</p>
+        <div class="fn-signature"><span class="kw">values</span>(obj: object) &rarr; array</div>
+        <pre><code><span class="bi">values</span>({<span class="prop">a</span>: <span class="num">1</span>, <span class="prop">b</span>: <span class="num">2</span>})  <span class="cmt">// [1, 2]</span></code></pre>
+
+        <h3><code>entries(object)</code></h3>
+        <p>Returns an array of [key, value] pairs.</p>
+        <div class="fn-signature"><span class="kw">entries</span>(obj: object) &rarr; array</div>
+        <pre><code><span class="bi">entries</span>({<span class="prop">a</span>: <span class="num">1</span>, <span class="prop">b</span>: <span class="num">2</span>})  <span class="cmt">// [["a", 1], ["b", 2]]</span></code></pre>
+
+        <h3><code>time()</code></h3>
+        <p>Returns the current timestamp in milliseconds.</p>
+        <div class="fn-signature"><span class="kw">time</span>() &rarr; number</div>
+        <pre><code><span class="kw">let</span> start = <span class="bi">time</span>()
+<span class="cmt">// ... do work ...</span>
+<span class="kw">let</span> elapsed = <span class="bi">time</span>() - start
+<span class="bi">print</span>(<span class="str">"Took"</span>, elapsed, <span class="str">"ms"</span>)</code></pre>
+
+        <h3><code>clone(value)</code></h3>
+        <p>Creates a deep copy of a value. Primitives are returned as-is.</p>
+        <div class="fn-signature"><span class="kw">clone</span>(value: any) &rarr; any</div>
+        <pre><code><span class="kw">let</span> original = [<span class="num">1</span>, [<span class="num">2</span>, <span class="num">3</span>]]
+<span class="kw">let</span> copy = <span class="bi">clone</span>(original)
+<span class="bi">push</span>(copy[<span class="num">1</span>], <span class="num">4</span>)
+<span class="bi">print</span>(original)  <span class="cmt">// [1, [2, 3]] (unchanged)</span>
+<span class="bi">print</span>(copy)      <span class="cmt">// [1, [2, 3, 4]]</span></code></pre>
+
+        <h3><code>assert(condition, message?)</code></h3>
+        <p>Throws an error if the condition is falsy.</p>
+        <div class="fn-signature"><span class="kw">assert</span>(condition: any, message?: string) &rarr; boolean</div>
+        <pre><code><span class="bi">assert</span>(<span class="num">1</span> + <span class="num">1</span> == <span class="num">2</span>)                    <span class="cmt">// OK</span>
+<span class="bi">assert</span>(<span class="num">1</span> + <span class="num">1</span> == <span class="num">3</span>, <span class="str">"Math is broken"</span>)  <span class="cmt">// Error!</span></code></pre>
+
+        <h3><code>format(template, ...args)</code></h3>
+        <p>String formatting with <code>{}</code> placeholders.</p>
+        <div class="fn-signature"><span class="kw">format</span>(template: string, ...args) &rarr; string</div>
+        <pre><code><span class="bi">format</span>(<span class="str">"Hello, {}!"</span>, <span class="str">"World"</span>)
+<span class="cmt">// "Hello, World!"</span>
+
+<span class="bi">format</span>(<span class="str">"{} + {} = {}"</span>, <span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>)
+<span class="cmt">// "1 + 2 = 3"</span></code></pre>
+
+        <h3><code>sleep(ms)</code></h3>
+        <p>Pauses execution for the specified milliseconds (educational use).</p>
+        <div class="fn-signature"><span class="kw">sleep</span>(ms: number) &rarr; null</div>
+        <pre><code><span class="bi">sleep</span>(<span class="num">1000</span>)  <span class="cmt">// Wait 1 second</span></code></pre>
+
+        <h3><code>typeof(value)</code></h3>
+        <p>Alias for <code>type()</code>. Returns the type of a value as a string.</p>
+        <div class="fn-signature"><span class="kw">typeof</span>(value: any) &rarr; string</div>
+        <pre><code><span class="bi">typeof</span>(<span class="num">42</span>)  <span class="cmt">// "number"</span></code></pre>
+
+        <div class="page-nav">
+          <a href="language-reference.html" class="page-nav-link">
+            <div class="page-nav-label">Previous</div>
+            <div class="page-nav-title">&larr; Language Reference</div>
+          </a>
+          <a href="examples.html" class="page-nav-link next">
+            <div class="page-nav-label">Next</div>
+            <div class="page-nav-title">Examples &rarr;</div>
+          </a>
+        </div>
+
+        <footer class="page-footer">
+          <span>TinyLang v1.0.0</span>
+          <a href="https://github.com/tinylang/tinylang">GitHub</a>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme');
+      if (current === 'dark') {
+        html.setAttribute('data-theme', 'light');
+        localStorage.setItem('theme', 'light');
+      } else {
+        html.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+      }
+    }
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.querySelector('.sidebar-overlay').classList.toggle('active');
+    }
+    (function() {
+      const saved = localStorage.getItem('theme');
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+    })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+{
+  "id": "FEAT-003",
+  "type": "docs",
+  "description": "Create a comprehensive documentation site as a structured docs/ folder with static HTML pages covering getting started, language reference, stdlib API, architecture guide, examples gallery, and contributing guide.",
+  "status": "in_progress",
+  "steps": [
+    "Create docs/index.html as the documentation landing page with navigation sidebar, hero section, and links to all doc pages. Use a clean, professional design with CSS (no external frameworks needed, just well-crafted HTML/CSS).",
+    "Create docs/getting-started.html with installation instructions, first program tutorial, running from CLI, using the web IDE, and REPL usage guide.",
+    "Create docs/language-reference.html documenting every language feature: data types, variables (let/const), operators, control flow (if/else/while/for/match/break/continue), functions (named, arrow, closures, defaults), classes (inheritance, this, new), modules (import), test blocks, and ranges.",
+    "Create docs/stdlib.html documenting every standard library function with signature, description, parameters, return value, and usage example. Organize by module: IO, Math, Strings, Arrays, Types, Utils.",
+    "Create docs/architecture.html explaining how the compiler/VM works: lexer pipeline, parser design (Pratt parsing), AST structure, bytecode compiler (opcodes, constant pool, scoping), VM execution model (stack-based, call frames, closures), optimizer passes, and debugger architecture.",
+    "Create docs/examples.html as a gallery of example programs with syntax-highlighted code snippets and explanations of what each demonstrates.",
+    "Create docs/cli-reference.html documenting every CLI command with usage, options, flags, and examples (run, compile, exec, debug, fmt, lint, test, doc, init, bench, repl, check).",
+    "Create docs/contributing.html with development setup, coding standards, testing guidelines, PR process, and architecture overview for contributors.",
+    "Create docs/styles.css as shared stylesheet for all documentation pages with responsive design, code highlighting, and dark mode support.",
+    "Add a docs/assets/ directory with any needed images or diagrams (architecture diagram as SVG)."
+  ],
+  "acceptance_criteria": [
+    "docs/index.html opens in a browser and shows professional documentation site",
+    "All navigation links work between pages",
+    "Language reference covers every syntax feature with examples",
+    "Stdlib docs cover all 60+ built-in functions with signatures and examples",
+    "Architecture page explains compiler/VM internals with diagrams",
+    "All pages are responsive and readable on mobile",
+    "Code examples in docs are syntax-highlighted"
+  ],
+  "verification": [
+    "All HTML files in docs/ are valid (no broken links between them)",
+    "npm run build still passes",
+    "npx vitest run still passes"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

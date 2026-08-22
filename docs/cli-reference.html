@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CLI Reference - TinyLang Documentation</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+  <div class="layout">
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <a href="index.html" class="sidebar-logo">
+          <img src="assets/logo.svg" alt="TinyLang" width="32" height="32">
+          <div>
+            <div class="sidebar-logo-text">TinyLang</div>
+            <div class="sidebar-version">v1.0.0</div>
+          </div>
+        </a>
+      </div>
+      <div class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Getting Started</div>
+          <a href="index.html" class="sidebar-link">Overview</a>
+          <a href="getting-started.html" class="sidebar-link">Quick Start</a>
+          <a href="cli-reference.html" class="sidebar-link active">CLI Reference</a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Language</div>
+          <a href="language-reference.html" class="sidebar-link">Language Reference</a>
+          <a href="stdlib.html" class="sidebar-link">Standard Library</a>
+          <a href="examples.html" class="sidebar-link">Examples</a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Internals</div>
+          <a href="architecture.html" class="sidebar-link">Architecture</a>
+          <a href="contributing.html" class="sidebar-link">Contributing</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="main-content">
+      <div class="top-bar">
+        <button class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12h18M3 6h18M3 18h18"/>
+          </svg>
+        </button>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+          <span>Theme</span>
+        </button>
+      </div>
+
+      <main class="content">
+        <div class="breadcrumb">
+          <a href="index.html">Docs</a>
+          <span class="breadcrumb-separator">/</span>
+          <span>CLI Reference</span>
+        </div>
+
+        <h1>CLI Reference</h1>
+        <p>Complete reference for all TinyLang CLI commands, options, and flags.</p>
+
+        <h2>Usage</h2>
+        <pre><code>tinylang &lt;command&gt; [options] [arguments]</code></pre>
+
+        <p>If no command is provided, the REPL starts automatically.</p>
+
+        <!-- run -->
+        <h2><code>run</code></h2>
+        <p>Execute a TinyLang source file using the tree-walk interpreter.</p>
+
+        <pre><code>tinylang run &lt;file.tiny&gt;</code></pre>
+
+        <h4>Examples</h4>
+        <pre><code>tinylang run main.tiny
+tinylang run examples/07-fibonacci.tiny</code></pre>
+
+        <div class="info-box tip">
+          <div class="info-box-title">Tip</div>
+          <p>You can also run a file directly: <code>tinylang main.tiny</code> (the <code>run</code> command is implied for <code>.tiny</code> files).</p>
+        </div>
+
+        <!-- compile -->
+        <h2><code>compile</code></h2>
+        <p>Compile a source file to TinyLang bytecode (<code>.tinyc</code>).</p>
+
+        <pre><code>tinylang compile &lt;file.tiny&gt; [options]</code></pre>
+
+        <h4>Options</h4>
+        <table>
+          <thead><tr><th>Flag</th><th>Short</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>--output &lt;path&gt;</code></td><td><code>-o</code></td><td>Output file path (default: same name with <code>.tinyc</code> extension)</td></tr>
+            <tr><td><code>--no-optimize</code></td><td></td><td>Skip bytecode optimization pass</td></tr>
+            <tr><td><code>--disassemble</code></td><td><code>-d</code></td><td>Print disassembly to stdout</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Examples</h4>
+        <pre><code><span class="cmt"># Compile with default output</span>
+tinylang compile app.tiny
+<span class="cmt"># Creates: app.tinyc</span>
+
+<span class="cmt"># Custom output path</span>
+tinylang compile app.tiny -o build/app.tinyc
+
+<span class="cmt"># View disassembly</span>
+tinylang compile app.tiny --disassemble
+
+<span class="cmt"># Skip optimization</span>
+tinylang compile app.tiny --no-optimize</code></pre>
+
+        <h4>Output</h4>
+        <pre><code>Compiled: 24 instructions, 5 constants, optimized 3 bytes
+Output: app.tinyc (128 bytes)</code></pre>
+
+        <!-- exec -->
+        <h2><code>exec</code></h2>
+        <p>Execute a compiled bytecode file on the virtual machine.</p>
+
+        <pre><code>tinylang exec &lt;file.tinyc&gt;</code></pre>
+
+        <h4>Examples</h4>
+        <pre><code>tinylang exec app.tinyc
+tinylang exec build/program.tinyc</code></pre>
+
+        <div class="info-box">
+          <div class="info-box-title">Note</div>
+          <p>You can also run <code>.tinyc</code> files directly: <code>tinylang app.tinyc</code></p>
+        </div>
+
+        <!-- debug -->
+        <h2><code>debug</code></h2>
+        <p>Start the interactive debugger for step-through execution.</p>
+
+        <pre><code>tinylang debug &lt;file.tiny&gt;</code></pre>
+
+        <h4>Debugger Commands</h4>
+        <table>
+          <thead><tr><th>Command</th><th>Short</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>step</code></td><td><code>s</code></td><td>Step to the next statement</td></tr>
+            <tr><td><code>step_into</code></td><td><code>si</code></td><td>Step into a function call</td></tr>
+            <tr><td><code>step_out</code></td><td><code>so</code></td><td>Step out of the current function</td></tr>
+            <tr><td><code>continue</code></td><td><code>c</code></td><td>Continue to next breakpoint</td></tr>
+            <tr><td><code>break &lt;line&gt;</code></td><td><code>b</code></td><td>Set a breakpoint at a line</td></tr>
+            <tr><td><code>locals</code></td><td><code>l</code></td><td>Show local variables</td></tr>
+            <tr><td><code>eval &lt;expr&gt;</code></td><td><code>e</code></td><td>Evaluate an expression</td></tr>
+            <tr><td><code>help</code></td><td><code>h</code></td><td>Show help text</td></tr>
+            <tr><td><code>quit</code></td><td><code>q</code></td><td>Exit the debugger</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Example Session</h4>
+        <pre><code>$ tinylang debug examples/03-functions.tiny
+
+TinyLang Debugger
+File: examples/03-functions.tiny
+
+->    1 fn add(a, b) {
+
+debug&gt; b 5
+Breakpoint set at line 5
+debug&gt; c
+debug&gt; locals
+  a = 3
+  b = 4
+debug&gt; eval a + b
+7
+debug&gt; quit</code></pre>
+
+        <!-- fmt -->
+        <h2><code>fmt</code></h2>
+        <p>Format TinyLang source files with consistent style.</p>
+
+        <pre><code>tinylang fmt &lt;file.tiny&gt; [files...] [options]</code></pre>
+
+        <h4>Options</h4>
+        <table>
+          <thead><tr><th>Flag</th><th>Short</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>--write</code></td><td><code>-w</code></td><td>Write formatted output back to file</td></tr>
+            <tr><td><code>--check</code></td><td></td><td>Check mode - exit 1 if changes would be made</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Examples</h4>
+        <pre><code><span class="cmt"># Preview formatted output (stdout)</span>
+tinylang fmt main.tiny
+
+<span class="cmt"># Write changes to files</span>
+tinylang fmt --write main.tiny lib.tiny
+
+<span class="cmt"># Check if files are formatted (CI mode)</span>
+tinylang fmt --check src/*.tiny</code></pre>
+
+        <!-- lint -->
+        <h2><code>lint</code></h2>
+        <p>Run static analysis to find potential issues.</p>
+
+        <pre><code>tinylang lint &lt;file.tiny&gt; [files...] [options]</code></pre>
+
+        <h4>Options</h4>
+        <table>
+          <thead><tr><th>Flag</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>--fix</code></td><td>Automatically fix issues where possible</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Lint Rules</h4>
+        <table>
+          <thead><tr><th>Rule</th><th>Default</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>prefer-const</code></td><td>warning</td><td>Use <code>const</code> when variable is never reassigned</td></tr>
+            <tr><td><code>no-unused-variables</code></td><td>warning</td><td>Variables declared but never used</td></tr>
+            <tr><td><code>no-empty-blocks</code></td><td>warning</td><td>Empty function or loop bodies</td></tr>
+            <tr><td><code>unreachable-code</code></td><td>error</td><td>Code after <code>return</code> or <code>break</code></td></tr>
+            <tr><td><code>no-shadow</code></td><td>info</td><td>Variable shadowing in nested scopes</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Examples</h4>
+        <pre><code><span class="cmt"># Check for issues</span>
+tinylang lint main.tiny
+
+<span class="cmt"># Auto-fix what's possible</span>
+tinylang lint --fix main.tiny</code></pre>
+
+        <h4>Output</h4>
+        <pre><code>warning [prefer-const] main.tiny:3:5: Variable 'x' is never reassigned, use 'const'
+error [unreachable-code] main.tiny:12:3: Unreachable code after 'return'</code></pre>
+
+        <!-- test -->
+        <h2><code>test</code></h2>
+        <p>Run test files containing <code>test</code> blocks.</p>
+
+        <pre><code>tinylang test [files...]</code></pre>
+
+        <p>If no files are specified, automatically finds all <code>*.test.tiny</code> files recursively.</p>
+
+        <h4>Examples</h4>
+        <pre><code><span class="cmt"># Run all tests</span>
+tinylang test
+
+<span class="cmt"># Run specific test files</span>
+tinylang test main.test.tiny lib.test.tiny</code></pre>
+
+        <h4>Output</h4>
+        <pre><code>main.test.tiny
+  ✓ addition works
+  ✓ string concatenation
+  ✗ division by zero handling
+    Expected: "error" Got: null
+
+Tests: 2 passed, 1 failed</code></pre>
+
+        <!-- doc -->
+        <h2><code>doc</code></h2>
+        <p>Generate documentation from source file comments.</p>
+
+        <pre><code>tinylang doc &lt;file.tiny&gt; [options]</code></pre>
+
+        <h4>Options</h4>
+        <table>
+          <thead><tr><th>Flag</th><th>Short</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>--output &lt;path&gt;</code></td><td><code>-o</code></td><td>Write output to file (default: stdout)</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Examples</h4>
+        <pre><code><span class="cmt"># Print docs to stdout</span>
+tinylang doc lib.tiny
+
+<span class="cmt"># Write to a markdown file</span>
+tinylang doc lib.tiny -o docs/api.md</code></pre>
+
+        <!-- init -->
+        <h2><code>init</code></h2>
+        <p>Scaffold a new TinyLang project with standard files.</p>
+
+        <pre><code>tinylang init [name]</code></pre>
+
+        <h4>Examples</h4>
+        <pre><code><span class="cmt"># Create new project directory</span>
+tinylang init my-project
+
+<span class="cmt"># Initialize in current directory</span>
+tinylang init .</code></pre>
+
+        <h4>Created Files</h4>
+        <pre><code>my-project/
+  main.tiny         - Entry point
+  lib.tiny          - Library module
+  main.test.tiny    - Test file
+  .tinylang.json    - Configuration
+  README.md         - Documentation</code></pre>
+
+        <!-- bench -->
+        <h2><code>bench</code></h2>
+        <p>Benchmark program execution with detailed statistics.</p>
+
+        <pre><code>tinylang bench &lt;file.tiny&gt; [options]</code></pre>
+
+        <h4>Options</h4>
+        <table>
+          <thead><tr><th>Flag</th><th>Short</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>--iterations &lt;N&gt;</code></td><td><code>-n</code></td><td>Number of iterations (default: 100)</td></tr>
+            <tr><td><code>--compare</code></td><td></td><td>Compare interpreter vs. VM performance</td></tr>
+          </tbody>
+        </table>
+
+        <h4>Examples</h4>
+        <pre><code><span class="cmt"># Basic benchmark</span>
+tinylang bench fib.tiny
+
+<span class="cmt"># 1000 iterations, compare modes</span>
+tinylang bench fib.tiny -n 1000 --compare</code></pre>
+
+        <h4>Output</h4>
+        <pre><code>Benchmarking: fib.tiny
+Iterations: 1000
+
+  Interpreter:
+    min:    0.12ms
+    max:    1.45ms
+    avg:    0.18ms
+    median: 0.15ms
+
+  Compiler+VM:
+    min:    0.04ms
+    max:    0.52ms
+    avg:    0.06ms
+    median: 0.05ms
+
+VM is 3.00x faster than interpreter</code></pre>
+
+        <!-- repl -->
+        <h2><code>repl</code></h2>
+        <p>Start the interactive Read-Eval-Print Loop.</p>
+
+        <pre><code>tinylang repl</code></pre>
+
+        <p>The REPL maintains state between lines, so you can define variables and functions that persist throughout the session. Use <code>Ctrl+C</code> to exit.</p>
+
+        <!-- check -->
+        <h2><code>check</code></h2>
+        <p>Check a file for syntax errors without executing it.</p>
+
+        <pre><code>tinylang check &lt;file.tiny&gt;</code></pre>
+
+        <h4>Examples</h4>
+        <pre><code>tinylang check main.tiny
+<span class="cmt"># Output: main.tiny: No errors found!</span></code></pre>
+
+        <!-- version & help -->
+        <h2><code>version</code></h2>
+        <p>Display version and platform information.</p>
+        <pre><code>tinylang version
+<span class="cmt"># TinyLang v1.0.0</span>
+<span class="cmt">#   Runtime: Node.js v22.x.x</span>
+<span class="cmt">#   Platform: linux x64</span></code></pre>
+
+        <h2><code>help</code></h2>
+        <p>Show the help message with all available commands.</p>
+        <pre><code>tinylang help
+tinylang --help</code></pre>
+
+        <!-- File Extensions -->
+        <h2>File Extensions</h2>
+        <table>
+          <thead><tr><th>Extension</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>.tiny</code></td><td>TinyLang source file</td></tr>
+            <tr><td><code>.tinyc</code></td><td>Compiled bytecode file</td></tr>
+            <tr><td><code>.test.tiny</code></td><td>Test file (discovered by <code>tinylang test</code>)</td></tr>
+            <tr><td><code>.tinylang.json</code></td><td>Project configuration (formatter/linter settings)</td></tr>
+          </tbody>
+        </table>
+
+        <!-- Configuration -->
+        <h2>Configuration</h2>
+        <p>Create a <code>.tinylang.json</code> in your project root to configure the formatter and linter:</p>
+        <pre><code>{
+  <span class="str">"formatter"</span>: {
+    <span class="str">"indentSize"</span>: <span class="num">2</span>,
+    <span class="str">"maxLineWidth"</span>: <span class="num">80</span>,
+    <span class="str">"insertFinalNewline"</span>: <span class="kw">true</span>
+  },
+  <span class="str">"linter"</span>: {
+    <span class="str">"rules"</span>: {
+      <span class="str">"prefer-const"</span>: <span class="str">"warning"</span>,
+      <span class="str">"no-unused-variables"</span>: <span class="str">"warning"</span>,
+      <span class="str">"no-empty-blocks"</span>: <span class="str">"warning"</span>,
+      <span class="str">"unreachable-code"</span>: <span class="str">"error"</span>,
+      <span class="str">"no-shadow"</span>: <span class="str">"info"</span>
+    }
+  }
+}</code></pre>
+
+        <div class="page-nav">
+          <a href="getting-started.html" class="page-nav-link">
+            <div class="page-nav-label">Previous</div>
+            <div class="page-nav-title">&larr; Getting Started</div>
+          </a>
+          <a href="language-reference.html" class="page-nav-link next">
+            <div class="page-nav-label">Next</div>
+            <div class="page-nav-title">Language Reference &rarr;</div>
+          </a>
+        </div>
+
+        <footer class="page-footer">
+          <span>TinyLang v1.0.0</span>
+          <a href="https://github.com/tinylang/tinylang">GitHub</a>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme');
+      if (current === 'dark') {
+        html.setAttribute('data-theme', 'light');
+        localStorage.setItem('theme', 'light');
+      } else {
+        html.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+      }
+    }
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.querySelector('.sidebar-overlay').classList.toggle('active');
+    }
+    (function() {
+      const saved = localStorage.getItem('theme');
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+    })();
+  </script>
+</body>
+</html>

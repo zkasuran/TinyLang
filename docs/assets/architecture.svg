@@ -1,0 +1,135 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" fill="none">
+  <defs>
+    <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:0.1" />
+      <stop offset="100%" style="stop-color:#764ba2;stop-opacity:0.1" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="500" rx="12" fill="#f8f9fb" stroke="#e2e8f0"/>
+
+  <!-- Title -->
+  <text x="400" y="35" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="16" font-weight="700" fill="#1a1f36">TinyLang Compilation Pipeline</text>
+
+  <!-- Source Code Box -->
+  <rect x="40" y="60" width="140" height="60" rx="8" fill="url(grad1)"/>
+  <text x="110" y="87" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" font-weight="600" fill="white">Source Code</text>
+  <text x="110" y="105" text-anchor="middle" font-family="monospace" font-size="9" fill="rgba(255,255,255,0.8)">.tiny file</text>
+
+  <!-- Arrow 1 -->
+  <path d="M180 90 L220 90" stroke="#667eea" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Lexer Box -->
+  <rect x="220" y="60" width="120" height="60" rx="8" fill="white" stroke="#667eea" stroke-width="2"/>
+  <text x="280" y="85" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" font-weight="600" fill="#667eea">Lexer</text>
+  <text x="280" y="103" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" fill="#718096">Tokenization</text>
+
+  <!-- Arrow 2 -->
+  <path d="M340 90 L380 90" stroke="#667eea" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- Parser Box -->
+  <rect x="380" y="60" width="120" height="60" rx="8" fill="white" stroke="#667eea" stroke-width="2"/>
+  <text x="440" y="85" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" font-weight="600" fill="#667eea">Parser</text>
+  <text x="440" y="103" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" fill="#718096">Pratt Parsing</text>
+
+  <!-- Arrow 3 -->
+  <path d="M500 90 L540 90" stroke="#667eea" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- AST Box -->
+  <rect x="540" y="60" width="120" height="60" rx="8" fill="white" stroke="#764ba2" stroke-width="2"/>
+  <text x="600" y="85" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" font-weight="600" fill="#764ba2">AST</text>
+  <text x="600" y="103" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" fill="#718096">Abstract Syntax Tree</text>
+
+  <!-- Branch: Interpreter path -->
+  <path d="M600 120 L600 170 L280 170 L280 200" stroke="#059669" stroke-width="2" stroke-dasharray="4,4" marker-end="url(#arrowGreen)"/>
+  <text x="440" y="163" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" fill="#059669">Interpret (tree-walk)</text>
+
+  <!-- Interpreter Box -->
+  <rect x="220" y="200" width="120" height="60" rx="8" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+  <text x="280" y="225" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" font-weight="600" fill="#059669">Interpreter</text>
+  <text x="280" y="243" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" fill="#718096">Tree-walk eval</text>
+
+  <!-- Branch: Compiler path -->
+  <path d="M660 90 L710 90 L710 200" stroke="#764ba2" stroke-width="2" marker-end="url(#arrowPurple)"/>
+  <text x="720" y="150" font-family="-apple-system, sans-serif" font-size="9" fill="#764ba2">Compile</text>
+
+  <!-- Compiler Box -->
+  <rect x="640" y="200" width="130" height="60" rx="8" fill="white" stroke="#764ba2" stroke-width="2"/>
+  <text x="705" y="225" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" font-weight="600" fill="#764ba2">Compiler</text>
+  <text x="705" y="243" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" fill="#718096">Bytecode generation</text>
+
+  <!-- Arrow to Optimizer -->
+  <path d="M705 260 L705 290" stroke="#764ba2" stroke-width="2" marker-end="url(#arrowPurple)"/>
+
+  <!-- Optimizer Box -->
+  <rect x="640" y="290" width="130" height="50" rx="8" fill="white" stroke="#764ba2" stroke-width="1.5"/>
+  <text x="705" y="312" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" font-weight="600" fill="#764ba2">Optimizer</text>
+  <text x="705" y="328" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" fill="#718096">Peephole + CFG</text>
+
+  <!-- Arrow to Bytecode -->
+  <path d="M705 340 L705 370" stroke="#764ba2" stroke-width="2" marker-end="url(#arrowPurple)"/>
+
+  <!-- Bytecode Box -->
+  <rect x="640" y="370" width="130" height="50" rx="8" fill="url(grad2)" stroke="#764ba2" stroke-width="2"/>
+  <text x="705" y="392" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" font-weight="600" fill="#764ba2">Bytecode</text>
+  <text x="705" y="408" text-anchor="middle" font-family="monospace" font-size="9" fill="#718096">.tinyc file</text>
+
+  <!-- Arrow to VM -->
+  <path d="M640 395 L520 395" stroke="#d97706" stroke-width="2" marker-end="url(#arrowOrange)"/>
+
+  <!-- VM Box -->
+  <rect x="380" y="370" width="140" height="60" rx="8" fill="#fffbeb" stroke="#d97706" stroke-width="2"/>
+  <text x="450" y="395" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" font-weight="600" fill="#d97706">Virtual Machine</text>
+  <text x="450" y="413" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" fill="#718096">Stack-based execution</text>
+
+  <!-- Output Box -->
+  <rect x="140" y="340" width="130" height="50" rx="8" fill="url(grad1)"/>
+  <text x="205" y="362" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="11" font-weight="600" fill="white">Program Output</text>
+  <text x="205" y="378" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="9" fill="rgba(255,255,255,0.8)">stdout</text>
+
+  <!-- Arrow from Interpreter to Output -->
+  <path d="M280 260 L280 310 L205 310 L205 340" stroke="#059669" stroke-width="2" marker-end="url(#arrowGreen)"/>
+
+  <!-- Arrow from VM to Output -->
+  <path d="M380 400 L270 400 L270 390 L205 390" stroke="#d97706" stroke-width="2" marker-end="url(#arrowOrange)"/>
+
+  <!-- Tools section -->
+  <rect x="40" y="440" width="720" height="45" rx="8" fill="var(--bg-tertiary, #f0f2f5)" stroke="#e2e8f0"/>
+  <text x="60" y="466" font-family="-apple-system, sans-serif" font-size="10" font-weight="600" fill="#4a5568">Tools:</text>
+  <text x="105" y="466" font-family="-apple-system, sans-serif" font-size="10" fill="#667eea">Formatter</text>
+  <text x="175" y="466" font-family="-apple-system, sans-serif" font-size="10" fill="#6b7280">|</text>
+  <text x="185" y="466" font-family="-apple-system, sans-serif" font-size="10" fill="#667eea">Linter</text>
+  <text x="230" y="466" font-family="-apple-system, sans-serif" font-size="10" fill="#6b7280">|</text>
+  <text x="240" y="466" font-family="-apple-system, sans-serif" font-size="10" fill="#667eea">Debugger</text>
+  <text x="305" y="466" font-family="-apple-system, sans-serif" font-size="10" fill="#6b7280">|</text>
+  <text x="315" y="466" font-family="-apple-system, sans-serif" font-size="10" fill="#667eea">Test Runner</text>
+  <text x="395" y="466" font-family="-apple-system, sans-serif" font-size="10" fill="#6b7280">|</text>
+  <text x="405" y="466" font-family="-apple-system, sans-serif" font-size="10" fill="#667eea">Doc Generator</text>
+  <text x="500" y="466" font-family="-apple-system, sans-serif" font-size="10" fill="#6b7280">|</text>
+  <text x="510" y="466" font-family="-apple-system, sans-serif" font-size="10" fill="#667eea">Module Loader</text>
+  <text x="605" y="466" font-family="-apple-system, sans-serif" font-size="10" fill="#6b7280">|</text>
+  <text x="615" y="466" font-family="-apple-system, sans-serif" font-size="10" fill="#667eea">REPL</text>
+  <text x="650" y="466" font-family="-apple-system, sans-serif" font-size="10" fill="#6b7280">|</text>
+  <text x="660" y="466" font-family="-apple-system, sans-serif" font-size="10" fill="#667eea">Web IDE</text>
+
+  <!-- Arrow markers -->
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#667eea"/>
+    </marker>
+    <marker id="arrowGreen" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#059669"/>
+    </marker>
+    <marker id="arrowPurple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#764ba2"/>
+    </marker>
+    <marker id="arrowOrange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <polygon points="0 0, 8 3, 0 6" fill="#d97706"/>
+    </marker>
+  </defs>
+</svg>

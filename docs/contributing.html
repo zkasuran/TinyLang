@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Contributing - TinyLang Documentation</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+  <div class="layout">
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <a href="index.html" class="sidebar-logo">
+          <img src="assets/logo.svg" alt="TinyLang" width="32" height="32">
+          <div>
+            <div class="sidebar-logo-text">TinyLang</div>
+            <div class="sidebar-version">v1.0.0</div>
+          </div>
+        </a>
+      </div>
+      <div class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Getting Started</div>
+          <a href="index.html" class="sidebar-link">Overview</a>
+          <a href="getting-started.html" class="sidebar-link">Quick Start</a>
+          <a href="cli-reference.html" class="sidebar-link">CLI Reference</a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Language</div>
+          <a href="language-reference.html" class="sidebar-link">Language Reference</a>
+          <a href="stdlib.html" class="sidebar-link">Standard Library</a>
+          <a href="examples.html" class="sidebar-link">Examples</a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Internals</div>
+          <a href="architecture.html" class="sidebar-link">Architecture</a>
+          <a href="contributing.html" class="sidebar-link active">Contributing</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="main-content">
+      <div class="top-bar">
+        <button class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12h18M3 6h18M3 18h18"/>
+          </svg>
+        </button>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+          <span>Theme</span>
+        </button>
+      </div>
+
+      <main class="content">
+        <div class="breadcrumb">
+          <a href="index.html">Docs</a>
+          <span class="breadcrumb-separator">/</span>
+          <span>Contributing</span>
+        </div>
+
+        <h1>Contributing</h1>
+        <p>Thank you for your interest in contributing to TinyLang! This guide covers everything you need to know to get started.</p>
+
+        <!-- Development Setup -->
+        <h2>Development Setup</h2>
+
+        <h3>Prerequisites</h3>
+        <ul>
+          <li><strong>Node.js 18+</strong> (22 recommended)</li>
+          <li><strong>npm 9+</strong></li>
+          <li><strong>Git</strong></li>
+        </ul>
+
+        <h3>Initial Setup</h3>
+        <pre><code><span class="cmt"># Clone the repository</span>
+git clone https://github.com/tinylang/tinylang.git
+<span class="kw">cd</span> tinylang
+
+<span class="cmt"># Install dependencies</span>
+npm install
+
+<span class="cmt"># Build the project</span>
+npm run build
+
+<span class="cmt"># Run all tests</span>
+npx vitest run
+
+<span class="cmt"># Verify everything works</span>
+node dist/cli/index.js run examples/01-hello.tiny</code></pre>
+
+        <h3>Development Commands</h3>
+        <table>
+          <thead><tr><th>Command</th><th>Description</th></tr></thead>
+          <tbody>
+            <tr><td><code>npm run build</code></td><td>Compile TypeScript to dist/</td></tr>
+            <tr><td><code>npx vitest run</code></td><td>Run all tests once</td></tr>
+            <tr><td><code>npx vitest</code></td><td>Run tests in watch mode</td></tr>
+            <tr><td><code>npx vitest run tests/lexer</code></td><td>Run tests for a specific module</td></tr>
+            <tr><td><code>npm run build && node dist/cli/index.js run &lt;file&gt;</code></td><td>Build and run a program</td></tr>
+          </tbody>
+        </table>
+
+        <!-- Coding Standards -->
+        <h2>Coding Standards</h2>
+
+        <h3>TypeScript Guidelines</h3>
+        <ul>
+          <li><strong>Strict mode:</strong> All TypeScript strict checks are enabled</li>
+          <li><strong>No <code>any</code> type:</strong> Use proper typing or <code>unknown</code> with type guards</li>
+          <li><strong>JSDoc comments:</strong> All public methods and exported functions must have JSDoc</li>
+          <li><strong>Descriptive naming:</strong> Use clear, descriptive variable and function names</li>
+          <li><strong>Error messages:</strong> Include educational hints that help users understand and fix issues</li>
+        </ul>
+
+        <h3>File Organization</h3>
+        <ul>
+          <li>Each module lives in its own directory under <code>src/</code></li>
+          <li>Export public API through an <code>index.ts</code> barrel file</li>
+          <li>Tests mirror the source structure under <code>tests/</code></li>
+          <li>AST node types are defined in <code>src/types/ast.ts</code></li>
+          <li>Runtime values in <code>src/types/values.ts</code></li>
+          <li>Token types in <code>src/types/tokens.ts</code></li>
+        </ul>
+
+        <h3>Code Style</h3>
+        <pre><code><span class="cmt">/**
+ * Calculate the factorial of a number.
+ * Returns 1 for n &lt;= 1.
+ */</span>
+<span class="kw">export function</span> <span class="fn">factorial</span>(n: <span class="cls">number</span>): <span class="cls">number</span> {
+  <span class="kw">if</span> (n &lt;= <span class="num">1</span>) <span class="kw">return</span> <span class="num">1</span>;
+  <span class="kw">return</span> n * <span class="fn">factorial</span>(n - <span class="num">1</span>);
+}</code></pre>
+
+        <h3>Error Messages</h3>
+        <p>TinyLang prioritizes helpful error messages. When throwing errors:</p>
+        <pre><code><span class="cmt">// Good - educational, actionable</span>
+<span class="kw">throw new</span> <span class="cls">RuntimeError</span>(
+  <span class="str">`Cannot call '${name}' - it is a ${type}, not a function. `</span> +
+  <span class="str">`Did you mean to access a property instead?`</span>
+);
+
+<span class="cmt">// Bad - unhelpful</span>
+<span class="kw">throw new</span> <span class="cls">Error</span>(<span class="str">"not callable"</span>);</code></pre>
+
+        <!-- Testing -->
+        <h2>Testing</h2>
+
+        <h3>Test Framework</h3>
+        <p>We use <strong>Vitest</strong> for testing. Tests are in the <code>tests/</code> directory, mirroring the <code>src/</code> structure.</p>
+
+        <h3>Writing Tests</h3>
+        <pre><code><span class="kw">import</span> { describe, it, expect } <span class="kw">from</span> <span class="str">'vitest'</span>;
+<span class="kw">import</span> { Lexer } <span class="kw">from</span> <span class="str">'../src/lexer'</span>;
+
+<span class="fn">describe</span>(<span class="str">'Lexer'</span>, () => {
+  <span class="fn">it</span>(<span class="str">'tokenizes numbers'</span>, () => {
+    <span class="kw">const</span> lexer = <span class="kw">new</span> <span class="cls">Lexer</span>(<span class="str">'42 3.14'</span>);
+    <span class="kw">const</span> tokens = lexer.<span class="fn">tokenize</span>();
+
+    <span class="fn">expect</span>(tokens[<span class="num">0</span>].type).<span class="fn">toBe</span>(<span class="str">'NUMBER'</span>);
+    <span class="fn">expect</span>(tokens[<span class="num">0</span>].value).<span class="fn">toBe</span>(<span class="str">'42'</span>);
+  });
+});</code></pre>
+
+        <h3>Test Categories</h3>
+        <table>
+          <thead><tr><th>Directory</th><th>Covers</th></tr></thead>
+          <tbody>
+            <tr><td><code>tests/lexer/</code></td><td>Token generation, edge cases, error recovery</td></tr>
+            <tr><td><code>tests/parser/</code></td><td>AST structure, operator precedence, error messages</td></tr>
+            <tr><td><code>tests/interpreter/</code></td><td>Expression evaluation, control flow, scoping</td></tr>
+            <tr><td><code>tests/compiler/</code></td><td>Bytecode generation, optimization passes</td></tr>
+            <tr><td><code>tests/vm/</code></td><td>VM execution, stack operations, closures</td></tr>
+            <tr><td><code>tests/stdlib/</code></td><td>Standard library function behavior</td></tr>
+            <tr><td><code>tests/formatter/</code></td><td>Code formatting output</td></tr>
+            <tr><td><code>tests/linter/</code></td><td>Lint rule detection and auto-fix</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Running Tests</h3>
+        <pre><code><span class="cmt"># All tests</span>
+npx vitest run
+
+<span class="cmt"># Specific module</span>
+npx vitest run tests/compiler
+
+<span class="cmt"># Watch mode (re-runs on changes)</span>
+npx vitest
+
+<span class="cmt"># With coverage</span>
+npx vitest run --coverage</code></pre>
+
+        <!-- PR Process -->
+        <h2>Pull Request Process</h2>
+
+        <h3>Branch Naming</h3>
+        <ul>
+          <li><code>feat/description</code> - New features</li>
+          <li><code>fix/description</code> - Bug fixes</li>
+          <li><code>refactor/description</code> - Code refactoring</li>
+          <li><code>docs/description</code> - Documentation changes</li>
+          <li><code>test/description</code> - Test additions/fixes</li>
+        </ul>
+
+        <h3>Commit Messages</h3>
+        <p>Use conventional commit format:</p>
+        <pre><code>feat: add pattern matching with match/when syntax
+fix: resolve closure variable capture in nested loops
+refactor: extract token types into separate module
+docs: add stdlib function examples
+test: add edge cases for array methods</code></pre>
+
+        <h3>PR Checklist</h3>
+        <ul>
+          <li>All existing tests pass (<code>npx vitest run</code>)</li>
+          <li>New code has tests covering happy path and edge cases</li>
+          <li>TypeScript compiles without errors (<code>npm run build</code>)</li>
+          <li>Public APIs have JSDoc comments</li>
+          <li>Error messages are educational and include hints</li>
+          <li>No <code>any</code> types introduced</li>
+          <li>Example programs still run correctly</li>
+        </ul>
+
+        <!-- Architecture Guide for Contributors -->
+        <h2>Architecture for Contributors</h2>
+
+        <h3>Adding a New Language Feature</h3>
+        <ol>
+          <li><strong>Lexer:</strong> Add new token types in <code>src/types/tokens.ts</code>, handle in lexer</li>
+          <li><strong>Parser:</strong> Add new AST node in <code>src/types/ast.ts</code>, add parsing logic</li>
+          <li><strong>Interpreter:</strong> Add evaluation logic for the new node type</li>
+          <li><strong>Compiler:</strong> Add bytecode emission for the new node</li>
+          <li><strong>VM:</strong> Add new opcode handling if needed</li>
+          <li><strong>Tests:</strong> Add tests at each level (lexer, parser, interpreter, compiler, VM)</li>
+          <li><strong>Docs:</strong> Update language reference and examples</li>
+        </ol>
+
+        <h3>Adding a New Stdlib Function</h3>
+        <ol>
+          <li>Identify the appropriate module in <code>src/stdlib/</code></li>
+          <li>Add the function to the module's array (follow existing patterns)</li>
+          <li>Write tests in <code>tests/stdlib/</code></li>
+          <li>Document in <code>docs/stdlib.html</code></li>
+        </ol>
+
+        <h3>Adding a New CLI Command</h3>
+        <ol>
+          <li>Add a handler function in <code>src/cli/index.ts</code></li>
+          <li>Add the case to the switch statement in <code>main()</code></li>
+          <li>Update the help text</li>
+          <li>Document in <code>docs/cli-reference.html</code></li>
+        </ol>
+
+        <!-- Environment -->
+        <h2>Development Environment</h2>
+
+        <h3>Recommended Tools</h3>
+        <ul>
+          <li><strong>Editor:</strong> VS Code with TypeScript support</li>
+          <li><strong>Node.js:</strong> v22 (for latest features)</li>
+          <li><strong>Terminal:</strong> Any with color support for TinyLang CLI output</li>
+        </ul>
+
+        <h3>Project Configuration</h3>
+        <table>
+          <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+          <tbody>
+            <tr><td><code>tsconfig.json</code></td><td>TypeScript compiler settings (strict mode, ES2022 target)</td></tr>
+            <tr><td><code>package.json</code></td><td>Dependencies, scripts, project metadata</td></tr>
+            <tr><td><code>vitest.config.ts</code></td><td>Test runner configuration</td></tr>
+          </tbody>
+        </table>
+
+        <!-- Getting Help -->
+        <h2>Getting Help</h2>
+        <ul>
+          <li>Read the <a href="architecture.html">Architecture Guide</a> to understand the codebase</li>
+          <li>Look at existing implementations for patterns to follow</li>
+          <li>Check existing tests to understand expected behavior</li>
+          <li>Open an issue to discuss major changes before implementing</li>
+        </ul>
+
+        <div class="info-box tip">
+          <div class="info-box-title">First Contribution?</div>
+          <p>Start with something small: fix a typo in docs, add a missing test case, or improve an error message. These are great ways to learn the codebase.</p>
+        </div>
+
+        <div class="page-nav">
+          <a href="architecture.html" class="page-nav-link">
+            <div class="page-nav-label">Previous</div>
+            <div class="page-nav-title">&larr; Architecture</div>
+          </a>
+          <a href="index.html" class="page-nav-link next">
+            <div class="page-nav-label">Back to</div>
+            <div class="page-nav-title">Home &rarr;</div>
+          </a>
+        </div>
+
+        <footer class="page-footer">
+          <span>TinyLang v1.0.0</span>
+          <a href="https://github.com/tinylang/tinylang">GitHub</a>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme');
+      if (current === 'dark') {
+        html.setAttribute('data-theme', 'light');
+        localStorage.setItem('theme', 'light');
+      } else {
+        html.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+      }
+    }
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.querySelector('.sidebar-overlay').classList.toggle('active');
+    }
+    (function() {
+      const saved = localStorage.getItem('theme');
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+    })();
+  </script>
+</body>
+</html>

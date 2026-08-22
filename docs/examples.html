@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Examples - TinyLang Documentation</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+  <div class="layout">
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <a href="index.html" class="sidebar-logo">
+          <img src="assets/logo.svg" alt="TinyLang" width="32" height="32">
+          <div>
+            <div class="sidebar-logo-text">TinyLang</div>
+            <div class="sidebar-version">v1.0.0</div>
+          </div>
+        </a>
+      </div>
+      <div class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Getting Started</div>
+          <a href="index.html" class="sidebar-link">Overview</a>
+          <a href="getting-started.html" class="sidebar-link">Quick Start</a>
+          <a href="cli-reference.html" class="sidebar-link">CLI Reference</a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Language</div>
+          <a href="language-reference.html" class="sidebar-link">Language Reference</a>
+          <a href="stdlib.html" class="sidebar-link">Standard Library</a>
+          <a href="examples.html" class="sidebar-link active">Examples</a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Internals</div>
+          <a href="architecture.html" class="sidebar-link">Architecture</a>
+          <a href="contributing.html" class="sidebar-link">Contributing</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="main-content">
+      <div class="top-bar">
+        <button class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12h18M3 6h18M3 18h18"/>
+          </svg>
+        </button>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+          <span>Theme</span>
+        </button>
+      </div>
+
+      <main class="content">
+        <div class="breadcrumb">
+          <a href="index.html">Docs</a>
+          <span class="breadcrumb-separator">/</span>
+          <span>Examples</span>
+        </div>
+
+        <h1>Example Programs</h1>
+        <p>A gallery of TinyLang programs demonstrating the language's features. Each example is a complete, runnable program. Find these in the <code>examples/</code> directory.</p>
+
+        <!-- Example 1: Hello World -->
+        <h2>01 - Hello World</h2>
+        <p>Your first program. Demonstrates strings, variables, and the <code>print</code> function.</p>
+        <pre><code><span class="cmt">// Hello World - Your first TinyLang program!</span>
+<span class="bi">print</span>(<span class="str">"Hello, World!"</span>)
+<span class="bi">print</span>(<span class="str">"Welcome to TinyLang 🎉"</span>)
+
+<span class="cmt">// Variables</span>
+<span class="kw">let</span> name = <span class="str">"TinyLang"</span>
+<span class="kw">let</span> version = <span class="num">1.0</span>
+
+<span class="bi">print</span>(<span class="str">"I am "</span> + name + <span class="str">" version "</span> + <span class="bi">str</span>(version))
+<span class="bi">print</span>(<span class="str">"I was built to help you learn programming!"</span>)</code></pre>
+        <pre><code><span class="cmt"># Run with: tinylang run examples/01-hello.tiny</span></code></pre>
+
+        <!-- Example 2: Variables -->
+        <h2>02 - Variables and Data Types</h2>
+        <p>Demonstrates all six data types: numbers, strings, booleans, null, arrays, and objects.</p>
+        <pre><code><span class="cmt">// Numbers (integers and floats)</span>
+<span class="kw">let</span> age = <span class="num">25</span>
+<span class="kw">let</span> pi = <span class="num">3.14159</span>
+<span class="kw">let</span> negative = <span class="num">-42</span>
+
+<span class="cmt">// Strings</span>
+<span class="kw">let</span> greeting = <span class="str">"Hello"</span>
+<span class="kw">let</span> name = <span class="str">'World'</span>
+<span class="kw">let</span> message = greeting + <span class="str">", "</span> + name + <span class="str">"!"</span>
+
+<span class="cmt">// Booleans and Null</span>
+<span class="kw">let</span> isStudent = <span class="kw">true</span>
+<span class="kw">let</span> nothing = <span class="kw">null</span>
+
+<span class="cmt">// Arrays</span>
+<span class="kw">let</span> colors = [<span class="str">"red"</span>, <span class="str">"green"</span>, <span class="str">"blue"</span>]
+<span class="bi">print</span>(<span class="str">"First color:"</span>, colors[<span class="num">0</span>])
+
+<span class="cmt">// Objects</span>
+<span class="kw">let</span> person = {<span class="prop">name</span>: <span class="str">"Alice"</span>, <span class="prop">age</span>: <span class="num">30</span>, <span class="prop">city</span>: <span class="str">"NYC"</span>}
+<span class="bi">print</span>(<span class="str">"Name:"</span>, person.<span class="prop">name</span>)
+
+<span class="cmt">// Constants (cannot be reassigned)</span>
+<span class="kw">const</span> MAX_SIZE = <span class="num">100</span>
+<span class="kw">const</span> APP_NAME = <span class="str">"TinyLang"</span>
+
+<span class="cmt">// Type checking</span>
+<span class="bi">print</span>(<span class="str">"Type of age:"</span>, <span class="bi">type</span>(age))       <span class="cmt">// "number"</span>
+<span class="bi">print</span>(<span class="str">"Type of colors:"</span>, <span class="bi">type</span>(colors)) <span class="cmt">// "array"</span></code></pre>
+
+        <!-- Example 3: Functions -->
+        <h2>03 - Functions and Closures</h2>
+        <p>Demonstrates named functions, arrow functions, default parameters, closures, and higher-order functions.</p>
+        <pre><code><span class="cmt">// Basic function</span>
+<span class="kw">fn</span> <span class="fn">add</span>(a, b) {
+  <span class="kw">return</span> a + b
+}
+
+<span class="cmt">// Default parameters</span>
+<span class="kw">fn</span> <span class="fn">greet</span>(name, greeting = <span class="str">"Hello"</span>) {
+  <span class="kw">return</span> greeting + <span class="str">", "</span> + name + <span class="str">"!"</span>
+}
+
+<span class="bi">print</span>(<span class="fn">greet</span>(<span class="str">"Alice"</span>))         <span class="cmt">// Hello, Alice!</span>
+<span class="bi">print</span>(<span class="fn">greet</span>(<span class="str">"Bob"</span>, <span class="str">"Hi"</span>))  <span class="cmt">// Hi, Bob!</span>
+
+<span class="cmt">// Arrow functions</span>
+<span class="kw">let</span> double = (x) => x * <span class="num">2</span>
+<span class="kw">let</span> square = (x) => x * x
+
+<span class="cmt">// Closures - capture their environment</span>
+<span class="kw">fn</span> <span class="fn">makeCounter</span>(start = <span class="num">0</span>) {
+  <span class="kw">let</span> count = start
+  <span class="kw">return</span> <span class="kw">fn</span>() {
+    count += <span class="num">1</span>
+    <span class="kw">return</span> count
+  }
+}
+
+<span class="kw">let</span> counter = <span class="fn">makeCounter</span>()
+<span class="bi">print</span>(<span class="fn">counter</span>())  <span class="cmt">// 1</span>
+<span class="bi">print</span>(<span class="fn">counter</span>())  <span class="cmt">// 2</span>
+<span class="bi">print</span>(<span class="fn">counter</span>())  <span class="cmt">// 3</span>
+
+<span class="cmt">// Function composition</span>
+<span class="kw">fn</span> <span class="fn">compose</span>(f, g) {
+  <span class="kw">return</span> (x) => <span class="fn">f</span>(<span class="fn">g</span>(x))
+}
+
+<span class="kw">let</span> doubleSquare = <span class="fn">compose</span>(double, square)
+<span class="bi">print</span>(<span class="str">"double(square(3)) ="</span>, <span class="fn">doubleSquare</span>(<span class="num">3</span>))  <span class="cmt">// 18</span></code></pre>
+
+        <!-- Example 4: Arrays -->
+        <h2>04 - Arrays and Higher-Order Functions</h2>
+        <p>Demonstrates array operations, map/filter/reduce, method chaining, and functional patterns.</p>
+        <pre><code><span class="kw">let</span> nums = [<span class="num">5</span>, <span class="num">2</span>, <span class="num">8</span>, <span class="num">1</span>, <span class="num">9</span>, <span class="num">3</span>]
+
+<span class="cmt">// Sorting and reversing</span>
+<span class="bi">print</span>(<span class="str">"Sorted:"</span>, <span class="bi">sort</span>(nums))      <span class="cmt">// [1, 2, 3, 5, 8, 9]</span>
+<span class="bi">print</span>(<span class="str">"Reversed:"</span>, <span class="bi">reverse</span>(nums))  <span class="cmt">// [3, 9, 1, 8, 2, 5]</span>
+
+<span class="cmt">// Map - transform each element</span>
+<span class="kw">let</span> doubled = nums.<span class="fn">map</span>((x) => x * <span class="num">2</span>)
+<span class="bi">print</span>(<span class="str">"Doubled:"</span>, doubled)
+
+<span class="cmt">// Filter - keep matching elements</span>
+<span class="kw">let</span> evens = nums.<span class="fn">filter</span>((x) => x % <span class="num">2</span> == <span class="num">0</span>)
+<span class="bi">print</span>(<span class="str">"Evens:"</span>, evens)
+
+<span class="cmt">// Reduce - combine into single value</span>
+<span class="kw">let</span> sum = nums.<span class="fn">reduce</span>((acc, x) => acc + x, <span class="num">0</span>)
+<span class="bi">print</span>(<span class="str">"Sum:"</span>, sum)
+
+<span class="cmt">// Chaining operations</span>
+<span class="kw">let</span> result = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>, <span class="num">6</span>, <span class="num">7</span>, <span class="num">8</span>, <span class="num">9</span>, <span class="num">10</span>]
+  .<span class="fn">filter</span>((x) => x % <span class="num">2</span> == <span class="num">0</span>)
+  .<span class="fn">map</span>((x) => x * x)
+<span class="bi">print</span>(<span class="str">"Even squares:"</span>, result)  <span class="cmt">// [4, 16, 36, 64, 100]</span></code></pre>
+
+        <!-- Example 5: Loops -->
+        <h2>05 - Loops and Control Flow</h2>
+        <p>Demonstrates while loops, for..in loops, ranges, break, and continue.</p>
+        <pre><code><span class="cmt">// While loop - countdown</span>
+<span class="kw">let</span> n = <span class="num">5</span>
+<span class="kw">while</span> n > <span class="num">0</span> {
+  <span class="bi">print</span>(n)
+  n -= <span class="num">1</span>
+}
+<span class="bi">print</span>(<span class="str">"Liftoff! 🚀"</span>)
+
+<span class="cmt">// For loop with range</span>
+<span class="kw">for</span> i <span class="kw">in</span> <span class="num">1</span>..<span class="num">6</span> {
+  <span class="bi">print</span>(<span class="bi">str</span>(i) + <span class="str">"² = "</span> + <span class="bi">str</span>(i * i))
+}
+
+<span class="cmt">// For loop with array</span>
+<span class="kw">let</span> items = [<span class="str">"milk"</span>, <span class="str">"eggs"</span>, <span class="str">"bread"</span>]
+<span class="kw">for</span> item <span class="kw">in</span> items {
+  <span class="bi">print</span>(<span class="str">"  ☐ "</span> + item)
+}
+
+<span class="cmt">// Break - exit early</span>
+<span class="kw">for</span> i <span class="kw">in</span> <span class="num">1</span>..<span class="num">20</span> {
+  <span class="kw">if</span> i > <span class="num">5</span> <span class="kw">and</span> i % <span class="num">2</span> == <span class="num">0</span> {
+    <span class="bi">print</span>(<span class="str">"Found:"</span>, i)
+    <span class="kw">break</span>
+  }
+}
+
+<span class="cmt">// Continue - skip iteration</span>
+<span class="kw">for</span> i <span class="kw">in</span> <span class="num">1</span>..<span class="num">11</span> {
+  <span class="kw">if</span> i % <span class="num">2</span> == <span class="num">0</span> { <span class="kw">continue</span> }
+  <span class="bi">print</span>(i)  <span class="cmt">// Only odd numbers</span>
+}</code></pre>
+
+        <!-- Example 6: Classes -->
+        <h2>06 - Classes and Inheritance</h2>
+        <p>Demonstrates classes, constructors, methods, inheritance, and polymorphism.</p>
+        <pre><code><span class="kw">class</span> <span class="cls">Animal</span> {
+  <span class="kw">let</span> name = <span class="str">""</span>
+  <span class="kw">let</span> sound = <span class="str">""</span>
+
+  <span class="kw">fn</span> <span class="fn">init</span>(name, sound) {
+    <span class="kw">this</span>.<span class="prop">name</span> = name
+    <span class="kw">this</span>.<span class="prop">sound</span> = sound
+  }
+
+  <span class="kw">fn</span> <span class="fn">speak</span>() {
+    <span class="bi">print</span>(<span class="kw">this</span>.<span class="prop">name</span> + <span class="str">" says '"</span> + <span class="kw">this</span>.<span class="prop">sound</span> + <span class="str">"'!"</span>)
+  }
+}
+
+<span class="kw">class</span> <span class="cls">Dog</span> <span class="kw">extends</span> <span class="cls">Animal</span> {
+  <span class="kw">let</span> tricks = []
+
+  <span class="kw">fn</span> <span class="fn">init</span>(name) {
+    <span class="kw">this</span>.<span class="prop">name</span> = name
+    <span class="kw">this</span>.<span class="prop">sound</span> = <span class="str">"Woof"</span>
+    <span class="kw">this</span>.<span class="prop">tricks</span> = []
+  }
+
+  <span class="kw">fn</span> <span class="fn">learn</span>(trick) {
+    <span class="kw">this</span>.<span class="prop">tricks</span>.<span class="fn">push</span>(trick)
+    <span class="bi">print</span>(<span class="kw">this</span>.<span class="prop">name</span> + <span class="str">" learned: "</span> + trick)
+  }
+}
+
+<span class="kw">let</span> buddy = <span class="kw">new</span> <span class="cls">Dog</span>(<span class="str">"Buddy"</span>)
+buddy.<span class="fn">speak</span>()        <span class="cmt">// Buddy says 'Woof'!</span>
+buddy.<span class="fn">learn</span>(<span class="str">"sit"</span>)   <span class="cmt">// Buddy learned: sit</span>
+buddy.<span class="fn">learn</span>(<span class="str">"shake"</span>) <span class="cmt">// Buddy learned: shake</span></code></pre>
+
+        <!-- Example 7: Fibonacci -->
+        <h2>07 - Fibonacci (Multiple Approaches)</h2>
+        <p>Demonstrates recursion, iteration, and arrays through the classic Fibonacci problem.</p>
+        <pre><code><span class="cmt">// Recursive approach</span>
+<span class="kw">fn</span> <span class="fn">fib_recursive</span>(n) {
+  <span class="kw">if</span> n &lt;= <span class="num">1</span> { <span class="kw">return</span> n }
+  <span class="kw">return</span> <span class="fn">fib_recursive</span>(n - <span class="num">1</span>) + <span class="fn">fib_recursive</span>(n - <span class="num">2</span>)
+}
+
+<span class="cmt">// Iterative approach (faster)</span>
+<span class="kw">fn</span> <span class="fn">fib_iterative</span>(n) {
+  <span class="kw">if</span> n &lt;= <span class="num">1</span> { <span class="kw">return</span> n }
+  <span class="kw">let</span> a = <span class="num">0</span>
+  <span class="kw">let</span> b = <span class="num">1</span>
+  <span class="kw">for</span> i <span class="kw">in</span> <span class="num">2</span>..n + <span class="num">1</span> {
+    <span class="kw">let</span> temp = b
+    b = a + b
+    a = temp
+  }
+  <span class="kw">return</span> b
+}
+
+<span class="cmt">// Generate entire sequence</span>
+<span class="kw">fn</span> <span class="fn">fib_sequence</span>(count) {
+  <span class="kw">let</span> seq = [<span class="num">0</span>, <span class="num">1</span>]
+  <span class="kw">for</span> i <span class="kw">in</span> <span class="num">2</span>..count {
+    <span class="kw">let</span> next = seq[i - <span class="num">1</span>] + seq[i - <span class="num">2</span>]
+    <span class="bi">push</span>(seq, next)
+  }
+  <span class="kw">return</span> seq
+}
+
+<span class="bi">print</span>(<span class="str">"fib(10) ="</span>, <span class="fn">fib_recursive</span>(<span class="num">10</span>))  <span class="cmt">// 55</span>
+<span class="bi">print</span>(<span class="str">"fib(30) ="</span>, <span class="fn">fib_iterative</span>(<span class="num">30</span>)) <span class="cmt">// 832040</span>
+<span class="bi">print</span>(<span class="str">"First 15:"</span>, <span class="fn">fib_sequence</span>(<span class="num">15</span>))</code></pre>
+
+        <!-- Example 8: Sorting -->
+        <h2>08 - Sorting Algorithms</h2>
+        <p>Implements classic sorting algorithms: bubble sort, selection sort, and insertion sort.</p>
+        <pre><code><span class="kw">fn</span> <span class="fn">bubbleSort</span>(arr) {
+  <span class="kw">let</span> n = <span class="bi">len</span>(arr)
+  <span class="kw">let</span> sorted = <span class="bi">slice</span>(arr, <span class="num">0</span>, n)
+
+  <span class="kw">for</span> i <span class="kw">in</span> <span class="num">0</span>..n {
+    <span class="kw">for</span> j <span class="kw">in</span> <span class="num">0</span>..n - i - <span class="num">1</span> {
+      <span class="kw">if</span> sorted[j] > sorted[j + <span class="num">1</span>] {
+        <span class="kw">let</span> temp = sorted[j]
+        sorted[j] = sorted[j + <span class="num">1</span>]
+        sorted[j + <span class="num">1</span>] = temp
+      }
+    }
+  }
+  <span class="kw">return</span> sorted
+}
+
+<span class="kw">let</span> data = [<span class="num">64</span>, <span class="num">34</span>, <span class="num">25</span>, <span class="num">12</span>, <span class="num">22</span>, <span class="num">11</span>, <span class="num">90</span>]
+<span class="bi">print</span>(<span class="str">"Original:"</span>, data)
+<span class="bi">print</span>(<span class="str">"Sorted:"</span>, <span class="fn">bubbleSort</span>(data))</code></pre>
+
+        <!-- Example 9: Functional -->
+        <h2>09 - Functional Programming</h2>
+        <p>Demonstrates function composition, pipes, currying patterns, and data pipelines.</p>
+        <pre><code><span class="cmt">// Function composition</span>
+<span class="kw">fn</span> <span class="fn">compose</span>(f, g) {
+  <span class="kw">return</span> (x) => <span class="fn">f</span>(<span class="fn">g</span>(x))
+}
+
+<span class="kw">let</span> double = (x) => x * <span class="num">2</span>
+<span class="kw">let</span> addOne = (x) => x + <span class="num">1</span>
+
+<span class="kw">let</span> doubleAndAdd = <span class="fn">compose</span>(addOne, double)
+<span class="bi">print</span>(<span class="fn">doubleAndAdd</span>(<span class="num">5</span>))  <span class="cmt">// 11</span>
+
+<span class="cmt">// Currying pattern</span>
+<span class="kw">fn</span> <span class="fn">multiplier</span>(factor) {
+  <span class="kw">return</span> (x) => x * factor
+}
+
+<span class="kw">let</span> triple = <span class="fn">multiplier</span>(<span class="num">3</span>)
+<span class="bi">print</span>(<span class="fn">triple</span>(<span class="num">7</span>))  <span class="cmt">// 21</span>
+
+<span class="cmt">// Data pipeline with map/filter/reduce</span>
+<span class="kw">let</span> people = [
+  {<span class="prop">name</span>: <span class="str">"Alice"</span>, <span class="prop">age</span>: <span class="num">30</span>, <span class="prop">city</span>: <span class="str">"NYC"</span>},
+  {<span class="prop">name</span>: <span class="str">"Bob"</span>, <span class="prop">age</span>: <span class="num">25</span>, <span class="prop">city</span>: <span class="str">"LA"</span>},
+  {<span class="prop">name</span>: <span class="str">"Charlie"</span>, <span class="prop">age</span>: <span class="num">35</span>, <span class="prop">city</span>: <span class="str">"NYC"</span>}
+]
+
+<span class="cmt">// Get names of NYC residents over 28</span>
+<span class="kw">let</span> nycPeople = people
+  .<span class="fn">filter</span>((p) => p.<span class="prop">city</span> == <span class="str">"NYC"</span>)
+  .<span class="fn">filter</span>((p) => p.<span class="prop">age</span> > <span class="num">28</span>)
+  .<span class="fn">map</span>((p) => p.<span class="prop">name</span>)
+
+<span class="bi">print</span>(<span class="str">"NYC over 28:"</span>, nycPeople)  <span class="cmt">// ["Alice", "Charlie"]</span></code></pre>
+
+        <!-- Example 10: Match -->
+        <h2>10 - Pattern Matching</h2>
+        <p>Demonstrates the <code>match/when</code> expression for clean multi-way branching.</p>
+        <pre><code><span class="kw">fn</span> <span class="fn">dayType</span>(day) {
+  <span class="kw">match</span> day {
+    <span class="kw">when</span> <span class="str">"Saturday"</span> => <span class="kw">return</span> <span class="str">"weekend 🎉"</span>
+    <span class="kw">when</span> <span class="str">"Sunday"</span> => <span class="kw">return</span> <span class="str">"weekend 🎉"</span>
+    <span class="kw">when</span> <span class="str">"Friday"</span> => <span class="kw">return</span> <span class="str">"almost done! 🙌"</span>
+    <span class="kw">else</span> => <span class="kw">return</span> <span class="str">"weekday 📝"</span>
+  }
+}
+
+<span class="kw">let</span> days = [<span class="str">"Monday"</span>, <span class="str">"Friday"</span>, <span class="str">"Saturday"</span>]
+<span class="kw">for</span> day <span class="kw">in</span> days {
+  <span class="bi">print</span>(day + <span class="str">": "</span> + <span class="fn">dayType</span>(day))
+}
+
+<span class="cmt">// Calculator with match</span>
+<span class="kw">fn</span> <span class="fn">calculate</span>(op, a, b) {
+  <span class="kw">match</span> op {
+    <span class="kw">when</span> <span class="str">"+"</span> => <span class="kw">return</span> a + b
+    <span class="kw">when</span> <span class="str">"-"</span> => <span class="kw">return</span> a - b
+    <span class="kw">when</span> <span class="str">"*"</span> => <span class="kw">return</span> a * b
+    <span class="kw">when</span> <span class="str">"/"</span> => {
+      <span class="kw">if</span> b == <span class="num">0</span> { <span class="kw">return</span> <span class="kw">null</span> }
+      <span class="kw">return</span> a / b
+    }
+    <span class="kw">else</span> => <span class="kw">return</span> <span class="kw">null</span>
+  }
+}
+
+<span class="bi">print</span>(<span class="str">"10 + 3 ="</span>, <span class="fn">calculate</span>(<span class="str">"+"</span>, <span class="num">10</span>, <span class="num">3</span>))   <span class="cmt">// 13</span>
+<span class="bi">print</span>(<span class="str">"10 * 3 ="</span>, <span class="fn">calculate</span>(<span class="str">"*"</span>, <span class="num">10</span>, <span class="num">3</span>))   <span class="cmt">// 30</span></code></pre>
+
+        <hr>
+        <h2>Running Examples</h2>
+        <p>All examples are in the <code>examples/</code> directory. Run any of them with:</p>
+        <pre><code>tinylang run examples/01-hello.tiny
+tinylang run examples/07-fibonacci.tiny
+tinylang run examples/09-functional.tiny</code></pre>
+
+        <p>Or compile and run on the VM for better performance:</p>
+        <pre><code>tinylang compile examples/08-sorting.tiny
+tinylang exec examples/08-sorting.tinyc</code></pre>
+
+        <div class="page-nav">
+          <a href="stdlib.html" class="page-nav-link">
+            <div class="page-nav-label">Previous</div>
+            <div class="page-nav-title">&larr; Standard Library</div>
+          </a>
+          <a href="architecture.html" class="page-nav-link next">
+            <div class="page-nav-label">Next</div>
+            <div class="page-nav-title">Architecture &rarr;</div>
+          </a>
+        </div>
+
+        <footer class="page-footer">
+          <span>TinyLang v1.0.0</span>
+          <a href="https://github.com/tinylang/tinylang">GitHub</a>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme');
+      if (current === 'dark') {
+        html.setAttribute('data-theme', 'light');
+        localStorage.setItem('theme', 'light');
+      } else {
+        html.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+      }
+    }
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.querySelector('.sidebar-overlay').classList.toggle('active');
+    }
+    (function() {
+      const saved = localStorage.getItem('theme');
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+    })();
+  </script>
+</body>
+</html>

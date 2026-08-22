@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Language Reference - TinyLang Documentation</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+  <div class="layout">
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <a href="index.html" class="sidebar-logo">
+          <img src="assets/logo.svg" alt="TinyLang" width="32" height="32">
+          <div>
+            <div class="sidebar-logo-text">TinyLang</div>
+            <div class="sidebar-version">v1.0.0</div>
+          </div>
+        </a>
+      </div>
+      <div class="sidebar-nav">
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Getting Started</div>
+          <a href="index.html" class="sidebar-link">Overview</a>
+          <a href="getting-started.html" class="sidebar-link">Quick Start</a>
+          <a href="cli-reference.html" class="sidebar-link">CLI Reference</a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Language</div>
+          <a href="language-reference.html" class="sidebar-link active">Language Reference</a>
+          <a href="stdlib.html" class="sidebar-link">Standard Library</a>
+          <a href="examples.html" class="sidebar-link">Examples</a>
+        </div>
+        <div class="sidebar-section">
+          <div class="sidebar-section-title">Internals</div>
+          <a href="architecture.html" class="sidebar-link">Architecture</a>
+          <a href="contributing.html" class="sidebar-link">Contributing</a>
+        </div>
+      </div>
+    </nav>
+
+    <div class="main-content">
+      <div class="top-bar">
+        <button class="mobile-menu-btn" onclick="toggleSidebar()" aria-label="Toggle menu">
+          <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12h18M3 6h18M3 18h18"/>
+          </svg>
+        </button>
+        <button class="theme-toggle" onclick="toggleTheme()" aria-label="Toggle theme">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+          </svg>
+          <span>Theme</span>
+        </button>
+      </div>
+
+      <main class="content">
+        <div class="breadcrumb">
+          <a href="index.html">Docs</a>
+          <span class="breadcrumb-separator">/</span>
+          <span>Language Reference</span>
+        </div>
+
+        <h1>Language Reference</h1>
+        <p>Complete syntax and semantics reference for TinyLang. Every language feature is documented here with examples.</p>
+
+        <!-- Data Types -->
+        <h2>Data Types</h2>
+        <p>TinyLang has six fundamental data types:</p>
+
+        <table>
+          <thead><tr><th>Type</th><th>Description</th><th>Examples</th></tr></thead>
+          <tbody>
+            <tr><td><code>number</code></td><td>64-bit floating point numbers</td><td><code>42</code>, <code>3.14</code>, <code>-7</code>, <code>1e6</code></td></tr>
+            <tr><td><code>string</code></td><td>Unicode text (double or single quotes)</td><td><code>"hello"</code>, <code>'world'</code></td></tr>
+            <tr><td><code>boolean</code></td><td>Logical true or false</td><td><code>true</code>, <code>false</code></td></tr>
+            <tr><td><code>null</code></td><td>Absence of value</td><td><code>null</code></td></tr>
+            <tr><td><code>array</code></td><td>Ordered collection of values</td><td><code>[1, 2, 3]</code></td></tr>
+            <tr><td><code>object</code></td><td>Key-value pairs</td><td><code>{name: "Alice", age: 30}</code></td></tr>
+          </tbody>
+        </table>
+
+        <h3>Numbers</h3>
+        <pre><code><span class="kw">let</span> integer = <span class="num">42</span>
+<span class="kw">let</span> float = <span class="num">3.14159</span>
+<span class="kw">let</span> negative = <span class="num">-7</span>
+<span class="kw">let</span> scientific = <span class="num">1e6</span>     <span class="cmt">// 1000000</span></code></pre>
+
+        <h3>Strings</h3>
+        <pre><code><span class="kw">let</span> double = <span class="str">"Hello, World!"</span>
+<span class="kw">let</span> single = <span class="str">'Also valid'</span>
+<span class="kw">let</span> concat = <span class="str">"Hello"</span> + <span class="str">", "</span> + <span class="str">"World"</span>  <span class="cmt">// String concatenation with +</span>
+<span class="kw">let</span> length = <span class="bi">len</span>(<span class="str">"hello"</span>)  <span class="cmt">// 5</span></code></pre>
+
+        <h3>Arrays</h3>
+        <pre><code><span class="kw">let</span> empty = []
+<span class="kw">let</span> nums = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>]
+<span class="kw">let</span> mixed = [<span class="num">1</span>, <span class="str">"two"</span>, <span class="kw">true</span>, <span class="kw">null</span>]
+<span class="kw">let</span> nested = [[<span class="num">1</span>, <span class="num">2</span>], [<span class="num">3</span>, <span class="num">4</span>]]
+
+<span class="cmt">// Access by index (zero-based)</span>
+<span class="bi">print</span>(nums[<span class="num">0</span>])  <span class="cmt">// 1</span>
+<span class="bi">print</span>(nums[<span class="num">4</span>])  <span class="cmt">// 5</span></code></pre>
+
+        <h3>Objects</h3>
+        <pre><code><span class="kw">let</span> person = {
+  <span class="prop">name</span>: <span class="str">"Alice"</span>,
+  <span class="prop">age</span>: <span class="num">30</span>,
+  <span class="prop">city</span>: <span class="str">"NYC"</span>
+}
+
+<span class="cmt">// Property access</span>
+<span class="bi">print</span>(person.<span class="prop">name</span>)    <span class="cmt">// "Alice"</span>
+<span class="bi">print</span>(person[<span class="str">"age"</span>])  <span class="cmt">// 30</span>
+
+<span class="cmt">// Modify properties</span>
+person.<span class="prop">age</span> = <span class="num">31</span></code></pre>
+
+        <!-- Variables -->
+        <h2>Variables</h2>
+
+        <h3>let - Mutable Variables</h3>
+        <pre><code><span class="kw">let</span> x = <span class="num">10</span>
+x = <span class="num">20</span>  <span class="cmt">// OK - can reassign</span>
+
+<span class="kw">let</span> name = <span class="str">"Alice"</span>
+name = <span class="str">"Bob"</span>  <span class="cmt">// OK</span></code></pre>
+
+        <h3>const - Immutable Variables</h3>
+        <pre><code><span class="kw">const</span> PI = <span class="num">3.14159</span>
+<span class="cmt">// PI = 3.0  // Error! Cannot reassign a constant</span>
+
+<span class="kw">const</span> MAX_SIZE = <span class="num">100</span>
+<span class="kw">const</span> APP_NAME = <span class="str">"TinyLang"</span></code></pre>
+
+        <h3>Compound Assignment</h3>
+        <pre><code><span class="kw">let</span> x = <span class="num">10</span>
+x += <span class="num">5</span>   <span class="cmt">// x = 15</span>
+x -= <span class="num">3</span>   <span class="cmt">// x = 12</span>
+x *= <span class="num">2</span>   <span class="cmt">// x = 24</span>
+x /= <span class="num">4</span>   <span class="cmt">// x = 6</span></code></pre>
+
+        <!-- Operators -->
+        <h2>Operators</h2>
+
+        <h3>Arithmetic</h3>
+        <table>
+          <thead><tr><th>Operator</th><th>Description</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td><code>+</code></td><td>Addition / String concatenation</td><td><code>3 + 4</code> = <code>7</code></td></tr>
+            <tr><td><code>-</code></td><td>Subtraction</td><td><code>10 - 3</code> = <code>7</code></td></tr>
+            <tr><td><code>*</code></td><td>Multiplication</td><td><code>4 * 5</code> = <code>20</code></td></tr>
+            <tr><td><code>/</code></td><td>Division</td><td><code>15 / 4</code> = <code>3.75</code></td></tr>
+            <tr><td><code>%</code></td><td>Modulo (remainder)</td><td><code>17 % 5</code> = <code>2</code></td></tr>
+            <tr><td><code>**</code></td><td>Exponentiation</td><td><code>2 ** 10</code> = <code>1024</code></td></tr>
+            <tr><td><code>-</code> (unary)</td><td>Negation</td><td><code>-x</code></td></tr>
+          </tbody>
+        </table>
+
+        <h3>Comparison</h3>
+        <table>
+          <thead><tr><th>Operator</th><th>Description</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td><code>==</code></td><td>Equal to</td><td><code>5 == 5</code> = <code>true</code></td></tr>
+            <tr><td><code>!=</code></td><td>Not equal to</td><td><code>5 != 3</code> = <code>true</code></td></tr>
+            <tr><td><code>&lt;</code></td><td>Less than</td><td><code>3 &lt; 5</code> = <code>true</code></td></tr>
+            <tr><td><code>&lt;=</code></td><td>Less than or equal</td><td><code>5 &lt;= 5</code> = <code>true</code></td></tr>
+            <tr><td><code>&gt;</code></td><td>Greater than</td><td><code>7 &gt; 3</code> = <code>true</code></td></tr>
+            <tr><td><code>&gt;=</code></td><td>Greater than or equal</td><td><code>5 &gt;= 5</code> = <code>true</code></td></tr>
+          </tbody>
+        </table>
+
+        <h3>Logical</h3>
+        <table>
+          <thead><tr><th>Operator</th><th>Description</th><th>Example</th></tr></thead>
+          <tbody>
+            <tr><td><code>and</code></td><td>Logical AND</td><td><code>true and false</code> = <code>false</code></td></tr>
+            <tr><td><code>or</code></td><td>Logical OR</td><td><code>true or false</code> = <code>true</code></td></tr>
+            <tr><td><code>not</code></td><td>Logical NOT</td><td><code>not true</code> = <code>false</code></td></tr>
+          </tbody>
+        </table>
+
+        <!-- Control Flow -->
+        <h2>Control Flow</h2>
+
+        <h3>if / else</h3>
+        <pre><code><span class="kw">let</span> age = <span class="num">18</span>
+
+<span class="kw">if</span> age >= <span class="num">18</span> {
+  <span class="bi">print</span>(<span class="str">"Adult"</span>)
+} <span class="kw">else if</span> age >= <span class="num">13</span> {
+  <span class="bi">print</span>(<span class="str">"Teenager"</span>)
+} <span class="kw">else</span> {
+  <span class="bi">print</span>(<span class="str">"Child"</span>)
+}</code></pre>
+
+        <h3>while Loop</h3>
+        <pre><code><span class="kw">let</span> i = <span class="num">0</span>
+<span class="kw">while</span> i &lt; <span class="num">5</span> {
+  <span class="bi">print</span>(i)
+  i += <span class="num">1</span>
+}
+<span class="cmt">// Output: 0 1 2 3 4</span></code></pre>
+
+        <h3>for..in Loop</h3>
+        <p>Iterate over arrays, strings, or ranges:</p>
+        <pre><code><span class="cmt">// Iterate over an array</span>
+<span class="kw">let</span> fruits = [<span class="str">"apple"</span>, <span class="str">"banana"</span>, <span class="str">"cherry"</span>]
+<span class="kw">for</span> fruit <span class="kw">in</span> fruits {
+  <span class="bi">print</span>(fruit)
+}
+
+<span class="cmt">// Iterate over a range (0 to 4)</span>
+<span class="kw">for</span> i <span class="kw">in</span> <span class="num">0</span>..<span class="num">5</span> {
+  <span class="bi">print</span>(i)
+}
+
+<span class="cmt">// Iterate over characters of a string</span>
+<span class="kw">for</span> ch <span class="kw">in</span> <span class="str">"HELLO"</span> {
+  <span class="bi">print</span>(ch)
+}</code></pre>
+
+        <h3>Ranges</h3>
+        <p>The <code>..</code> operator creates a range (exclusive upper bound):</p>
+        <pre><code><span class="cmt">// Range from 0 to 9</span>
+<span class="kw">for</span> i <span class="kw">in</span> <span class="num">0</span>..<span class="num">10</span> {
+  <span class="bi">print</span>(i)
+}
+
+<span class="cmt">// Ranges work with variables</span>
+<span class="kw">let</span> n = <span class="num">5</span>
+<span class="kw">for</span> i <span class="kw">in</span> <span class="num">0</span>..n {
+  <span class="bi">print</span>(i)
+}</code></pre>
+
+        <h3>break and continue</h3>
+        <pre><code><span class="cmt">// break - exit loop early</span>
+<span class="kw">for</span> i <span class="kw">in</span> <span class="num">0</span>..<span class="num">100</span> {
+  <span class="kw">if</span> i > <span class="num">5</span> { <span class="kw">break</span> }
+  <span class="bi">print</span>(i)
+}
+
+<span class="cmt">// continue - skip to next iteration</span>
+<span class="kw">for</span> i <span class="kw">in</span> <span class="num">0</span>..<span class="num">10</span> {
+  <span class="kw">if</span> i % <span class="num">2</span> == <span class="num">0</span> { <span class="kw">continue</span> }
+  <span class="bi">print</span>(i)  <span class="cmt">// Only odd numbers</span>
+}</code></pre>
+
+        <h3>match / when</h3>
+        <p>Pattern matching for multi-way branching:</p>
+        <pre><code><span class="kw">fn</span> <span class="fn">describe</span>(code) {
+  <span class="kw">match</span> code {
+    <span class="kw">when</span> <span class="num">200</span> => <span class="kw">return</span> <span class="str">"OK"</span>
+    <span class="kw">when</span> <span class="num">404</span> => <span class="kw">return</span> <span class="str">"Not Found"</span>
+    <span class="kw">when</span> <span class="num">500</span> => <span class="kw">return</span> <span class="str">"Server Error"</span>
+    <span class="kw">else</span> => <span class="kw">return</span> <span class="str">"Unknown"</span>
+  }
+}
+
+<span class="bi">print</span>(<span class="fn">describe</span>(<span class="num">200</span>))  <span class="cmt">// "OK"</span>
+<span class="bi">print</span>(<span class="fn">describe</span>(<span class="num">404</span>))  <span class="cmt">// "Not Found"</span></code></pre>
+
+        <p>Match with blocks:</p>
+        <pre><code><span class="kw">match</span> op {
+  <span class="kw">when</span> <span class="str">"+"</span> => <span class="kw">return</span> a + b
+  <span class="kw">when</span> <span class="str">"-"</span> => <span class="kw">return</span> a - b
+  <span class="kw">when</span> <span class="str">"/"</span> => {
+    <span class="kw">if</span> b == <span class="num">0</span> {
+      <span class="bi">print</span>(<span class="str">"Error: division by zero"</span>)
+      <span class="kw">return</span> <span class="kw">null</span>
+    }
+    <span class="kw">return</span> a / b
+  }
+  <span class="kw">else</span> => <span class="kw">return</span> <span class="kw">null</span>
+}</code></pre>
+
+        <!-- Functions -->
+        <h2>Functions</h2>
+
+        <h3>Named Functions</h3>
+        <pre><code><span class="kw">fn</span> <span class="fn">add</span>(a, b) {
+  <span class="kw">return</span> a + b
+}
+
+<span class="bi">print</span>(<span class="fn">add</span>(<span class="num">3</span>, <span class="num">4</span>))  <span class="cmt">// 7</span></code></pre>
+
+        <h3>Default Parameters</h3>
+        <pre><code><span class="kw">fn</span> <span class="fn">greet</span>(name, greeting = <span class="str">"Hello"</span>) {
+  <span class="kw">return</span> greeting + <span class="str">", "</span> + name + <span class="str">"!"</span>
+}
+
+<span class="bi">print</span>(<span class="fn">greet</span>(<span class="str">"Alice"</span>))         <span class="cmt">// "Hello, Alice!"</span>
+<span class="bi">print</span>(<span class="fn">greet</span>(<span class="str">"Bob"</span>, <span class="str">"Hi"</span>))  <span class="cmt">// "Hi, Bob!"</span></code></pre>
+
+        <h3>Arrow Functions</h3>
+        <pre><code><span class="kw">let</span> double = (x) => x * <span class="num">2</span>
+<span class="kw">let</span> square = (x) => x * x
+<span class="kw">let</span> isEven = (n) => n % <span class="num">2</span> == <span class="num">0</span>
+
+<span class="bi">print</span>(<span class="fn">double</span>(<span class="num">5</span>))   <span class="cmt">// 10</span>
+<span class="bi">print</span>(<span class="fn">square</span>(<span class="num">4</span>))   <span class="cmt">// 16</span>
+<span class="bi">print</span>(<span class="fn">isEven</span>(<span class="num">6</span>))   <span class="cmt">// true</span></code></pre>
+
+        <h3>Closures</h3>
+        <p>Functions capture variables from their enclosing scope:</p>
+        <pre><code><span class="kw">fn</span> <span class="fn">makeCounter</span>(start = <span class="num">0</span>) {
+  <span class="kw">let</span> count = start
+  <span class="kw">return</span> <span class="kw">fn</span>() {
+    count += <span class="num">1</span>
+    <span class="kw">return</span> count
+  }
+}
+
+<span class="kw">let</span> counter = <span class="fn">makeCounter</span>()
+<span class="bi">print</span>(<span class="fn">counter</span>())  <span class="cmt">// 1</span>
+<span class="bi">print</span>(<span class="fn">counter</span>())  <span class="cmt">// 2</span>
+<span class="bi">print</span>(<span class="fn">counter</span>())  <span class="cmt">// 3</span></code></pre>
+
+        <h3>Higher-Order Functions</h3>
+        <pre><code><span class="kw">fn</span> <span class="fn">apply</span>(f, value) {
+  <span class="kw">return</span> <span class="fn">f</span>(value)
+}
+
+<span class="kw">let</span> double = (x) => x * <span class="num">2</span>
+<span class="bi">print</span>(<span class="fn">apply</span>(double, <span class="num">5</span>))  <span class="cmt">// 10</span>
+
+<span class="cmt">// Arrays support map, filter, reduce</span>
+<span class="kw">let</span> nums = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>]
+<span class="kw">let</span> doubled = nums.<span class="fn">map</span>((x) => x * <span class="num">2</span>)        <span class="cmt">// [2, 4, 6, 8, 10]</span>
+<span class="kw">let</span> evens = nums.<span class="fn">filter</span>((x) => x % <span class="num">2</span> == <span class="num">0</span>) <span class="cmt">// [2, 4]</span>
+<span class="kw">let</span> sum = nums.<span class="fn">reduce</span>((a, x) => a + x, <span class="num">0</span>)  <span class="cmt">// 15</span></code></pre>
+
+        <!-- Classes -->
+        <h2>Classes</h2>
+
+        <h3>Basic Classes</h3>
+        <pre><code><span class="kw">class</span> <span class="cls">Animal</span> {
+  <span class="kw">let</span> name = <span class="str">""</span>
+  <span class="kw">let</span> sound = <span class="str">""</span>
+
+  <span class="kw">fn</span> <span class="fn">init</span>(name, sound) {
+    <span class="kw">this</span>.<span class="prop">name</span> = name
+    <span class="kw">this</span>.<span class="prop">sound</span> = sound
+  }
+
+  <span class="kw">fn</span> <span class="fn">speak</span>() {
+    <span class="bi">print</span>(<span class="kw">this</span>.<span class="prop">name</span> + <span class="str">" says "</span> + <span class="kw">this</span>.<span class="prop">sound</span>)
+  }
+}
+
+<span class="kw">let</span> dog = <span class="kw">new</span> <span class="cls">Animal</span>(<span class="str">"Dog"</span>, <span class="str">"Woof"</span>)
+dog.<span class="fn">speak</span>()  <span class="cmt">// "Dog says Woof"</span></code></pre>
+
+        <h3>Inheritance</h3>
+        <pre><code><span class="kw">class</span> <span class="cls">Dog</span> <span class="kw">extends</span> <span class="cls">Animal</span> {
+  <span class="kw">let</span> tricks = []
+
+  <span class="kw">fn</span> <span class="fn">init</span>(name) {
+    <span class="kw">this</span>.<span class="prop">name</span> = name
+    <span class="kw">this</span>.<span class="prop">sound</span> = <span class="str">"Woof"</span>
+    <span class="kw">this</span>.<span class="prop">tricks</span> = []
+  }
+
+  <span class="kw">fn</span> <span class="fn">learn</span>(trick) {
+    <span class="kw">this</span>.<span class="prop">tricks</span>.<span class="fn">push</span>(trick)
+  }
+}
+
+<span class="kw">let</span> buddy = <span class="kw">new</span> <span class="cls">Dog</span>(<span class="str">"Buddy"</span>)
+buddy.<span class="fn">speak</span>()       <span class="cmt">// "Buddy says Woof" (inherited)</span>
+buddy.<span class="fn">learn</span>(<span class="str">"sit"</span>)  <span class="cmt">// Dog-specific method</span></code></pre>
+
+        <h3>Class Features</h3>
+        <ul>
+          <li><strong>Properties</strong> - Declared with <code>let</code> inside the class body</li>
+          <li><strong>Constructor</strong> - The <code>init()</code> method is called on <code>new</code></li>
+          <li><strong>Methods</strong> - Declared with <code>fn</code> inside the class body</li>
+          <li><strong>this</strong> - Refers to the current instance</li>
+          <li><strong>Inheritance</strong> - Use <code>extends</code> to inherit from a parent class</li>
+          <li><strong>Instantiation</strong> - Use <code>new ClassName(args)</code></li>
+        </ul>
+
+        <!-- Modules -->
+        <h2>Modules</h2>
+
+        <h3>Importing</h3>
+        <pre><code><span class="cmt">// Import specific items from a module</span>
+<span class="kw">import</span> {greet, add} <span class="kw">from</span> <span class="str">"./lib"</span>
+
+<span class="fn">greet</span>(<span class="str">"World"</span>)
+<span class="bi">print</span>(<span class="fn">add</span>(<span class="num">2</span>, <span class="num">3</span>))</code></pre>
+
+        <div class="info-box">
+          <div class="info-box-title">Note</div>
+          <p>Module paths are relative to the importing file. The <code>.tiny</code> extension is optional.</p>
+        </div>
+
+        <!-- Test Blocks -->
+        <h2>Test Blocks</h2>
+
+        <p>TinyLang has built-in testing support:</p>
+        <pre><code><span class="kw">fn</span> <span class="fn">add</span>(a, b) {
+  <span class="kw">return</span> a + b
+}
+
+<span class="kw">test</span> <span class="str">"addition works"</span> {
+  <span class="bi">expectToBe</span>(<span class="fn">add</span>(<span class="num">2</span>, <span class="num">3</span>), <span class="num">5</span>)
+  <span class="bi">expectToBe</span>(<span class="fn">add</span>(<span class="num">-1</span>, <span class="num">1</span>), <span class="num">0</span>)
+}
+
+<span class="kw">test</span> <span class="str">"string concatenation"</span> {
+  <span class="kw">let</span> result = <span class="str">"hello"</span> + <span class="str">" world"</span>
+  <span class="bi">expectToBe</span>(result, <span class="str">"hello world"</span>)
+}</code></pre>
+
+        <p>Run tests with:</p>
+        <pre><code>tinylang test main.test.tiny</code></pre>
+
+        <!-- Comments -->
+        <h2>Comments</h2>
+        <pre><code><span class="cmt">// Single-line comment</span>
+
+<span class="cmt">// Multi-line comments use multiple single-line comments</span>
+<span class="cmt">// There is no block comment syntax in TinyLang</span></code></pre>
+
+        <!-- Array Methods -->
+        <h2>Array Methods</h2>
+        <p>Arrays support method-style calls for common operations:</p>
+        <pre><code><span class="kw">let</span> nums = [<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>]
+
+<span class="cmt">// Transform</span>
+nums.<span class="fn">map</span>((x) => x * <span class="num">2</span>)         <span class="cmt">// [2, 4, 6, 8, 10]</span>
+nums.<span class="fn">filter</span>((x) => x > <span class="num">2</span>)       <span class="cmt">// [3, 4, 5]</span>
+nums.<span class="fn">reduce</span>((a, x) => a + x, <span class="num">0</span>) <span class="cmt">// 15</span>
+
+<span class="cmt">// Search</span>
+nums.<span class="fn">find</span>((x) => x > <span class="num">3</span>)         <span class="cmt">// 4</span>
+nums.<span class="fn">includes</span>(<span class="num">3</span>)                <span class="cmt">// true</span>
+
+<span class="cmt">// Iterate</span>
+nums.<span class="fn">forEach</span>((x, i) => {
+  <span class="bi">print</span>(i, x)
+})
+
+<span class="cmt">// Chaining</span>
+[<span class="num">1</span>, <span class="num">2</span>, <span class="num">3</span>, <span class="num">4</span>, <span class="num">5</span>]
+  .<span class="fn">filter</span>((x) => x % <span class="num">2</span> == <span class="num">0</span>)
+  .<span class="fn">map</span>((x) => x * x)
+<span class="cmt">// [4, 16]</span></code></pre>
+
+        <!-- Scope -->
+        <h2>Scoping Rules</h2>
+        <p>TinyLang uses lexical (block) scoping:</p>
+        <pre><code><span class="kw">let</span> x = <span class="num">1</span>
+
+<span class="kw">if</span> <span class="kw">true</span> {
+  <span class="kw">let</span> x = <span class="num">2</span>  <span class="cmt">// New variable in inner scope</span>
+  <span class="bi">print</span>(x)   <span class="cmt">// 2</span>
+}
+
+<span class="bi">print</span>(x)  <span class="cmt">// 1 (outer scope unchanged)</span></code></pre>
+
+        <div class="page-nav">
+          <a href="getting-started.html" class="page-nav-link">
+            <div class="page-nav-label">Previous</div>
+            <div class="page-nav-title">&larr; Getting Started</div>
+          </a>
+          <a href="stdlib.html" class="page-nav-link next">
+            <div class="page-nav-label">Next</div>
+            <div class="page-nav-title">Standard Library &rarr;</div>
+          </a>
+        </div>
+
+        <footer class="page-footer">
+          <span>TinyLang v1.0.0</span>
+          <a href="https://github.com/tinylang/tinylang">GitHub</a>
+        </footer>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme');
+      if (current === 'dark') {
+        html.setAttribute('data-theme', 'light');
+        localStorage.setItem('theme', 'light');
+      } else {
+        html.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+      }
+    }
+    function toggleSidebar() {
+      document.getElementById('sidebar').classList.toggle('open');
+      document.querySelector('.sidebar-overlay').classList.toggle('active');
+    }
+    (function() {
+      const saved = localStorage.getItem('theme');
+      if (saved) document.documentElement.setAttribute('data-theme', saved);
+    })();
+  </script>
+</body>
+</html>
