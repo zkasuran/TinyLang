@@ -126,6 +126,137 @@ export const assertionFunctions: NativeFunctionValue[] = [
     return { type: 'null', value: null };
   }),
 
+  createAssertionFn('expect', 1, (args) => {
+    const actual = args[0];
+    const methods = new Map<string, RuntimeValue>();
+
+    methods.set('toBe', {
+      type: 'native-function',
+      name: 'toBe',
+      arity: 1,
+      fn: (innerArgs) => {
+        if (!valuesEqual(actual, innerArgs[0])) {
+          throw new AssertionError(
+            `Expected ${stringify(actual)} to be ${stringify(innerArgs[0])}`
+          );
+        }
+        return { type: 'null', value: null };
+      },
+    });
+
+    methods.set('toBeGreaterThan', {
+      type: 'native-function',
+      name: 'toBeGreaterThan',
+      arity: 1,
+      fn: (innerArgs) => {
+        const n = innerArgs[0];
+        if (actual.type !== 'number' || n.type !== 'number') {
+          throw new AssertionError(
+            `toBeGreaterThan requires numbers, got ${actual.type} and ${n.type}`
+          );
+        }
+        if (!(actual.value > n.value)) {
+          throw new AssertionError(
+            `Expected ${actual.value} to be greater than ${n.value}`
+          );
+        }
+        return { type: 'null', value: null };
+      },
+    });
+
+    methods.set('toBeLessThan', {
+      type: 'native-function',
+      name: 'toBeLessThan',
+      arity: 1,
+      fn: (innerArgs) => {
+        const n = innerArgs[0];
+        if (actual.type !== 'number' || n.type !== 'number') {
+          throw new AssertionError(
+            `toBeLessThan requires numbers, got ${actual.type} and ${n.type}`
+          );
+        }
+        if (!(actual.value < n.value)) {
+          throw new AssertionError(
+            `Expected ${actual.value} to be less than ${n.value}`
+          );
+        }
+        return { type: 'null', value: null };
+      },
+    });
+
+    methods.set('toContain', {
+      type: 'native-function',
+      name: 'toContain',
+      arity: 1,
+      fn: (innerArgs) => {
+        const needle = innerArgs[0];
+        if (actual.type === 'array') {
+          const found = actual.elements.some(el => valuesEqual(el, needle));
+          if (!found) {
+            throw new AssertionError(
+              `Expected ${stringify(actual)} to contain ${stringify(needle)}`
+            );
+          }
+        } else if (actual.type === 'string' && needle.type === 'string') {
+          if (!actual.value.includes(needle.value)) {
+            throw new AssertionError(
+              `Expected "${actual.value}" to contain "${needle.value}"`
+            );
+          }
+        } else {
+          throw new AssertionError(
+            `toContain requires an array or string, got ${actual.type}`
+          );
+        }
+        return { type: 'null', value: null };
+      },
+    });
+
+    methods.set('toBeNull', {
+      type: 'native-function',
+      name: 'toBeNull',
+      arity: 0,
+      fn: () => {
+        if (actual.type !== 'null') {
+          throw new AssertionError(
+            `Expected ${stringify(actual)} to be null`
+          );
+        }
+        return { type: 'null', value: null };
+      },
+    });
+
+    methods.set('toBeTrue', {
+      type: 'native-function',
+      name: 'toBeTrue',
+      arity: 0,
+      fn: () => {
+        if (!isTruthy(actual)) {
+          throw new AssertionError(
+            `Expected ${stringify(actual)} to be truthy`
+          );
+        }
+        return { type: 'null', value: null };
+      },
+    });
+
+    methods.set('toBeFalse', {
+      type: 'native-function',
+      name: 'toBeFalse',
+      arity: 0,
+      fn: () => {
+        if (isTruthy(actual)) {
+          throw new AssertionError(
+            `Expected ${stringify(actual)} to be falsy`
+          );
+        }
+        return { type: 'null', value: null };
+      },
+    });
+
+    return { type: 'object', properties: methods };
+  }),
+
   createAssertionFn('expectToThrow', 1, (args) => {
     const [fn] = args;
     if (fn.type !== 'function' && fn.type !== 'native-function') {

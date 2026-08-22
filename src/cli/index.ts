@@ -622,12 +622,12 @@ fn add(a, b) {
 }
 
 test "addition works" {
-  expectToBe(add(2, 3), 5)
+  expect(add(2, 3)).toBe(5)
 }
 
 test "string concatenation" {
   let result = "hello" + " " + "world"
-  expectToBe(result, "hello world")
+  expect(result).toBe("hello world")
 }
 `;
   fs.writeFileSync(path.join(targetDir, 'main.test.tiny'), testTiny);
