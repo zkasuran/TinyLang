@@ -1,0 +1,7 @@
+{
+  "task_id": "task-tinylang-suite",
+  "task_description": "Build a complete, professional-grade programming language suite under the TinyLang brand. Add bytecode compiler + VM, interactive debugger, formatter, linter, built-in test framework, full CLI with all commands, Web IDE upgrade, module system, documentation site, and rich .kiro configuration. Everything must actually work - no stubs.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001", "FEAT-002", "FEAT-003", "FEAT-004", "FEAT-005", "FEAT-006"],
+  "blocked_reason": null
+}

@@ -1,0 +1,100 @@
+// ================================================
+// Sorting Algorithms
+// ================================================
+// Implement classic sorting algorithms to
+// understand how they work.
+
+// Bubble Sort - O(n²)
+// Repeatedly swap adjacent elements if they're in wrong order
+fn bubbleSort(arr) {
+  let n = len(arr)
+  let sorted = slice(arr, 0, n)
+  let swaps = 0
+  
+  for i in 0..n {
+    for j in 0..n - i - 1 {
+      if sorted[j] > sorted[j + 1] {
+        let temp = sorted[j]
+        sorted[j] = sorted[j + 1]
+        sorted[j + 1] = temp
+        swaps += 1
+      }
+    }
+  }
+  
+  print("  (Swaps: " + str(swaps) + ")")
+  return sorted
+}
+
+// Selection Sort - O(n²)
+// Find minimum element and place it at beginning
+fn selectionSort(arr) {
+  let n = len(arr)
+  let sorted = slice(arr, 0, n)
+  let comparisons = 0
+  
+  for i in 0..n {
+    let minIdx = i
+    for j in i + 1..n {
+      comparisons += 1
+      if sorted[j] < sorted[minIdx] {
+        minIdx = j
+      }
+    }
+    if minIdx != i {
+      let temp = sorted[i]
+      sorted[i] = sorted[minIdx]
+      sorted[minIdx] = temp
+    }
+  }
+  
+  print("  (Comparisons: " + str(comparisons) + ")")
+  return sorted
+}
+
+// Insertion Sort - O(n²) but good for small/nearly sorted
+fn insertionSort(arr) {
+  let n = len(arr)
+  let sorted = slice(arr, 0, n)
+  let shifts = 0
+  
+  for i in 1..n {
+    let key = sorted[i]
+    let j = i - 1
+    while j >= 0 and sorted[j] > key {
+      sorted[j + 1] = sorted[j]
+      j -= 1
+      shifts += 1
+    }
+    sorted[j + 1] = key
+  }
+  
+  print("  (Shifts: " + str(shifts) + ")")
+  return sorted
+}
+
+// Test all sorting algorithms
+let data = [64, 34, 25, 12, 22, 11, 90, 1, 55, 42]
+print("Original:", data)
+print("")
+
+print("Bubble Sort:")
+let result1 = bubbleSort(data)
+print("  Result:", result1)
+print("")
+
+print("Selection Sort:")
+let result2 = selectionSort(data)
+print("  Result:", result2)
+print("")
+
+print("Insertion Sort:")
+let result3 = insertionSort(data)
+print("  Result:", result3)
+print("")
+
+// Compare with built-in sort
+print("Built-in sort:", sort(data))
+
+// Verify all produce same result
+print("\nAll correct:", result1 == result2 and result2 == result3)

@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Lint TypeScript on Save",
+      "trigger": "PostFileSave",
+      "matcher": "\\.ts$",
+      "action": {
+        "type": "command",
+        "command": "cd /projects/sandbox/tinylang && npx eslint --fix"
+      }
+    }
+  ]
+}

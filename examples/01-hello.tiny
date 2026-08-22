@@ -1,0 +1,15 @@
+// ================================================
+// Hello World - Your first TinyLang program!
+// ================================================
+// TinyLang is designed to be easy to learn.
+// Let's start with the basics.
+
+print("Hello, World!")
+print("Welcome to TinyLang 🎉")
+
+// Variables
+let name = "TinyLang"
+let version = 1.0
+
+print("I am " + name + " version " + str(version))
+print("I was built to help you learn programming!")

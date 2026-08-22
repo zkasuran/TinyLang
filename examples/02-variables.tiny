@@ -1,0 +1,54 @@
+// ================================================
+// Variables and Data Types
+// ================================================
+// TinyLang has 6 data types: number, string, boolean,
+// null, array, and object.
+
+// Numbers (integers and floats)
+let age = 25
+let pi = 3.14159
+let negative = -42
+
+print("Age:", age)
+print("Pi:", pi)
+print("Negative:", negative)
+
+// Strings
+let greeting = "Hello"
+let name = 'World'
+let message = greeting + ", " + name + "!"
+print(message)
+
+// Booleans
+let isStudent = true
+let hasGraduated = false
+print("Student:", isStudent)
+print("Graduated:", hasGraduated)
+
+// Null
+let nothing = null
+print("Nothing:", nothing)
+
+// Arrays
+let colors = ["red", "green", "blue"]
+let numbers = [1, 2, 3, 4, 5]
+print("Colors:", colors)
+print("Numbers:", numbers)
+print("First color:", colors[0])
+
+// Objects
+let person = {name: "Alice", age: 30, city: "NYC"}
+print("Person:", person)
+print("Name:", person.name)
+
+// Constants (cannot be reassigned)
+const MAX_SIZE = 100
+const APP_NAME = "TinyLang"
+print("Max size:", MAX_SIZE)
+
+// Type checking
+print("Type of age:", type(age))
+print("Type of name:", type(name))
+print("Type of colors:", type(colors))
+print("Type of person:", type(person))
+print("Type of null:", type(nothing))

@@ -1,0 +1,32 @@
+{
+  "project_type": "TypeScript programming language suite (lexer, parser, interpreter, CLI, stdlib, REPL, playground)",
+  "language": "TypeScript",
+  "build_system": "npm + tsc (TypeScript compiler). Strict mode enabled with noUnusedLocals, noUnusedParameters, noImplicitReturns.",
+  "test_framework": "Vitest with 124 passing tests across 4 test files (lexer, parser, interpreter, integration)",
+  "build_command": "npm run build",
+  "test_command": "npx vitest run",
+  "verification_instructions": "1. Run npm run build to compile. 2. Run npx vitest run to verify tests pass. 3. Run node dist/cli/index.js run examples/01-hello.tiny to verify CLI works. 4. Open playground/index.html in browser for web IDE.",
+  "snapshot_or_generated_files": null,
+  "setup_instructions": "npm install && npm run build",
+  "environment_constraints": "OPEN_INTERNET - full network access. Node.js 22.x available via nvm. Bun 1.2.14 available. TypeScript strict mode requires all code to pass strict checks.",
+  "contribution_requirements": "TypeScript throughout, Node.js 18+ compatible. Playground must work from a single HTML file or simple npm script. No external services required.",
+  "key_patterns": "1. AST nodes in src/types/ast.ts with SourcePosition on every node. 2. Runtime values in src/types/values.ts using discriminated unions. 3. Environment class with parent chain for scoping. 4. Stdlib registered via registerStdlib() with NativeFunctionValue objects. 5. Error classes: LexerError, ParseError, RuntimeError all carry position info. 6. CLI uses raw process.argv parsing. 7. Tests use vitest describe/it/expect pattern. 8. TinyLang class is the high-level API that orchestrates lexer->parser->interpreter.",
+  "relevant_files": [
+    "src/index.ts",
+    "src/tinylang.ts",
+    "src/cli/index.ts",
+    "src/types/ast.ts",
+    "src/types/tokens.ts",
+    "src/types/values.ts",
+    "src/lexer/index.ts",
+    "src/parser/parser.ts",
+    "src/interpreter/interpreter.ts",
+    "src/stdlib/register.ts",
+    "src/repl/index.ts",
+    "tsconfig.json",
+    "package.json",
+    "vitest.config.ts",
+    "playground/index.html"
+  ],
+  "directory_structure": "src/ - source code (cli/, interpreter/, lexer/, parser/, repl/, stdlib/, types/, utils/). tests/ - vitest tests (integration/, interpreter/, lexer/, parser/). examples/ - 10 .tiny example programs. playground/ - web playground (single index.html). dist/ - compiled output. .kiro/ - specs, steering, hooks."
+}

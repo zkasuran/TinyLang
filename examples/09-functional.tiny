@@ -1,0 +1,95 @@
+// ================================================
+// Functional Programming Patterns
+// ================================================
+// TinyLang supports functional programming with
+// closures, higher-order functions, and more.
+
+// Function composition
+fn compose(f, g) {
+  return (x) => f(g(x))
+}
+
+let double = (x) => x * 2
+let addOne = (x) => x + 1
+let negate = (x) => -x
+
+let doubleAndAdd = compose(addOne, double)
+let addAndDouble = compose(double, addOne)
+
+print("=== Composition ===")
+print("doubleAndAdd(5) =", doubleAndAdd(5))
+print("addAndDouble(5) =", addAndDouble(5))
+
+// Pipe - apply functions left to right
+fn pipe(value, functions) {
+  let result = value
+  for f in functions {
+    result = f(result)
+  }
+  return result
+}
+
+print("\n=== Pipe ===")
+let result = pipe(3, [double, addOne, double, negate])
+print("pipe(3, [double, addOne, double, negate]) =", result)
+
+// Curry-like patterns
+fn multiplier(factor) {
+  return (x) => x * factor
+}
+
+fn adder(amount) {
+  return (x) => x + amount
+}
+
+let triple = multiplier(3)
+let addTen = adder(10)
+
+print("\n=== Currying ===")
+print("triple(7) =", triple(7))
+print("addTen(5) =", addTen(5))
+
+// Memoization
+fn memoize(f) {
+  let cache = {}
+  return fn(n) {
+    let key = str(n)
+    if cache.has(key) {
+      return cache.keys()
+    }
+    let result = f(n)
+    cache[key] = result
+    return result
+  }
+}
+
+// Map/Filter/Reduce pipeline
+print("\n=== Data Pipeline ===")
+let people = [
+  {name: "Alice", age: 30, city: "NYC"},
+  {name: "Bob", age: 25, city: "LA"},
+  {name: "Charlie", age: 35, city: "NYC"},
+  {name: "Diana", age: 28, city: "SF"},
+  {name: "Eve", age: 32, city: "NYC"}
+]
+
+// Get names of people in NYC over 28
+let nycPeople = people
+  .filter((p) => p.city == "NYC")
+  .filter((p) => p.age > 28)
+  .map((p) => p.name)
+
+print("NYC people over 28:", nycPeople)
+
+// Calculate average age
+let totalAge = people.reduce((acc, p) => acc + p.age, 0)
+let avgAge = totalAge / len(people)
+print("Average age:", avgAge)
+
+// Group by city (using reduce)
+print("\n=== People by city ===")
+let cities = ["NYC", "LA", "SF"]
+for city in cities {
+  let inCity = people.filter((p) => p.city == city).map((p) => p.name)
+  print("  " + city + ": " + join(inCity, ", "))
+}

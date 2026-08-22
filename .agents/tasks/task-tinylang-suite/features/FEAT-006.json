@@ -1,0 +1,35 @@
+{
+  "id": "FEAT-006",
+  "type": "docs",
+  "description": "Complete documentation site, expanded .kiro/ configuration for maximum Kiro Usage points, updated README with all features, and expanded examples collection.",
+  "status": "pending",
+  "steps": [
+    "Create docs/ directory with comprehensive documentation as HTML/Markdown pages: docs/index.html (landing page), docs/getting-started.md, docs/language-reference.md (every language feature), docs/stdlib-api.md (every function with signature, description, examples), docs/compiler-architecture.md (how bytecode compiler and VM work with diagrams), docs/debugger-guide.md, docs/cli-reference.md (all commands), docs/examples-gallery.md, docs/contributing.md.",
+    "Create docs/language-reference.md covering: variables (let/const), data types (number, string, boolean, null, array, object), operators (arithmetic, comparison, logical, assignment), control flow (if/else, while, for, match, break, continue), functions (named, arrow, closures, default params), classes (inheritance, methods, properties, this), modules (import/from), test blocks, error handling.",
+    "Create docs/stdlib-api.md with complete API documentation for every stdlib function organized by module (io, math, strings, arrays, types, utils). Each function has: signature, description, parameters, return value, example code, and notes.",
+    "Create docs/compiler-architecture.md explaining the bytecode instruction set, how the compiler walks the AST, the constant pool, the VM execution loop, the call frame stack, garbage collection approach, and optimization passes. Include ASCII diagrams.",
+    "Rewrite README.md completely: professional layout with badges, clear value proposition, quick start, complete feature list, CLI command reference, code examples, architecture overview, links to docs/, contribution guide, and acknowledgments. Should be impressive to hackathon judges.",
+    "Expand .kiro/specs/ with additional spec files: .kiro/specs/compiler-spec.md (requirements, design, tasks for bytecode compiler), .kiro/specs/debugger-spec.md, .kiro/specs/ide-spec.md, .kiro/specs/testing-framework-spec.md. Each follows the Requirements -> Design -> Tasks pattern.",
+    "Expand .kiro/steering/ with additional steering files: .kiro/steering/testing-standards.md, .kiro/steering/error-handling.md, .kiro/steering/performance.md, .kiro/steering/documentation-standards.md.",
+    "Expand .kiro/hooks/ with additional hooks: .kiro/hooks/pre-commit.json (run lint + test), .kiro/hooks/generate-docs.json, .kiro/hooks/benchmark-check.json.",
+    "Add more example programs in examples/: 11-modules.tiny (import/export demo), 12-testing.tiny (test blocks demo), 13-algorithms.tiny (more algorithms), 14-data-structures.tiny (linked list, stack, queue), 15-game.tiny (text adventure game), 16-compiler-demo.tiny (show bytecode compilation).",
+    "Update CHANGELOG.md with all new features added."
+  ],
+  "acceptance_criteria": [
+    "npm run build succeeds",
+    "npx vitest run passes all tests",
+    "docs/ directory contains comprehensive documentation",
+    "README.md is professional-grade and covers all features",
+    ".kiro/ directory has expanded specs, steering, and hooks",
+    "All new example programs run successfully with tinylang run",
+    "Documentation accurately describes the actual implemented features"
+  ],
+  "verification": [
+    "npm run build",
+    "npx vitest run",
+    "node dist/cli/index.js run examples/11-modules.tiny || echo 'modules example needs module system'",
+    "ls docs/ && echo 'docs exist'"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

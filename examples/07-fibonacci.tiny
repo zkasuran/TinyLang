@@ -1,0 +1,60 @@
+// ================================================
+// Fibonacci - Multiple Approaches
+// ================================================
+// The Fibonacci sequence is a classic programming
+// exercise. Let's solve it three different ways!
+
+// Approach 1: Recursive (elegant but slow)
+fn fib_recursive(n) {
+  if n <= 1 { return n }
+  return fib_recursive(n - 1) + fib_recursive(n - 2)
+}
+
+// Approach 2: Iterative (fast!)
+fn fib_iterative(n) {
+  if n <= 1 { return n }
+  let a = 0
+  let b = 1
+  for i in 2..n + 1 {
+    let temp = b
+    b = a + b
+    a = temp
+  }
+  return b
+}
+
+// Approach 3: Generate entire sequence
+fn fib_sequence(count) {
+  let seq = [0, 1]
+  for i in 2..count {
+    let next = seq[i - 1] + seq[i - 2]
+    push(seq, next)
+  }
+  return seq
+}
+
+// Test recursive approach
+print("=== Recursive Fibonacci ===")
+for i in 0..11 {
+  print("fib(" + str(i) + ") = " + str(fib_recursive(i)))
+}
+
+// Test iterative approach (can handle larger numbers)
+print("\n=== Iterative Fibonacci ===")
+print("fib(20) =", fib_iterative(20))
+print("fib(30) =", fib_iterative(30))
+print("fib(40) =", fib_iterative(40))
+
+// Generate and display sequence
+print("\n=== First 15 Fibonacci Numbers ===")
+let sequence = fib_sequence(15)
+print(sequence)
+
+// Golden ratio approximation
+print("\n=== Golden Ratio Approximation ===")
+let seq = fib_sequence(20)
+for i in 5..15 {
+  let ratio = seq[i] / seq[i - 1]
+  print("fib(" + str(i) + ")/fib(" + str(i - 1) + ") = " + str(round(ratio * 10000) / 10000))
+}
+print("Actual golden ratio ≈ 1.6180")

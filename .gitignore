@@ -1,0 +1,11 @@
+node_modules/
+dist/
+coverage/
+*.js.map
+*.d.ts
+!vitest.config.ts
+.env
+.DS_Store
+playground/dist/
+playground/node_modules/
+*.log

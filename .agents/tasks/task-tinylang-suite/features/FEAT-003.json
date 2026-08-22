@@ -1,0 +1,36 @@
+{
+  "id": "FEAT-003",
+  "type": "feat",
+  "description": "Formatter (AST-based pretty printer), Linter (static analysis), and Built-in Test Framework. These are three developer tools that share AST analysis infrastructure.",
+  "status": "pending",
+  "steps": [
+    "Create src/formatter/formatter.ts - AST-based pretty printer. Walk the AST and produce formatted source. Configurable indent size (default 2), max line width (default 80). Preserve comments (requires lexer modification to track comments). Handle all AST node types. Ensure idempotency: formatting already-formatted code produces identical output.",
+    "Create src/formatter/config.ts - Formatting configuration: indentSize, maxLineWidth, useSemicolons, braceStyle. Read from .tinylang.json if present, otherwise use defaults.",
+    "Create src/formatter/index.ts - exports",
+    "Create src/linter/rules/ directory with individual rule files: unused-variables.ts (detect declared but never-used variables), unreachable-code.ts (detect code after return/break in same block), no-unused-params.ts (function params never referenced), no-shadow.ts (inner scope variable shadows outer), prefer-const.ts (variable never reassigned should be const), no-empty-blocks.ts (empty function/if/while bodies).",
+    "Create src/linter/linter.ts - Linter class that runs all enabled rules against the AST. Each rule returns an array of Diagnostic objects with severity (error/warning/info), message, position, and optional fix (replacement text for auto-fix).",
+    "Create src/linter/index.ts - exports",
+    "Create src/testing/runner.ts - Built-in test framework. Parse test blocks in TinyLang source: test \"description\" { ... } syntax. Requires adding TEST keyword to lexer (src/lexer/lexer.ts) and TestBlock AST node to parser (src/parser/parser.ts). The runner discovers test blocks, executes each in isolation, and reports pass/fail.",
+    "Create src/testing/assertions.ts - Assertion functions available inside test blocks: expect(actual).toBe(expected), expect(actual).toBeGreaterThan(n), expect(actual).toContain(item), expect(fn).toThrow(). Register these as native functions in the test execution environment.",
+    "Create src/testing/reporter.ts - Colorized test output showing test descriptions with checkmarks/crosses, execution time, and summary (X passed, Y failed, Z total).",
+    "Create src/testing/index.ts - exports",
+    "Add EXPECT and TEST token types to src/types/tokens.ts and KEYWORDS map. Add TestBlock node type to src/types/ast.ts. Update parser to parse test blocks.",
+    "Add tests in tests/formatter/formatter.test.ts, tests/linter/linter.test.ts, and tests/testing/testing.test.ts"
+  ],
+  "acceptance_criteria": [
+    "npm run build succeeds",
+    "npx vitest run passes all tests",
+    "Formatter produces correctly indented output for all example programs",
+    "Formatting is idempotent (format(format(code)) == format(code))",
+    "Linter detects unused variables and unreachable code",
+    "Linter auto-fix capability replaces let with const for never-reassigned variables",
+    "Test framework discovers and runs test blocks, reporting results",
+    "Test assertions correctly identify pass/fail conditions"
+  ],
+  "verification": [
+    "npm run build",
+    "npx vitest run"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

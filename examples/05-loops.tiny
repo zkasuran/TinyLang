@@ -1,0 +1,74 @@
+// ================================================
+// Loops and Control Flow
+// ================================================
+// TinyLang supports while loops, for-in loops,
+// ranges, break, and continue.
+
+// While loop
+print("=== Countdown ===")
+let n = 5
+while n > 0 {
+  print(n)
+  n -= 1
+}
+print("Liftoff! 🚀")
+
+// For loop with range (exclusive end)
+print("\n=== Squares 1-5 ===")
+for i in 1..6 {
+  print(str(i) + "² = " + str(i * i))
+}
+
+// For loop with array
+print("\n=== Shopping List ===")
+let items = ["milk", "eggs", "bread", "cheese"]
+for item in items {
+  print("  ☐ " + item)
+}
+
+// For loop with string
+print("\n=== Letters ===")
+for ch in "HELLO" {
+  print("  " + ch)
+}
+
+// Break - exit loop early
+print("\n=== Find first even > 5 ===")
+for i in 1..20 {
+  if i > 5 and i % 2 == 0 {
+    print("Found:", i)
+    break
+  }
+}
+
+// Continue - skip iteration
+print("\n=== Odd numbers 1-10 ===")
+for i in 1..11 {
+  if i % 2 == 0 {
+    continue
+  }
+  print(i)
+}
+
+// Nested loops - multiplication table
+print("\n=== 4x4 Multiplication Table ===")
+for i in 1..5 {
+  let row = ""
+  for j in 1..5 {
+    let val = str(i * j)
+    // Pad to 4 characters
+    while len(val) < 4 {
+      val = " " + val
+    }
+    row = row + val
+  }
+  print(row)
+}
+
+// While with complex condition
+print("\n=== Powers of 2 under 100 ===")
+let power = 1
+while power < 100 {
+  print(power)
+  power *= 2
+}

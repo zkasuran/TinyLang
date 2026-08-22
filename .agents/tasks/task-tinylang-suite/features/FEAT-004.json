@@ -1,0 +1,43 @@
+{
+  "id": "FEAT-004",
+  "type": "feat",
+  "description": "Professional CLI with all commands (run, compile, exec, debug, fmt, lint, test, doc, init, bench) with colorized output and proper exit codes. Module system with file resolution and circular dependency detection.",
+  "status": "pending",
+  "steps": [
+    "Overhaul src/cli/index.ts completely. Replace manual arg parsing with a structured command router. Add all commands: run, compile, exec, debug, fmt, lint, test, doc, init, bench, repl, check, version, help. Each command gets its own handler function.",
+    "Implement 'compile' command: read .tiny file, compile to bytecode using Compiler from FEAT-001, write .tinyc binary file. Show compilation stats (instruction count, constant pool size, time).",
+    "Implement 'exec' command: read .tinyc file, deserialize to Chunk, execute on VM. Handle missing file and invalid format errors gracefully.",
+    "Implement 'debug' command: instantiate Debugger from FEAT-002, start debug REPL on the given file. Print initial help showing available commands.",
+    "Implement 'fmt' command: read file, parse to AST, run Formatter from FEAT-003. Support --check flag (exit 1 if file would change, for CI). Support --write flag (overwrite file in place). Support glob patterns for multiple files.",
+    "Implement 'lint' command: read file, parse to AST, run Linter from FEAT-003. Display diagnostics with colored severity, file path, line:col, message. Support --fix flag to auto-apply fixes. Exit with code 1 if errors found.",
+    "Implement 'test' command: discover .test.tiny files (or specific file), run test framework from FEAT-003. Show colorized output with pass/fail counts.",
+    "Implement 'doc' command: parse file, extract doc comments (/// or /** */), generate markdown documentation showing function signatures, descriptions, and examples.",
+    "Implement 'init' command: scaffold a new TinyLang project. Create directory with main.tiny, lib.tiny, main.test.tiny, .tinylang.json (config), and a README.",
+    "Implement 'bench' command: run a .tiny file multiple times (default 100 iterations), measure execution time, report min/max/avg/median with colorized output and histogram.",
+    "Create src/modules/resolver.ts - Module resolution system. When import statement is encountered, resolve the module path relative to the importing file. Support importing from other .tiny files and from stdlib. Detect circular dependencies by tracking the import graph. Integrate with the interpreter: when ImportStatement is evaluated, load and execute the target file, extract named exports.",
+    "Update src/interpreter/interpreter.ts to handle ImportStatement by calling the module resolver. Cache modules so they only execute once.",
+    "Add colorized output helpers in src/cli/colors.ts - spinner, progress bar, table formatting, box drawing for pretty CLI output.",
+    "Add tests in tests/cli/cli.test.ts testing each command's core logic (not process spawning, but the handler functions)."
+  ],
+  "acceptance_criteria": [
+    "npm run build succeeds",
+    "npx vitest run passes all tests",
+    "tinylang run examples/01-hello.tiny prints output correctly",
+    "tinylang compile examples/01-hello.tiny creates a .tinyc file",
+    "tinylang exec examples/01-hello.tinyc runs the compiled bytecode",
+    "tinylang fmt --check examples/01-hello.tiny reports formatting status",
+    "tinylang lint examples/01-hello.tiny reports any lint issues",
+    "tinylang init creates project scaffold",
+    "tinylang bench examples/07-fibonacci.tiny shows performance stats",
+    "Module imports resolve files correctly and circular deps are detected",
+    "All commands show --help text and use proper exit codes"
+  ],
+  "verification": [
+    "npm run build",
+    "npx vitest run",
+    "node dist/cli/index.js run examples/07-fibonacci.tiny",
+    "node dist/cli/index.js help"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

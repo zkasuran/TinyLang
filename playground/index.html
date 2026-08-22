@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TinyLang Playground — Learn to Code</title>
+  <meta name="description" content="TinyLang is a minimal educational programming language. Try it in your browser — no installation required.">
+  <style>
+    :root {
+      --bg-primary: #1e1e2e;
+      --bg-secondary: #181825;
+      --bg-surface: #313244;
+      --bg-hover: #45475a;
+      --text-primary: #cdd6f4;
+      --text-secondary: #a6adc8;
+      --text-muted: #6c7086;
+      --accent: #89b4fa;
+      --accent-hover: #74c7ec;
+      --green: #a6e3a1;
+      --red: #f38ba8;
+      --yellow: #f9e2af;
+      --purple: #cba6f7;
+      --peach: #fab387;
+      --border: #45475a;
+      --radius: 8px;
+      --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    header {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+      color: var(--bg-primary);
+    }
+
+    .logo h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+
+    .logo span {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-left: 8px;
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    select {
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 8px 12px;
+      font-size: 13px;
+      cursor: pointer;
+      outline: none;
+    }
+
+    select:hover {
+      border-color: var(--accent);
+    }
+
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 16px;
+      transition: all 0.15s ease;
+    }
+
+    .btn-run {
+      background: var(--green);
+      color: var(--bg-primary);
+    }
+
+    .btn-run:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+
+    .btn-run:active {
+      transform: translateY(0);
+    }
+
+    .btn-clear {
+      background: var(--bg-surface);
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+    }
+
+    .btn-clear:hover {
+      background: var(--bg-hover);
+      color: var(--text-primary);
+    }
+
+    .btn-share {
+      background: var(--bg-surface);
+      color: var(--accent);
+      border: 1px solid var(--border);
+    }
+
+    .btn-share:hover {
+      background: var(--bg-hover);
+      border-color: var(--accent);
+    }
+
+    /* Main Layout */
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .editor-container {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+
+    @media (min-width: 768px) {
+      .editor-container {
+        flex-direction: row;
+      }
+    }
+
+    @media (max-width: 767px) {
+      .editor-container {
+        flex-direction: column;
+      }
+    }
+
+    /* Panels */
+    .panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+    }
+
+    .panel-header {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+    }
+
+    .panel-header .status {
+      font-size: 11px;
+      font-weight: 400;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+
+    .panel-header .status.success {
+      color: var(--green);
+    }
+
+    .panel-header .status.error {
+      color: var(--red);
+    }
+
+    /* Code Editor */
+    .code-editor {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .code-editor textarea {
+      width: 100%;
+      height: 100%;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      border: none;
+      resize: none;
+      padding: 16px;
+      padding-left: 56px;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      line-height: 1.6;
+      tab-size: 2;
+      outline: none;
+      white-space: pre;
+      overflow-wrap: normal;
+      overflow-x: auto;
+    }
+
+    .code-editor textarea::placeholder {
+      color: var(--text-muted);
+    }
+
+    .line-numbers {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 44px;
+      height: 100%;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      padding: 16px 8px;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text-muted);
+      text-align: right;
+      overflow: hidden;
+      user-select: none;
+      pointer-events: none;
+    }
+
+    /* Output Console */
+    .output-panel {
+      border-left: 1px solid var(--border);
+    }
+
+    @media (max-width: 767px) {
+      .output-panel {
+        border-left: none;
+        border-top: 1px solid var(--border);
+      }
+    }
+
+    .output-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.6;
+      background: var(--bg-primary);
+    }
+
+    .output-line {
+      padding: 2px 0;
+    }
+
+    .output-line.stdout {
+      color: var(--text-primary);
+    }
+
+    .output-line.result {
+      color: var(--green);
+    }
+
+    .output-line.result::before {
+      content: '→ ';
+      color: var(--text-muted);
+    }
+
+    .output-line.error {
+      color: var(--red);
+    }
+
+    .output-line.error::before {
+      content: '❌ ';
+    }
+
+    .output-line.hint {
+      color: var(--yellow);
+    }
+
+    .output-line.hint::before {
+      content: '💡 ';
+    }
+
+    .output-line.info {
+      color: var(--text-muted);
+      font-style: italic;
+    }
+
+    .output-welcome {
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.8;
+    }
+
+    .output-welcome code {
+      background: var(--bg-surface);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 12px;
+    }
+
+    /* Divider */
+    .divider {
+      width: 3px;
+      background: var(--border);
+      cursor: col-resize;
+      transition: background 0.15s;
+    }
+
+    .divider:hover {
+      background: var(--accent);
+    }
+
+    /* Footer */
+    footer {
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border);
+      padding: 8px 24px;
+      font-size: 11px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .keyboard-hints kbd {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-size: 10px;
+      font-family: var(--font-mono);
+    }
+
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      bottom: 60px;
+      right: 24px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 20px;
+      font-size: 13px;
+      color: var(--text-primary);
+      transform: translateY(20px);
+      opacity: 0;
+      transition: all 0.3s ease;
+      z-index: 1000;
+    }
+
+    .toast.show {
+      transform: translateY(0);
+      opacity: 1;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg-secondary);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--bg-hover);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">
+      <div class="logo-icon">TL</div>
+      <h1>TinyLang<span>Playground</span></h1>
+    </div>
+    <div class="header-actions">
+      <select id="examples" aria-label="Load example">
+        <option value="">📚 Load Example...</option>
+        <option value="hello">Hello World</option>
+        <option value="variables">Variables & Types</option>
+        <option value="functions">Functions & Closures</option>
+        <option value="arrays">Arrays & Methods</option>
+        <option value="loops">Loops & Ranges</option>
+        <option value="classes">Classes & OOP</option>
+        <option value="fibonacci">Fibonacci</option>
+        <option value="sorting">Sorting Algorithm</option>
+        <option value="functional">Functional Programming</option>
+        <option value="match">Pattern Matching</option>
+      </select>
+      <button class="btn-run" id="runBtn" title="Run (Ctrl+Enter)">▶ Run</button>
+      <button class="btn-clear" id="clearBtn" title="Clear output">Clear</button>
+      <button class="btn-share" id="shareBtn" title="Share code via URL">Share</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="editor-container">
+      <div class="panel">
+        <div class="panel-header">
+          <span>Editor</span>
+          <span class="status" id="editorStatus">ready</span>
+        </div>
+        <div class="code-editor">
+          <div class="line-numbers" id="lineNumbers">1</div>
+          <textarea 
+            id="codeEditor" 
+            placeholder="Write TinyLang code here...&#10;&#10;Try: print(&quot;Hello, World!&quot;)"
+            spellcheck="false"
+            autocomplete="off"
+            autocorrect="off"
+            autocapitalize="off"
+          ></textarea>
+        </div>
+      </div>
+
+      <div class="divider" id="divider"></div>
+
+      <div class="panel output-panel">
+        <div class="panel-header">
+          <span>Output</span>
+          <span class="status" id="outputStatus"></span>
+        </div>
+        <div class="output-content" id="output">
+          <div class="output-welcome">
+            Welcome to the TinyLang Playground!<br><br>
+            Write code in the editor and press <code>Ctrl+Enter</code> or click <code>▶ Run</code> to execute.<br><br>
+            Try loading an example from the dropdown above to get started.
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="keyboard-hints">
+      <kbd>Ctrl</kbd>+<kbd>Enter</kbd> Run &nbsp;|&nbsp;
+      <kbd>Tab</kbd> Indent
+    </div>
+    <div>TinyLang v1.0.0 — Built with Kiro</div>
+  </footer>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- TinyLang Interpreter (bundled inline) -->
+  <script>
+    // ========================================
+    // TINYLANG INTERPRETER - BROWSER BUNDLE
+    // ========================================
+
+    // Token types
+    const TokenType = {
+      NUMBER: 'NUMBER', STRING: 'STRING', BOOLEAN: 'BOOLEAN', NULL: 'NULL',
+      IDENTIFIER: 'IDENTIFIER', LET: 'LET', CONST: 'CONST', FN: 'FN',
+      RETURN: 'RETURN', IF: 'IF', ELSE: 'ELSE', WHILE: 'WHILE',
+      FOR: 'FOR', IN: 'IN', BREAK: 'BREAK', CONTINUE: 'CONTINUE',
+      TRUE: 'TRUE', FALSE: 'FALSE', NULL_KEYWORD: 'NULL_KEYWORD',
+      PRINT: 'PRINT', AND: 'AND', OR: 'OR', NOT: 'NOT',
+      IMPORT: 'IMPORT', FROM: 'FROM', CLASS: 'CLASS', NEW: 'NEW',
+      THIS: 'THIS', EXTENDS: 'EXTENDS', MATCH: 'MATCH', WHEN: 'WHEN',
+      PLUS: 'PLUS', MINUS: 'MINUS', STAR: 'STAR', SLASH: 'SLASH',
+      PERCENT: 'PERCENT', POWER: 'POWER', ASSIGN: 'ASSIGN',
+      PLUS_ASSIGN: 'PLUS_ASSIGN', MINUS_ASSIGN: 'MINUS_ASSIGN',
+      STAR_ASSIGN: 'STAR_ASSIGN', SLASH_ASSIGN: 'SLASH_ASSIGN',
+      EQUAL: 'EQUAL', NOT_EQUAL: 'NOT_EQUAL', LESS: 'LESS',
+      LESS_EQUAL: 'LESS_EQUAL', GREATER: 'GREATER', GREATER_EQUAL: 'GREATER_EQUAL',
+      LPAREN: 'LPAREN', RPAREN: 'RPAREN', LBRACE: 'LBRACE', RBRACE: 'RBRACE',
+      LBRACKET: 'LBRACKET', RBRACKET: 'RBRACKET', COMMA: 'COMMA',
+      DOT: 'DOT', COLON: 'COLON', SEMICOLON: 'SEMICOLON',
+      ARROW: 'ARROW', PIPE: 'PIPE', EOF: 'EOF', NEWLINE: 'NEWLINE',
+    };
+
+    const KEYWORDS = {
+      'let': TokenType.LET, 'const': TokenType.CONST, 'fn': TokenType.FN,
+      'return': TokenType.RETURN, 'if': TokenType.IF, 'else': TokenType.ELSE,
+      'while': TokenType.WHILE, 'for': TokenType.FOR, 'in': TokenType.IN,
+      'break': TokenType.BREAK, 'continue': TokenType.CONTINUE,
+      'true': TokenType.TRUE, 'false': TokenType.FALSE, 'null': TokenType.NULL_KEYWORD,
+      'print': TokenType.PRINT, 'and': TokenType.AND, 'or': TokenType.OR,
+      'not': TokenType.NOT, 'import': TokenType.IMPORT, 'from': TokenType.FROM,
+      'class': TokenType.CLASS, 'new': TokenType.NEW, 'this': TokenType.THIS,
+      'extends': TokenType.EXTENDS, 'match': TokenType.MATCH, 'when': TokenType.WHEN,
+    };
+
+    // ======== LEXER ========
+    class Lexer {
+      constructor(source) {
+        this.source = source;
+        this.tokens = [];
+        this.current = 0;
+        this.line = 1;
+        this.column = 1;
+        this.start = 0;
+      }
+      tokenize() {
+        while (this.current < this.source.length) {
+          this.start = this.current;
+          this.scanToken();
+        }
+        this.tokens.push({ type: TokenType.EOF, value: '', position: { line: this.line, column: this.column, offset: this.current }, length: 0 });
+        return this.tokens;
+      }
+      scanToken() {
+        const ch = this.source[this.current++]; this.column++;
+        switch (ch) {
+          case '(': this.addToken(TokenType.LPAREN); break;
+          case ')': this.addToken(TokenType.RPAREN); break;
+          case '{': this.addToken(TokenType.LBRACE); break;
+          case '}': this.addToken(TokenType.RBRACE); break;
+          case '[': this.addToken(TokenType.LBRACKET); break;
+          case ']': this.addToken(TokenType.RBRACKET); break;
+          case ',': this.addToken(TokenType.COMMA); break;
+          case '.': this.addToken(TokenType.DOT); break;
+          case ':': this.addToken(TokenType.COLON); break;
+          case ';': this.addToken(TokenType.SEMICOLON); break;
+          case '%': this.addToken(TokenType.PERCENT); break;
+          case '|': this.addToken(TokenType.PIPE); break;
+          case '+': this.match('=') ? this.addToken(TokenType.PLUS_ASSIGN) : this.addToken(TokenType.PLUS); break;
+          case '-': this.match('=') ? this.addToken(TokenType.MINUS_ASSIGN) : this.addToken(TokenType.MINUS); break;
+          case '*': this.match('*') ? this.addToken(TokenType.POWER) : this.match('=') ? this.addToken(TokenType.STAR_ASSIGN) : this.addToken(TokenType.STAR); break;
+          case '/':
+            if (this.match('/')) { while (this.current < this.source.length && this.source[this.current] !== '\n') this.current++; this.column = this.current - this.start; }
+            else if (this.match('*')) { let d = 1; while (this.current < this.source.length && d > 0) { if (this.source[this.current] === '*' && this.source[this.current+1] === '/') { d--; this.current += 2; } else { if (this.source[this.current] === '\n') { this.line++; this.column = 0; } this.current++; this.column++; } } }
+            else if (this.match('=')) this.addToken(TokenType.SLASH_ASSIGN);
+            else this.addToken(TokenType.SLASH);
+            break;
+          case '=': this.match('=') ? this.addToken(TokenType.EQUAL) : this.match('>') ? this.addToken(TokenType.ARROW) : this.addToken(TokenType.ASSIGN); break;
+          case '!': this.match('=') ? this.addToken(TokenType.NOT_EQUAL) : null; break;
+          case '<': this.match('=') ? this.addToken(TokenType.LESS_EQUAL) : this.addToken(TokenType.LESS); break;
+          case '>': this.match('=') ? this.addToken(TokenType.GREATER_EQUAL) : this.addToken(TokenType.GREATER); break;
+          case ' ': case '\r': case '\t': break;
+          case '\n': this.handleNewline(); this.line++; this.column = 1; break;
+          case '"': case "'": this.string(ch); break;
+          default:
+            if (ch >= '0' && ch <= '9') this.number();
+            else if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch === '_') this.identifier();
+            else throw new Error(`Unexpected character '${ch}' at line ${this.line}, column ${this.column - 1}`);
+        }
+      }
+      string(quote) {
+        let val = '';
+        while (this.current < this.source.length && this.source[this.current] !== quote) {
+          if (this.source[this.current] === '\\') { this.current++; this.column++; const esc = this.source[this.current]; val += esc === 'n' ? '\n' : esc === 't' ? '\t' : esc === '\\' ? '\\' : esc === quote ? quote : esc; }
+          else { val += this.source[this.current]; }
+          this.current++; this.column++;
+        }
+        if (this.current >= this.source.length) throw new Error(`Unterminated string at line ${this.line}`);
+        this.current++; this.column++;
+        this.tokens.push({ type: TokenType.STRING, value: val, position: { line: this.line, column: this.column - (this.current - this.start), offset: this.start }, length: this.current - this.start });
+      }
+      number() {
+        while (this.current < this.source.length && this.source[this.current] >= '0' && this.source[this.current] <= '9') { this.current++; this.column++; }
+        if (this.current < this.source.length && this.source[this.current] === '.' && this.source[this.current+1] >= '0' && this.source[this.current+1] <= '9') {
+          this.current++; this.column++;
+          while (this.current < this.source.length && this.source[this.current] >= '0' && this.source[this.current] <= '9') { this.current++; this.column++; }
+        }
+        this.tokens.push({ type: TokenType.NUMBER, value: this.source.slice(this.start, this.current), position: { line: this.line, column: this.column - (this.current - this.start), offset: this.start }, length: this.current - this.start });
+      }
+      identifier() {
+        while (this.current < this.source.length && ((this.source[this.current] >= 'a' && this.source[this.current] <= 'z') || (this.source[this.current] >= 'A' && this.source[this.current] <= 'Z') || (this.source[this.current] >= '0' && this.source[this.current] <= '9') || this.source[this.current] === '_')) { this.current++; this.column++; }
+        const val = this.source.slice(this.start, this.current);
+        let type = KEYWORDS[val] || TokenType.IDENTIFIER;
+        if (type === TokenType.TRUE || type === TokenType.FALSE) type = TokenType.BOOLEAN;
+        else if (type === TokenType.NULL_KEYWORD) type = TokenType.NULL;
+        this.tokens.push({ type, value: val, position: { line: this.line, column: this.column - (this.current - this.start), offset: this.start }, length: this.current - this.start });
+      }
+      handleNewline() {
+        if (this.tokens.length > 0) {
+          const last = this.tokens[this.tokens.length - 1];
+          const canEnd = [TokenType.IDENTIFIER, TokenType.NUMBER, TokenType.STRING, TokenType.BOOLEAN, TokenType.NULL, TokenType.RPAREN, TokenType.RBRACKET, TokenType.RBRACE, TokenType.RETURN, TokenType.BREAK, TokenType.CONTINUE, TokenType.THIS].includes(last.type);
+          if (canEnd) this.addToken(TokenType.NEWLINE);
+        }
+      }
+      match(expected) { if (this.current >= this.source.length || this.source[this.current] !== expected) return false; this.current++; this.column++; return true; }
+      addToken(type) { this.tokens.push({ type, value: this.source.slice(this.start, this.current), position: { line: this.line, column: this.column - (this.current - this.start), offset: this.start }, length: this.current - this.start }); }
+    }
+
+    // ======== PARSER ========
+    class Parser {
+      constructor(tokens) { this.tokens = tokens; this.current = 0; }
+      parse() { const body = []; this.skipNL(); while (!this.isEnd()) { body.push(this.stmt()); this.skipNL(); } return { type: 'Program', body, position: { line: 1, column: 1, offset: 0 } }; }
+      stmt() {
+        const t = this.peek().type;
+        if (t === TokenType.LET || t === TokenType.CONST) return this.varDecl();
+        if (t === TokenType.FN) return this.fnDecl();
+        if (t === TokenType.CLASS) return this.classDecl();
+        if (t === TokenType.RETURN) return this.retStmt();
+        if (t === TokenType.IF) return this.ifStmt();
+        if (t === TokenType.WHILE) return this.whileStmt();
+        if (t === TokenType.FOR) return this.forStmt();
+        if (t === TokenType.BREAK) { const pos = this.advance().position; this.endStmt(); return { type: 'BreakStatement', position: pos }; }
+        if (t === TokenType.CONTINUE) { const pos = this.advance().position; this.endStmt(); return { type: 'ContinueStatement', position: pos }; }
+        if (t === TokenType.PRINT) return this.printStmt();
+        if (t === TokenType.MATCH) return this.matchStmt();
+        return this.exprStmt();
+      }
+      varDecl() { const tok = this.advance(); const c = tok.type === TokenType.CONST; const n = this.expect(TokenType.IDENTIFIER).value; this.expect(TokenType.ASSIGN); const v = this.expr(); this.endStmt(); return { type: 'VariableDeclaration', name: n, value: v, constant: c, position: tok.position }; }
+      fnDecl() { const tok = this.advance(); const n = this.expect(TokenType.IDENTIFIER).value; const p = this.params(); const b = this.block(); return { type: 'FunctionDeclaration', name: n, params: p, body: b, position: tok.position }; }
+      classDecl() { const tok = this.advance(); const n = this.expect(TokenType.IDENTIFIER).value; let sup; if (this.match(TokenType.EXTENDS)) sup = this.expect(TokenType.IDENTIFIER).value; this.expect(TokenType.LBRACE); this.skipNL(); const methods = [], props = []; while (!this.check(TokenType.RBRACE) && !this.isEnd()) { this.skipNL(); if (this.check(TokenType.RBRACE)) break; if (this.check(TokenType.FN)) methods.push(this.fnDecl()); else if (this.check(TokenType.LET) || this.check(TokenType.CONST)) props.push(this.varDecl()); this.skipNL(); } this.expect(TokenType.RBRACE); return { type: 'ClassDeclaration', name: n, superClass: sup, methods, properties: props, position: tok.position }; }
+      retStmt() { const tok = this.advance(); let v = null; if (!this.isEndStmt()) v = this.expr(); this.endStmt(); return { type: 'ReturnStatement', value: v, position: tok.position }; }
+      ifStmt() { const tok = this.advance(); const cond = this.expr(); const cons = this.block(); let alt = null; this.skipNL(); if (this.match(TokenType.ELSE)) { alt = this.check(TokenType.IF) ? this.ifStmt() : this.block(); } return { type: 'IfStatement', condition: cond, consequent: cons, alternate: alt, position: tok.position }; }
+      whileStmt() { const tok = this.advance(); const cond = this.expr(); const b = this.block(); return { type: 'WhileStatement', condition: cond, body: b, position: tok.position }; }
+      forStmt() { const tok = this.advance(); const v = this.expect(TokenType.IDENTIFIER).value; this.expect(TokenType.IN); const iter = this.expr(); const b = this.block(); return { type: 'ForStatement', variable: v, iterable: iter, body: b, position: tok.position }; }
+      printStmt() { const tok = this.advance(); this.expect(TokenType.LPAREN); const exprs = []; if (!this.check(TokenType.RPAREN)) { do { exprs.push(this.expr()); } while (this.match(TokenType.COMMA)); } this.expect(TokenType.RPAREN); this.endStmt(); return { type: 'PrintStatement', expressions: exprs, position: tok.position }; }
+      matchStmt() { const tok = this.advance(); const subj = this.expr(); this.expect(TokenType.LBRACE); this.skipNL(); const cases = []; let def; while (!this.check(TokenType.RBRACE) && !this.isEnd()) { this.skipNL(); if (this.check(TokenType.RBRACE)) break; if (this.match(TokenType.ELSE)) { this.expect(TokenType.ARROW); def = this.caseBody(); } else { this.expect(TokenType.WHEN); const p = this.expr(); this.expect(TokenType.ARROW); cases.push({ pattern: p, body: this.caseBody() }); } this.skipNL(); } this.expect(TokenType.RBRACE); return { type: 'MatchStatement', subject: subj, cases, defaultCase: def, position: tok.position }; }
+      caseBody() { if (this.check(TokenType.LBRACE)) return this.block(); return [this.stmt()]; }
+      exprStmt() { const pos = this.peek().position; const e = this.expr(); this.endStmt(); return { type: 'ExpressionStatement', expression: e, position: pos }; }
+      expr() { return this.assignment(); }
+      assignment() { const e = this.or(); if (this.check(TokenType.ASSIGN) || this.check(TokenType.PLUS_ASSIGN) || this.check(TokenType.MINUS_ASSIGN) || this.check(TokenType.STAR_ASSIGN) || this.check(TokenType.SLASH_ASSIGN)) { const op = this.advance(); return { type: 'AssignmentExpression', operator: op.value, target: e, value: this.assignment(), position: e.position }; } return e; }
+      or() { let l = this.and(); while (this.match(TokenType.OR)) { l = { type: 'LogicalExpression', operator: 'or', left: l, right: this.and(), position: l.position }; } return l; }
+      and() { let l = this.equality(); while (this.match(TokenType.AND)) { l = { type: 'LogicalExpression', operator: 'and', left: l, right: this.equality(), position: l.position }; } return l; }
+      equality() { let l = this.comparison(); while (this.check(TokenType.EQUAL) || this.check(TokenType.NOT_EQUAL)) { const op = this.advance(); l = { type: 'BinaryExpression', operator: op.value, left: l, right: this.comparison(), position: l.position }; } return l; }
+      comparison() { let l = this.range(); while (this.check(TokenType.LESS) || this.check(TokenType.LESS_EQUAL) || this.check(TokenType.GREATER) || this.check(TokenType.GREATER_EQUAL)) { const op = this.advance(); l = { type: 'BinaryExpression', operator: op.value, left: l, right: this.range(), position: l.position }; } return l; }
+      range() { let l = this.addition(); if (this.check(TokenType.DOT) && this.tokens[this.current+1] && this.tokens[this.current+1].type === TokenType.DOT) { this.advance(); this.advance(); const incl = this.match(TokenType.ASSIGN); return { type: 'RangeExpression', start: l, end: this.addition(), inclusive: incl, position: l.position }; } return l; }
+      addition() { let l = this.multiplication(); while (this.check(TokenType.PLUS) || this.check(TokenType.MINUS)) { const op = this.advance(); l = { type: 'BinaryExpression', operator: op.value, left: l, right: this.multiplication(), position: l.position }; } return l; }
+      multiplication() { let l = this.power(); while (this.check(TokenType.STAR) || this.check(TokenType.SLASH) || this.check(TokenType.PERCENT)) { const op = this.advance(); l = { type: 'BinaryExpression', operator: op.value, left: l, right: this.power(), position: l.position }; } return l; }
+      power() { const l = this.unary(); if (this.check(TokenType.POWER)) { this.advance(); return { type: 'BinaryExpression', operator: '**', left: l, right: this.power(), position: l.position }; } return l; }
+      unary() { if (this.check(TokenType.MINUS) || this.check(TokenType.NOT)) { const op = this.advance(); return { type: 'UnaryExpression', operator: op.value, operand: this.unary(), position: op.position }; } return this.callMember(); }
+      callMember() { let e = this.primary(); while (true) { if (this.check(TokenType.LPAREN)) { this.advance(); const args = []; if (!this.check(TokenType.RPAREN)) { do { args.push(this.expr()); } while (this.match(TokenType.COMMA)); } this.expect(TokenType.RPAREN); e = { type: 'CallExpression', callee: e, args, position: e.position }; } else if (this.match(TokenType.DOT)) { const p = this.expect(TokenType.IDENTIFIER); e = { type: 'MemberExpression', object: e, property: p.value, position: e.position }; } else if (this.match(TokenType.LBRACKET)) { const idx = this.expr(); this.expect(TokenType.RBRACKET); e = { type: 'IndexExpression', object: e, index: idx, position: e.position }; } else break; } return e; }
+      primary() {
+        const t = this.peek();
+        if (t.type === TokenType.NUMBER) { this.advance(); return { type: 'NumberLiteral', value: Number(t.value), position: t.position }; }
+        if (t.type === TokenType.STRING) { this.advance(); return { type: 'StringLiteral', value: t.value, position: t.position }; }
+        if (t.type === TokenType.BOOLEAN) { this.advance(); return { type: 'BooleanLiteral', value: t.value === 'true', position: t.position }; }
+        if (t.type === TokenType.NULL) { this.advance(); return { type: 'NullLiteral', position: t.position }; }
+        if (t.type === TokenType.LBRACKET) { this.advance(); const els = []; this.skipNL(); if (!this.check(TokenType.RBRACKET)) { do { this.skipNL(); if (this.check(TokenType.RBRACKET)) break; els.push(this.expr()); this.skipNL(); } while (this.match(TokenType.COMMA)); } this.skipNL(); this.expect(TokenType.RBRACKET); return { type: 'ArrayLiteral', elements: els, position: t.position }; }
+        if (t.type === TokenType.LBRACE) { this.advance(); const props = []; this.skipNL(); if (!this.check(TokenType.RBRACE)) { do { this.skipNL(); if (this.check(TokenType.RBRACE)) break; const k = this.expect(TokenType.IDENTIFIER).value; this.expect(TokenType.COLON); props.push({ key: k, value: this.expr() }); this.skipNL(); } while (this.match(TokenType.COMMA)); } this.skipNL(); this.expect(TokenType.RBRACE); return { type: 'ObjectLiteral', properties: props, position: t.position }; }
+        if (t.type === TokenType.LPAREN) { const saved = this.current; try { const p = this.tryArrow(); if (p !== null && this.match(TokenType.ARROW)) { const body = this.check(TokenType.LBRACE) ? this.block() : this.expr(); return { type: 'ArrowFunction', params: p, body, position: t.position }; } } catch(e) {} this.current = saved; this.advance(); const e = this.expr(); this.expect(TokenType.RPAREN); return e; }
+        if (t.type === TokenType.IDENTIFIER) { this.advance(); return { type: 'Identifier', name: t.value, position: t.position }; }
+        if (t.type === TokenType.THIS) { this.advance(); return { type: 'ThisExpression', position: t.position }; }
+        if (t.type === TokenType.NEW) { this.advance(); const callee = this.primary(); let args = []; if (this.check(TokenType.LPAREN)) { this.advance(); if (!this.check(TokenType.RPAREN)) { do { args.push(this.expr()); } while (this.match(TokenType.COMMA)); } this.expect(TokenType.RPAREN); } return { type: 'NewExpression', callee, args, position: t.position }; }
+        if (t.type === TokenType.FN) { this.advance(); const p = this.params(); const b = this.block(); return { type: 'FunctionExpression', params: p, body: b, position: t.position }; }
+        throw new Error(`Parse Error at line ${t.position.line}: Unexpected '${t.value || t.type}'`);
+      }
+      tryArrow() { if (!this.match(TokenType.LPAREN)) return null; const p = []; if (!this.check(TokenType.RPAREN)) { do { if (!this.check(TokenType.IDENTIFIER)) return null; const n = this.advance().value; const param = { name: n }; if (this.match(TokenType.ASSIGN)) param.defaultValue = this.expr(); p.push(param); } while (this.match(TokenType.COMMA)); } if (!this.match(TokenType.RPAREN)) return null; return p; }
+      params() { this.expect(TokenType.LPAREN); const p = []; if (!this.check(TokenType.RPAREN)) { do { const n = this.expect(TokenType.IDENTIFIER).value; const param = { name: n }; if (this.match(TokenType.ASSIGN)) param.defaultValue = this.expr(); p.push(param); } while (this.match(TokenType.COMMA)); } this.expect(TokenType.RPAREN); return p; }
+      block() { this.expect(TokenType.LBRACE); this.skipNL(); const stmts = []; while (!this.check(TokenType.RBRACE) && !this.isEnd()) { stmts.push(this.stmt()); this.skipNL(); } this.expect(TokenType.RBRACE); return stmts; }
+      peek() { return this.tokens[this.current]; }
+      advance() { return this.tokens[this.current++]; }
+      check(t) { return !this.isEnd() && this.peek().type === t; }
+      match(t) { if (this.check(t)) { this.advance(); return true; } return false; }
+      expect(t) { if (this.check(t)) return this.advance(); const p = this.peek(); throw new Error(`Parse Error at line ${p.position.line}: Expected ${t}, got '${p.value || p.type}'`); }
+      isEnd() { return this.peek().type === TokenType.EOF; }
+      skipNL() { while (this.check(TokenType.NEWLINE) || this.check(TokenType.SEMICOLON)) this.advance(); }
+      isEndStmt() { return this.check(TokenType.NEWLINE) || this.check(TokenType.SEMICOLON) || this.check(TokenType.EOF) || this.check(TokenType.RBRACE); }
+      endStmt() { if (this.check(TokenType.NEWLINE) || this.check(TokenType.SEMICOLON)) this.advance(); }
+    }
+
+    // ======== INTERPRETER ========
+    class Environment {
+      constructor(parent = null) { this.vars = new Map(); this.consts = new Set(); this.parent = parent; }
+      define(name, value, constant = false) { this.vars.set(name, value); if (constant) this.consts.add(name); }
+      assign(name, value) { if (this.vars.has(name)) { if (this.consts.has(name)) throw new Error(`RuntimeError: Cannot reassign constant '${name}'`); this.vars.set(name, value); return value; } if (this.parent) return this.parent.assign(name, value); throw new Error(`RuntimeError: Variable '${name}' is not defined`); }
+      lookup(name) { if (this.vars.has(name)) return this.vars.get(name); if (this.parent) return this.parent.lookup(name); throw new Error(`RuntimeError: Variable '${name}' is not defined`); }
+      createChild() { return new Environment(this); }
+    }
+
+    const BREAK = Symbol('break'), CONTINUE = Symbol('continue');
+    class ReturnSignal { constructor(v) { this.value = v; } }
+
+    function stringify(v) {
+      if (v === null || v === undefined) return 'null';
+      if (typeof v === 'number' || typeof v === 'string' || typeof v === 'boolean') return String(v);
+      if (v.type === 'null') return 'null';
+      if (v.type === 'number') return String(v.value);
+      if (v.type === 'string') return v.value;
+      if (v.type === 'boolean') return String(v.value);
+      if (v.type === 'array') return '[' + v.elements.map(stringify).join(', ') + ']';
+      if (v.type === 'object') return '{' + Array.from(v.properties.entries()).map(([k,val]) => k + ': ' + stringify(val)).join(', ') + '}';
+      if (v.type === 'function') return `<fn ${v.name}>`;
+      if (v.type === 'native-function') return `<native fn ${v.name}>`;
+      if (v.type === 'class') return `<class ${v.name}>`;
+      if (v.type === 'instance') return `<${v.className} instance>`;
+      return String(v);
+    }
+
+    function isTruthy(v) { if (!v || v.type === 'null') return false; if (v.type === 'boolean') return v.value; if (v.type === 'number') return v.value !== 0; if (v.type === 'string') return v.value.length > 0; if (v.type === 'array') return v.elements.length > 0; return true; }
+    function valEq(a, b) { if (!a || !b) return a === b; if (a.type !== b.type) return false; if (a.type === 'null') return true; if (a.type === 'number' || a.type === 'string' || a.type === 'boolean') return a.value === b.value; return a === b; }
+    function mkNum(v) { return { type: 'number', value: v }; }
+    function mkStr(v) { return { type: 'string', value: v }; }
+    function mkBool(v) { return { type: 'boolean', value: v }; }
+    function mkNull() { return { type: 'null', value: null }; }
+    function mkArr(els) { return { type: 'array', elements: els }; }
+
+    class Interpreter {
+      constructor(output) { this.output = output || console.log; this.steps = 0; this.maxSteps = 500000; this.env = new Environment(); this.registerStdlib(); }
+      registerStdlib() {
+        const e = this.env;
+        e.define('PI', mkNum(Math.PI), true); e.define('E', mkNum(Math.E), true); e.define('TAU', mkNum(Math.PI*2), true); e.define('INFINITY', mkNum(Infinity), true);
+        const nf = (name, arity, fn) => e.define(name, { type: 'native-function', name, arity, fn });
+        nf('print', -1, (args) => { this.output(args.map(stringify).join(' ')); return mkNull(); });
+        nf('println', -1, (args) => { this.output(args.map(stringify).join(' ')); return mkNull(); });
+        nf('len', 1, ([a]) => a.type === 'string' ? mkNum(a.value.length) : a.type === 'array' ? mkNum(a.elements.length) : mkNum(0));
+        nf('type', 1, ([a]) => mkStr(a.type === 'native-function' ? 'function' : a.type));
+        nf('str', 1, ([a]) => mkStr(stringify(a)));
+        nf('num', 1, ([a]) => { if (a.type === 'number') return a; if (a.type === 'string') { const n = Number(a.value); if (isNaN(n)) throw new Error(`Cannot convert "${a.value}" to number`); return mkNum(n); } return mkNum(0); });
+        nf('bool', 1, ([a]) => mkBool(isTruthy(a)));
+        nf('abs', 1, ([a]) => mkNum(Math.abs(a.value)));
+        nf('floor', 1, ([a]) => mkNum(Math.floor(a.value)));
+        nf('ceil', 1, ([a]) => mkNum(Math.ceil(a.value)));
+        nf('round', 1, ([a]) => mkNum(Math.round(a.value)));
+        nf('sqrt', 1, ([a]) => mkNum(Math.sqrt(a.value)));
+        nf('pow', 2, ([a, b]) => mkNum(Math.pow(a.value, b.value)));
+        nf('random', 0, () => mkNum(Math.random()));
+        nf('randomInt', 2, ([a, b]) => mkNum(Math.floor(Math.random() * (b.value - a.value + 1)) + a.value));
+        nf('min', -1, (args) => { if (args[0] && args[0].type === 'array') return mkNum(Math.min(...args[0].elements.map(e => e.value))); return mkNum(Math.min(...args.map(a => a.value))); });
+        nf('max', -1, (args) => { if (args[0] && args[0].type === 'array') return mkNum(Math.max(...args[0].elements.map(e => e.value))); return mkNum(Math.max(...args.map(a => a.value))); });
+        nf('range', -1, (args) => { let s=0,en,st=1; if (args.length===1) { en=args[0].value; } else if (args.length===2) { s=args[0].value; en=args[1].value; } else { s=args[0].value; en=args[1].value; st=args[2].value; } const r=[]; if (st>0) for(let i=s;i<en;i+=st) r.push(mkNum(i)); else for(let i=s;i>en;i+=st) r.push(mkNum(i)); return mkArr(r); });
+        nf('push', 2, ([arr, v]) => { arr.elements.push(v); return mkNum(arr.elements.length); });
+        nf('pop', 1, ([arr]) => arr.elements.pop() || mkNull());
+        nf('split', 2, ([s, d]) => mkArr(s.value.split(d.value).map(mkStr)));
+        nf('join', 2, ([arr, d]) => mkStr(arr.elements.map(stringify).join(d.value)));
+        nf('upper', 1, ([s]) => mkStr(s.value.toUpperCase()));
+        nf('lower', 1, ([s]) => mkStr(s.value.toLowerCase()));
+        nf('trim', 1, ([s]) => mkStr(s.value.trim()));
+        nf('contains', 2, ([s, sub]) => mkBool(s.value.includes(sub.value)));
+        nf('replace', 3, ([s, p, r]) => mkStr(s.value.split(p.value).join(r.value)));
+        nf('keys', 1, ([o]) => mkArr(Array.from(o.properties.keys()).map(mkStr)));
+        nf('values', 1, ([o]) => mkArr(Array.from(o.properties.values())));
+        nf('indexOf', 2, ([a, v]) => mkNum(a.type === 'array' ? a.elements.findIndex(e => valEq(e, v)) : a.value.indexOf(v.value)));
+        nf('sort', 1, ([a]) => mkArr([...a.elements].sort((x,y) => x.type==='number'&&y.type==='number' ? x.value-y.value : stringify(x).localeCompare(stringify(y)))));
+        nf('reverse', 1, ([a]) => mkArr([...a.elements].reverse()));
+        nf('slice', -1, (args) => { const a=args[0],s=args[1]?args[1].value:0,en=args[2]?args[2].value:a.elements?a.elements.length:a.value.length; return a.type==='array'?mkArr(a.elements.slice(s,en)):mkStr(a.value.slice(s,en)); });
+        nf('assert', -1, (args) => { if (!isTruthy(args[0])) throw new Error('Assertion failed: ' + (args[1] ? stringify(args[1]) : '')); return mkBool(true); });
+        nf('format', -1, (args) => { let t = args[0].value; for (let i=1;i<args.length;i++) t=t.replace('{}', stringify(args[i])); return mkStr(t); });
+        nf('time', 0, () => mkNum(Date.now()));
+        nf('isNumber', 1, ([a]) => mkBool(a.type === 'number'));
+        nf('isString', 1, ([a]) => mkBool(a.type === 'string'));
+        nf('isArray', 1, ([a]) => mkBool(a.type === 'array'));
+        nf('isNull', 1, ([a]) => mkBool(a.type === 'null'));
+      }
+      run(program) { this.steps = 0; return this.execStmts(program.body, this.env); }
+      execStmts(stmts, env) { let r = mkNull(); for (const s of stmts) { this.step(); const v = this.execStmt(s, env); if (v === BREAK || v === CONTINUE || v instanceof ReturnSignal) return v; r = v; } return r; }
+      execStmt(s, env) {
+        switch (s.type) {
+          case 'VariableDeclaration': { const v = this.eval(s.value, env); env.define(s.name, v, s.constant); return v; }
+          case 'FunctionDeclaration': { const fn = { type: 'function', name: s.name, params: s.params, body: s.body, closure: env }; env.define(s.name, fn); return fn; }
+          case 'ClassDeclaration': { let sup = null; if (s.superClass) { sup = env.lookup(s.superClass); } const methods = new Map(); for (const m of s.methods) methods.set(m.name, { type: 'function', name: m.name, params: m.params, body: m.body, closure: env }); const props = new Map(); for (const p of s.properties) props.set(p.name, this.eval(p.value, env)); const cls = { type: 'class', name: s.name, superClass: sup, methods, properties: props }; env.define(s.name, cls); return cls; }
+          case 'ReturnStatement': return new ReturnSignal(s.value ? this.eval(s.value, env) : mkNull());
+          case 'IfStatement': { const c = this.eval(s.condition, env); if (isTruthy(c)) return this.execStmts(s.consequent, env.createChild()); if (s.alternate) { if (Array.isArray(s.alternate)) return this.execStmts(s.alternate, env.createChild()); return this.execStmt(s.alternate, env); } return mkNull(); }
+          case 'WhileStatement': { let r = mkNull(); while (isTruthy(this.eval(s.condition, env))) { this.step(); const v = this.execStmts(s.body, env.createChild()); if (v === BREAK) break; if (v === CONTINUE) continue; if (v instanceof ReturnSignal) return v; r = v; } return r; }
+          case 'ForStatement': { const iter = this.eval(s.iterable, env); let items = iter.type === 'array' ? iter.elements : iter.type === 'string' ? iter.value.split('').map(mkStr) : []; let r = mkNull(); for (const item of items) { this.step(); const be = env.createChild(); be.define(s.variable, item); const v = this.execStmts(s.body, be); if (v === BREAK) break; if (v === CONTINUE) continue; if (v instanceof ReturnSignal) return v; r = v; } return r; }
+          case 'BreakStatement': return BREAK;
+          case 'ContinueStatement': return CONTINUE;
+          case 'ExpressionStatement': return this.eval(s.expression, env);
+          case 'PrintStatement': { const vals = s.expressions.map(e => this.eval(e, env)); this.output(vals.map(stringify).join(' ')); return mkNull(); }
+          case 'MatchStatement': { const subj = this.eval(s.subject, env); for (const c of s.cases) { if (valEq(subj, this.eval(c.pattern, env))) return this.execStmts(c.body, env.createChild()); } if (s.defaultCase) return this.execStmts(s.defaultCase, env.createChild()); return mkNull(); }
+          default: return mkNull();
+        }
+      }
+      eval(e, env) {
+        this.step();
+        switch (e.type) {
+          case 'NumberLiteral': return mkNum(e.value);
+          case 'StringLiteral': return mkStr(e.value);
+          case 'BooleanLiteral': return mkBool(e.value);
+          case 'NullLiteral': return mkNull();
+          case 'ArrayLiteral': return mkArr(e.elements.map(el => this.eval(el, env)));
+          case 'ObjectLiteral': { const p = new Map(); for (const prop of e.properties) p.set(prop.key, this.eval(prop.value, env)); return { type: 'object', properties: p }; }
+          case 'Identifier': return env.lookup(e.name);
+          case 'ThisExpression': return env.lookup('this');
+          case 'BinaryExpression': return this.evalBinary(e, env);
+          case 'UnaryExpression': { const op = this.eval(e.operand, env); if (e.operator === '-') return mkNum(-op.value); if (e.operator === 'not') return mkBool(!isTruthy(op)); return mkNull(); }
+          case 'LogicalExpression': { const l = this.eval(e.left, env); if (e.operator === 'or') return isTruthy(l) ? l : this.eval(e.right, env); return !isTruthy(l) ? l : this.eval(e.right, env); }
+          case 'AssignmentExpression': return this.evalAssign(e, env);
+          case 'CallExpression': return this.evalCall(e, env);
+          case 'MemberExpression': return this.evalMember(e, env);
+          case 'IndexExpression': { const o = this.eval(e.object, env), i = this.eval(e.index, env); if (o.type === 'array') return o.elements[i.value] || mkNull(); if (o.type === 'string') return mkStr(o.value[i.value] || ''); if (o.type === 'object') return o.properties.get(i.value) || mkNull(); return mkNull(); }
+          case 'ArrowFunction': { const body = Array.isArray(e.body) ? e.body : [{ type: 'ReturnStatement', value: e.body, position: e.position }]; return { type: 'function', name: '<arrow>', params: e.params, body, closure: env }; }
+          case 'FunctionExpression': return { type: 'function', name: '<anon>', params: e.params, body: e.body, closure: env };
+          case 'RangeExpression': { const s = this.eval(e.start, env).value, en = this.eval(e.end, env).value; const r = []; const lim = e.inclusive ? en : en-1; if (s <= lim) for (let i=s; i<=lim; i++) r.push(mkNum(i)); else for (let i=s; i>=(e.inclusive?en:en+1); i--) r.push(mkNum(i)); return mkArr(r); }
+          case 'NewExpression': { const cls = this.eval(e.callee, env); const inst = { type: 'instance', className: cls.name, classRef: cls, properties: new Map(cls.properties) }; if (cls.superClass) for (const [k,v] of cls.superClass.properties) if (!inst.properties.has(k)) inst.properties.set(k, v); const init = this.findMethod(cls, 'init'); if (init) this.callFn(init, e.args.map(a => this.eval(a, env)), inst, env); return inst; }
+          default: throw new Error(`Unknown expression: ${e.type}`);
+        }
+      }
+      evalBinary(e, env) {
+        const l = this.eval(e.left, env), r = this.eval(e.right, env);
+        switch (e.operator) {
+          case '+': if (l.type === 'number' && r.type === 'number') return mkNum(l.value + r.value); if (l.type === 'string' || r.type === 'string') return mkStr(stringify(l) + stringify(r)); if (l.type === 'array' && r.type === 'array') return mkArr([...l.elements, ...r.elements]); throw new Error(`Cannot add ${l.type} and ${r.type}`);
+          case '-': return mkNum(l.value - r.value);
+          case '*': if (l.type === 'string' && r.type === 'number') return mkStr(l.value.repeat(r.value)); return mkNum(l.value * r.value);
+          case '/': if (r.value === 0) throw new Error('Division by zero!'); return mkNum(l.value / r.value);
+          case '%': return mkNum(l.value % r.value);
+          case '**': return mkNum(Math.pow(l.value, r.value));
+          case '==': return mkBool(valEq(l, r));
+          case '!=': return mkBool(!valEq(l, r));
+          case '<': return mkBool(l.value < r.value);
+          case '>': return mkBool(l.value > r.value);
+          case '<=': return mkBool(l.value <= r.value);
+          case '>=': return mkBool(l.value >= r.value);
+          default: throw new Error(`Unknown operator: ${e.operator}`);
+        }
+      }
+      evalAssign(e, env) {
+        const v = this.eval(e.value, env);
+        if (e.target.type === 'Identifier') { if (e.operator === '=') return env.assign(e.target.name, v); const c = env.lookup(e.target.name); let nv; switch(e.operator) { case '+=': nv=mkNum(c.value+v.value); break; case '-=': nv=mkNum(c.value-v.value); break; case '*=': nv=mkNum(c.value*v.value); break; case '/=': nv=mkNum(c.value/v.value); break; default: nv=v; } return env.assign(e.target.name, nv); }
+        if (e.target.type === 'MemberExpression') { const o = this.eval(e.target.object, env); if (o.type === 'object' || o.type === 'instance') { o.properties.set(e.target.property, v); return v; } }
+        if (e.target.type === 'IndexExpression') { const o = this.eval(e.target.object, env), i = this.eval(e.target.index, env); if (o.type === 'array') { o.elements[i.value] = v; return v; } }
+        throw new Error('Invalid assignment target');
+      }
+      evalCall(e, env) {
+        let callee, thisObj = null;
+        if (e.callee.type === 'MemberExpression') {
+          const obj = this.eval(e.callee.object, env); thisObj = obj;
+          const args = e.args.map(a => this.eval(a, env));
+          const bm = this.builtinMethod(obj, e.callee.property, args, env);
+          if (bm !== undefined) return bm;
+          if (obj.type === 'instance') { callee = this.findMethod(obj.classRef, e.callee.property); if (!callee) throw new Error(`No method '${e.callee.property}' on ${obj.className}`); }
+          else if (obj.type === 'class') { callee = obj.methods.get(e.callee.property); }
+          else throw new Error(`Cannot call method on ${obj.type}`);
+          return this.callFn(callee, args, thisObj, env);
+        }
+        callee = this.eval(e.callee, env);
+        const args = e.args.map(a => this.eval(a, env));
+        return this.callFn(callee, args, thisObj, env);
+      }
+      callFn(fn, args, thisObj, env) {
+        if (fn.type === 'native-function') { if (fn.arity >= 0 && args.length !== fn.arity) throw new Error(`'${fn.name}' expects ${fn.arity} args, got ${args.length}`); return fn.fn(args, env); }
+        if (fn.type === 'function') { const fe = fn.closure.createChild(); if (thisObj) fe.define('this', thisObj); for (let i=0; i<fn.params.length; i++) { let v = i < args.length ? args[i] : (fn.params[i].defaultValue ? this.eval(fn.params[i].defaultValue, fe) : mkNull()); fe.define(fn.params[i].name, v); } const r = this.execStmts(fn.body, fe); return r instanceof ReturnSignal ? r.value : r; }
+        throw new Error(`'${stringify(fn)}' is not callable`);
+      }
+      evalMember(e, env) {
+        const o = this.eval(e.object, env);
+        if (o.type === 'object') return o.properties.get(e.property) || mkNull();
+        if (o.type === 'instance') { if (o.properties.has(e.property)) return o.properties.get(e.property); const m = this.findMethod(o.classRef, e.property); if (m) return m; return mkNull(); }
+        if (o.type === 'array' && e.property === 'length') return mkNum(o.elements.length);
+        if (o.type === 'string' && e.property === 'length') return mkNum(o.value.length);
+        return mkNull();
+      }
+      builtinMethod(obj, method, args, env) {
+        if (obj.type === 'array') {
+          switch (method) {
+            case 'push': obj.elements.push(...args); return mkNum(obj.elements.length);
+            case 'pop': return obj.elements.pop() || mkNull();
+            case 'shift': return obj.elements.shift() || mkNull();
+            case 'map': { const fn = args[0]; return mkArr(obj.elements.map((el,i) => this.callFn(fn, [el, mkNum(i)], null, env))); }
+            case 'filter': { const fn = args[0]; return mkArr(obj.elements.filter((el,i) => isTruthy(this.callFn(fn, [el, mkNum(i)], null, env)))); }
+            case 'reduce': { const fn = args[0]; let acc = args.length > 1 ? args[1] : obj.elements[0]; const start = args.length > 1 ? 0 : 1; for (let i=start; i<obj.elements.length; i++) acc = this.callFn(fn, [acc, obj.elements[i], mkNum(i)], null, env); return acc; }
+            case 'forEach': { const fn = args[0]; obj.elements.forEach((el,i) => this.callFn(fn, [el, mkNum(i)], null, env)); return mkNull(); }
+            case 'sort': return mkArr([...obj.elements].sort((a,b) => a.type==='number'&&b.type==='number'?a.value-b.value:stringify(a).localeCompare(stringify(b))));
+            case 'reverse': return mkArr([...obj.elements].reverse());
+            case 'slice': { const s=args[0]?args[0].value:0, e=args[1]?args[1].value:obj.elements.length; return mkArr(obj.elements.slice(s,e)); }
+            case 'indexOf': return mkNum(obj.elements.findIndex(el => valEq(el, args[0])));
+            case 'includes': return mkBool(obj.elements.some(el => valEq(el, args[0])));
+            case 'join': return mkStr(obj.elements.map(stringify).join(args[0]?args[0].value:','));
+            case 'length': return mkNum(obj.elements.length);
+          }
+        }
+        if (obj.type === 'string') {
+          switch (method) {
+            case 'split': return mkArr(obj.value.split(args[0]?args[0].value:'').map(mkStr));
+            case 'trim': return mkStr(obj.value.trim());
+            case 'upper': return mkStr(obj.value.toUpperCase());
+            case 'lower': return mkStr(obj.value.toLowerCase());
+            case 'contains': return mkBool(obj.value.includes(args[0]?args[0].value:''));
+            case 'replace': return mkStr(obj.value.split(args[0]?args[0].value:'').join(args[1]?args[1].value:''));
+            case 'startsWith': return mkBool(obj.value.startsWith(args[0]?args[0].value:''));
+            case 'endsWith': return mkBool(obj.value.endsWith(args[0]?args[0].value:''));
+            case 'charAt': return mkStr(obj.value[args[0]?args[0].value:0]||'');
+            case 'indexOf': return mkNum(obj.value.indexOf(args[0]?args[0].value:''));
+            case 'slice': return mkStr(obj.value.slice(args[0]?args[0].value:0, args[1]?args[1].value:obj.value.length));
+            case 'repeat': return mkStr(obj.value.repeat(args[0]?args[0].value:1));
+            case 'length': return mkNum(obj.value.length);
+          }
+        }
+        if (obj.type === 'object') {
+          switch (method) {
+            case 'keys': return mkArr(Array.from(obj.properties.keys()).map(mkStr));
+            case 'values': return mkArr(Array.from(obj.properties.values()));
+            case 'has': return mkBool(obj.properties.has(args[0]?args[0].value:''));
+          }
+        }
+        return undefined;
+      }
+      findMethod(cls, name) { if (cls.methods.has(name)) return cls.methods.get(name); if (cls.superClass) return this.findMethod(cls.superClass, name); return null; }
+      step() { if (++this.steps > this.maxSteps) throw new Error('Execution limit exceeded. Your program might have an infinite loop.'); }
+    }
+
+    // ======== PLAYGROUND UI ========
+    const EXAMPLES = {
+      hello: `// Hello World in TinyLang!\nprint("Hello, World!")\nprint("Welcome to TinyLang 🎉")\n\nlet name = "TinyLang"\nprint("I am " + name + " — a minimal language for learning!")`,
+      variables: `// Variables and Data Types\nlet age = 25\nlet name = "Alice"\nlet isStudent = true\nlet scores = [95, 87, 92, 88]\nlet person = {name: "Bob", age: 30}\n\nprint("Name:", name)\nprint("Age:", age)\nprint("Student:", isStudent)\nprint("Scores:", scores)\nprint("Person:", person)\n\n// Constants cannot be reassigned\nconst PI = 3.14159\nprint("PI =", PI)\n\n// Type checking\nprint("type of name:", type(name))\nprint("type of age:", type(age))\nprint("type of scores:", type(scores))`,
+      functions: `// Functions and Closures\nfn greet(name, greeting = "Hello") {\n  return greeting + ", " + name + "!"\n}\n\nprint(greet("Alice"))\nprint(greet("Bob", "Hi"))\n\n// Recursive function\nfn factorial(n) {\n  if n <= 1 { return 1 }\n  return n * factorial(n - 1)\n}\n\nprint("5! =", factorial(5))\nprint("10! =", factorial(10))\n\n// Closures\nfn makeCounter() {\n  let count = 0\n  return fn() {\n    count += 1\n    return count\n  }\n}\n\nlet counter = makeCounter()\nprint("Count:", counter())\nprint("Count:", counter())\nprint("Count:", counter())\n\n// Arrow functions\nlet double = (x) => x * 2\nlet add = (a, b) => a + b\nprint("double(5) =", double(5))\nprint("add(3, 4) =", add(3, 4))`,
+      arrays: `// Arrays and Higher-Order Functions\nlet fruits = ["apple", "banana", "cherry", "date"]\nprint("Fruits:", fruits)\nprint("Length:", len(fruits))\nprint("First:", fruits[0])\n\n// Array methods\nlet nums = [3, 1, 4, 1, 5, 9, 2, 6]\nprint("Original:", nums)\nprint("Sorted:", nums.sort())\nprint("Reversed:", nums.reverse())\n\n// Map, Filter, Reduce\nlet doubled = nums.map((x) => x * 2)\nprint("Doubled:", doubled)\n\nlet evens = nums.filter((x) => x % 2 == 0)\nprint("Evens:", evens)\n\nlet sum = nums.reduce((acc, x) => acc + x, 0)\nprint("Sum:", sum)\n\n// Chaining\nlet result = [1, 2, 3, 4, 5]\n  .map((x) => x * x)\n  .filter((x) => x > 5)\nprint("Squares > 5:", result)`,
+      loops: `// Loops and Control Flow\n\n// For loop with range\nprint("Counting 1 to 5:")\nfor i in 1..6 {\n  print("  ", i)\n}\n\n// While loop\nlet n = 1\nprint("\\nPowers of 2:")\nwhile n <= 128 {\n  print("  ", n)\n  n *= 2\n}\n\n// For-in with arrays\nlet colors = ["red", "green", "blue", "yellow"]\nprint("\\nColors:")\nfor color in colors {\n  print("  🎨", color)\n}\n\n// Break and continue\nprint("\\nOdd numbers < 10:")\nfor i in 0..20 {\n  if i >= 10 { break }\n  if i % 2 == 0 { continue }\n  print("  ", i)\n}\n\n// Nested loops\nprint("\\nMultiplication table (3x3):")\nfor i in 1..4 {\n  let row = ""\n  for j in 1..4 {\n    row = row + str(i * j) + "\\t"\n  }\n  print("  ", row)\n}`,
+      classes: `// Classes and Object-Oriented Programming\n\nclass Animal {\n  let name = ""\n  let sound = ""\n\n  fn init(name, sound) {\n    this.name = name\n    this.sound = sound\n  }\n\n  fn speak() {\n    print(this.name + " says " + this.sound + "!")\n  }\n\n  fn describe() {\n    print("I am " + this.name + ", an animal.")\n  }\n}\n\nclass Dog extends Animal {\n  let tricks = []\n\n  fn init(name) {\n    this.name = name\n    this.sound = "Woof"\n    this.tricks = []\n  }\n\n  fn learn(trick) {\n    this.tricks.push(trick)\n    print(this.name + " learned: " + trick)\n  }\n\n  fn showTricks() {\n    print(this.name + "'s tricks:")\n    for trick in this.tricks {\n      print("  ⭐ " + trick)\n    }\n  }\n}\n\nlet buddy = new Dog("Buddy")\nbuddy.speak()\nbuddy.learn("sit")\nbuddy.learn("roll over")\nbuddy.learn("fetch")\nbuddy.showTricks()\n\nlet cat = new Animal("Whiskers", "Meow")\ncat.speak()\ncat.describe()`,
+      fibonacci: `// Fibonacci Sequence — Multiple Approaches\n\n// 1. Recursive (classic but slow for large n)\nfn fib_recursive(n) {\n  if n <= 1 { return n }\n  return fib_recursive(n - 1) + fib_recursive(n - 2)\n}\n\n// 2. Iterative (fast)\nfn fib_iterative(n) {\n  if n <= 1 { return n }\n  let a = 0\n  let b = 1\n  for i in 2..n + 1 {\n    let temp = b\n    b = a + b\n    a = temp\n  }\n  return b\n}\n\n// 3. Generate sequence as array\nfn fib_sequence(count) {\n  let seq = [0, 1]\n  for i in 2..count {\n    let next = seq[i-1] + seq[i-2]\n    seq.push(next)\n  }\n  return seq\n}\n\nprint("Fibonacci (recursive):")\nfor i in 0..10 {\n  print("  fib(" + str(i) + ") = " + str(fib_recursive(i)))\n}\n\nprint("\\nFibonacci (iterative):")\nprint("  fib(20) =", fib_iterative(20))\nprint("  fib(30) =", fib_iterative(30))\n\nprint("\\nFirst 15 Fibonacci numbers:")\nprint("  ", fib_sequence(15))`,
+      sorting: `// Sorting Algorithms in TinyLang\n\n// Bubble Sort\nfn bubbleSort(arr) {\n  let n = len(arr)\n  let sorted = slice(arr, 0, n)\n  for i in 0..n {\n    for j in 0..n - i - 1 {\n      if sorted[j] > sorted[j + 1] {\n        let temp = sorted[j]\n        sorted[j] = sorted[j + 1]\n        sorted[j + 1] = temp\n      }\n    }\n  }\n  return sorted\n}\n\n// Selection Sort\nfn selectionSort(arr) {\n  let n = len(arr)\n  let sorted = slice(arr, 0, n)\n  for i in 0..n {\n    let minIdx = i\n    for j in i + 1..n {\n      if sorted[j] < sorted[minIdx] {\n        minIdx = j\n      }\n    }\n    if minIdx != i {\n      let temp = sorted[i]\n      sorted[i] = sorted[minIdx]\n      sorted[minIdx] = temp\n    }\n  }\n  return sorted\n}\n\n// Test\nlet data = [64, 34, 25, 12, 22, 11, 90]\nprint("Original:", data)\nprint("Bubble Sort:", bubbleSort(data))\nprint("Selection Sort:", selectionSort(data))\nprint("Built-in Sort:", sort(data))`,
+      functional: `// Functional Programming in TinyLang\n\n// Higher-order functions\nfn compose(f, g) {\n  return (x) => f(g(x))\n}\n\nlet double = (x) => x * 2\nlet addOne = (x) => x + 1\n\nlet doubleAndAdd = compose(addOne, double)\nlet addAndDouble = compose(double, addOne)\n\nprint("doubleAndAdd(5) =", doubleAndAdd(5))  // (5*2)+1 = 11\nprint("addAndDouble(5) =", addAndDouble(5))  // (5+1)*2 = 12\n\n// Pipe (apply functions left to right)\nfn pipe(value, functions) {\n  let result = value\n  for f in functions {\n    result = f(result)\n  }\n  return result\n}\n\nlet result = pipe(5, [double, addOne, double])\nprint("pipe(5, [double, addOne, double]) =", result)  // ((5*2)+1)*2 = 22\n\n// Curry-like pattern\nfn multiplier(factor) {\n  return (x) => x * factor\n}\n\nlet triple = multiplier(3)\nlet quadruple = multiplier(4)\n\nprint("triple(7) =", triple(7))\nprint("quadruple(7) =", quadruple(7))\n\n// Working with data\nlet people = [\n  {name: "Alice", age: 30},\n  {name: "Bob", age: 25},\n  {name: "Charlie", age: 35}\n]\n\nlet names = people.map((p) => p.name)\nprint("Names:", names)`,
+      match: `// Pattern Matching with match/when\n\n// Simple value matching\nfn dayType(day) {\n  match day {\n    when "Saturday" => return "weekend 🎉"\n    when "Sunday" => return "weekend 🎉"\n    when "Monday" => return "start of week 😅"\n    when "Friday" => return "almost weekend! 🙌"\n    else => return "weekday 📝"\n  }\n}\n\nprint("Monday:", dayType("Monday"))\nprint("Saturday:", dayType("Saturday"))\nprint("Wednesday:", dayType("Wednesday"))\nprint("Friday:", dayType("Friday"))\n\n// Match with numbers\nfn grade(score) {\n  if score >= 90 { return "A" }\n  if score >= 80 { return "B" }\n  if score >= 70 { return "C" }\n  if score >= 60 { return "D" }\n  return "F"\n}\n\nlet scores = [95, 82, 67, 91, 73]\nprint("\\nGrades:")\nfor s in scores {\n  print("  Score", s, "=>", grade(s))\n}\n\n// Match with computation\nfn fizzBuzz(n) {\n  for i in 1..n + 1 {\n    if i % 15 == 0 {\n      print("FizzBuzz")\n    } else if i % 3 == 0 {\n      print("Fizz")\n    } else if i % 5 == 0 {\n      print("Buzz")\n    } else {\n      print(i)\n    }\n  }\n}\n\nprint("\\nFizzBuzz (1-20):")\nfizzBuzz(20)`,
+    };
+
+    // DOM Elements
+    const editor = document.getElementById('codeEditor');
+    const outputEl = document.getElementById('output');
+    const lineNumbers = document.getElementById('lineNumbers');
+    const examplesSelect = document.getElementById('examples');
+    const runBtn = document.getElementById('runBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const shareBtn = document.getElementById('shareBtn');
+    const editorStatus = document.getElementById('editorStatus');
+    const outputStatus = document.getElementById('outputStatus');
+    const toast = document.getElementById('toast');
+
+    // Update line numbers
+    function updateLineNumbers() {
+      const lines = editor.value.split('\n').length;
+      lineNumbers.textContent = Array.from({ length: lines }, (_, i) => i + 1).join('\n');
+    }
+
+    // Run code
+    function runCode() {
+      const source = editor.value.trim();
+      if (!source) { outputEl.innerHTML = '<div class="output-line info">No code to run. Type something in the editor!</div>'; return; }
+
+      outputEl.innerHTML = '';
+      const outputLines = [];
+      const startTime = performance.now();
+
+      try {
+        const lexer = new Lexer(source);
+        const tokens = lexer.tokenize();
+        const parser = new Parser(tokens);
+        const program = parser.parse();
+        const interp = new Interpreter((msg) => { outputLines.push(msg); });
+        const result = interp.run(program);
+        const elapsed = (performance.now() - startTime).toFixed(1);
+
+        for (const line of outputLines) {
+          const div = document.createElement('div');
+          div.className = 'output-line stdout';
+          div.textContent = line;
+          outputEl.appendChild(div);
+        }
+
+        if (outputLines.length === 0 && result && result.type !== 'null') {
+          const div = document.createElement('div');
+          div.className = 'output-line result';
+          div.textContent = stringify(result);
+          outputEl.appendChild(div);
+        }
+
+        outputStatus.textContent = `✓ ${elapsed}ms`;
+        outputStatus.className = 'status success';
+        editorStatus.textContent = 'executed';
+      } catch (error) {
+        const div = document.createElement('div');
+        div.className = 'output-line error';
+        div.textContent = error.message;
+        outputEl.appendChild(div);
+        outputStatus.textContent = '✗ error';
+        outputStatus.className = 'status error';
+        editorStatus.textContent = 'error';
+      }
+
+      outputEl.scrollTop = outputEl.scrollHeight;
+    }
+
+    // Clear output
+    function clearOutput() {
+      outputEl.innerHTML = '<div class="output-line info">Output cleared.</div>';
+      outputStatus.textContent = '';
+    }
+
+    // Share via URL
+    function shareCode() {
+      const code = editor.value;
+      const encoded = btoa(encodeURIComponent(code));
+      const url = window.location.origin + window.location.pathname + '?code=' + encoded;
+      navigator.clipboard.writeText(url).then(() => showToast('Link copied to clipboard!')).catch(() => showToast('Could not copy link'));
+    }
+
+    function showToast(msg) {
+      toast.textContent = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2500);
+    }
+
+    // Load from URL
+    function loadFromURL() {
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      if (code) {
+        try { editor.value = decodeURIComponent(atob(code)); updateLineNumbers(); } catch(e) {}
+      }
+    }
+
+    // Event listeners
+    editor.addEventListener('input', () => { updateLineNumbers(); editorStatus.textContent = 'editing'; });
+    editor.addEventListener('scroll', () => { lineNumbers.style.transform = `translateY(-${editor.scrollTop}px)`; });
+    editor.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); runCode(); }
+      if (e.key === 'Tab') { e.preventDefault(); const start = editor.selectionStart; editor.value = editor.value.substring(0, start) + '  ' + editor.value.substring(editor.selectionEnd); editor.selectionStart = editor.selectionEnd = start + 2; updateLineNumbers(); }
+    });
+
+    runBtn.addEventListener('click', runCode);
+    clearBtn.addEventListener('click', clearOutput);
+    shareBtn.addEventListener('click', shareCode);
+    examplesSelect.addEventListener('change', (e) => {
+      if (e.target.value && EXAMPLES[e.target.value]) {
+        editor.value = EXAMPLES[e.target.value];
+        updateLineNumbers();
+        editorStatus.textContent = 'example loaded';
+        e.target.value = '';
+      }
+    });
+
+    // Initialize
+    loadFromURL();
+    updateLineNumbers();
+    if (!editor.value) { editor.value = EXAMPLES.hello; updateLineNumbers(); }
+  </script>
+</body>
+</html>

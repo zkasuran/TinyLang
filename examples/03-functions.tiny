@@ -1,0 +1,73 @@
+// ================================================
+// Functions and Closures
+// ================================================
+// Functions are first-class values in TinyLang.
+
+// Basic function
+fn add(a, b) {
+  return a + b
+}
+
+print("3 + 4 =", add(3, 4))
+
+// Default parameters
+fn greet(name, greeting = "Hello") {
+  return greeting + ", " + name + "!"
+}
+
+print(greet("Alice"))
+print(greet("Bob", "Hi"))
+print(greet("Charlie", "Hey"))
+
+// Recursive function - Factorial
+fn factorial(n) {
+  if n <= 1 { return 1 }
+  return n * factorial(n - 1)
+}
+
+print("5! =", factorial(5))
+print("10! =", factorial(10))
+
+// Arrow functions (short syntax)
+let double = (x) => x * 2
+let square = (x) => x * x
+let isEven = (n) => n % 2 == 0
+
+print("double(7) =", double(7))
+print("square(5) =", square(5))
+print("isEven(4) =", isEven(4))
+
+// Functions as arguments (higher-order)
+fn apply(f, value) {
+  return f(value)
+}
+
+print("apply(double, 10) =", apply(double, 10))
+print("apply(square, 6) =", apply(square, 6))
+
+// Closures - functions that capture their environment
+fn makeCounter(start = 0) {
+  let count = start
+  let inc = fn() {
+    count += 1
+    return count
+  }
+  return inc
+}
+
+let counter = makeCounter()
+print("Count:", counter())
+print("Count:", counter())
+print("Count:", counter())
+
+let fromTen = makeCounter(10)
+print("From 10:", fromTen())
+print("From 10:", fromTen())
+
+// Function composition
+fn compose(f, g) {
+  return (x) => f(g(x))
+}
+
+let doubleSquare = compose(double, square)
+print("double(square(3)) =", doubleSquare(3))

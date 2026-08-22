@@ -1,0 +1,83 @@
+// ================================================
+// Pattern Matching with match/when
+// ================================================
+// Match expressions provide clean multi-way branching.
+
+// Simple value matching
+fn dayType(day) {
+  match day {
+    when "Saturday" => return "weekend 🎉"
+    when "Sunday" => return "weekend 🎉"
+    when "Monday" => return "start of week 😅"
+    when "Friday" => return "almost done! 🙌"
+    else => return "weekday 📝"
+  }
+}
+
+print("=== Day Types ===")
+let days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+for day in days {
+  print("  " + day + ": " + dayType(day))
+}
+
+// HTTP status codes
+fn statusMessage(code) {
+  match code {
+    when 200 => return "OK"
+    when 201 => return "Created"
+    when 301 => return "Moved Permanently"
+    when 400 => return "Bad Request"
+    when 401 => return "Unauthorized"
+    when 403 => return "Forbidden"
+    when 404 => return "Not Found"
+    when 500 => return "Internal Server Error"
+    else => return "Unknown Status"
+  }
+}
+
+print("\n=== HTTP Status Codes ===")
+let codes = [200, 201, 404, 500, 418]
+for code in codes {
+  print("  " + str(code) + ": " + statusMessage(code))
+}
+
+// Calculator
+fn calculate(op, a, b) {
+  match op {
+    when "+" => return a + b
+    when "-" => return a - b
+    when "*" => return a * b
+    when "/" => {
+      if b == 0 {
+        print("  Error: Division by zero!")
+        return null
+      }
+      return a / b
+    }
+    else => {
+      print("  Unknown operator: " + op)
+      return null
+    }
+  }
+}
+
+print("\n=== Calculator ===")
+let operations = ["+", "-", "*", "/"]
+for op in operations {
+  let result = calculate(op, 10, 3)
+  print("  10 " + op + " 3 = " + str(result))
+}
+
+// FizzBuzz with match-like logic
+print("\n=== FizzBuzz (1-20) ===")
+for i in 1..21 {
+  if i % 15 == 0 {
+    print("  " + str(i) + ": FizzBuzz")
+  } else if i % 3 == 0 {
+    print("  " + str(i) + ": Fizz")
+  } else if i % 5 == 0 {
+    print("  " + str(i) + ": Buzz")
+  } else {
+    print("  " + str(i))
+  }
+}

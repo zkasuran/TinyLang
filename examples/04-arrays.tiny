@@ -1,0 +1,69 @@
+// ================================================
+// Arrays and Higher-Order Functions
+// ================================================
+// Arrays are ordered collections. They support
+// powerful functional programming methods.
+
+let fruits = ["apple", "banana", "cherry", "date", "elderberry"]
+print("Fruits:", fruits)
+print("Length:", len(fruits))
+print("First:", fruits[0])
+print("Last:", fruits[4])
+
+// Modifying arrays
+let nums = [5, 2, 8, 1, 9, 3]
+print("\nOriginal:", nums)
+
+// Sorting and reversing (return new arrays)
+print("Sorted:", sort(nums))
+print("Reversed:", reverse(nums))
+
+// Push and pop
+let stack = [1, 2, 3]
+push(stack, 4)
+push(stack, 5)
+print("\nStack after push:", stack)
+let top = pop(stack)
+print("Popped:", top)
+print("Stack now:", stack)
+
+// Map - transform each element
+let doubled = nums.map((x) => x * 2)
+print("\nDoubled:", doubled)
+
+let names = ["alice", "bob", "charlie"]
+let capitalized = names.map((s) => upper(s))
+print("Capitalized:", capitalized)
+
+// Filter - keep elements matching condition
+let evens = nums.filter((x) => x % 2 == 0)
+let odds = nums.filter((x) => x % 2 != 0)
+print("\nEvens:", evens)
+print("Odds:", odds)
+
+// Reduce - combine all elements into one value
+let sum = nums.reduce((acc, x) => acc + x, 0)
+let product = nums.reduce((acc, x) => acc * x, 1)
+print("\nSum:", sum)
+print("Product:", product)
+
+// Chaining operations
+let result = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+  .filter((x) => x % 2 == 0)
+  .map((x) => x * x)
+print("\nEven squares:", result)
+
+// Slice
+print("\nFirst 3 fruits:", slice(fruits, 0, 3))
+print("Last 2 fruits:", slice(fruits, 3, 5))
+
+// Finding elements
+print("\nIndex of 8:", indexOf(nums, 8))
+print("Includes 9:", includes(nums, 9))
+print("Includes 99:", includes(nums, 99))
+
+// For-each
+print("\nIterating:")
+fruits.forEach((fruit, i) => {
+  print("  " + str(i) + ": " + fruit)
+})

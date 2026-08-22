@@ -1,0 +1,57 @@
+{
+  "name": "tinylang",
+  "version": "1.0.0",
+  "description": "TinyLang - A minimal educational programming language designed to teach programming concepts with friendly error messages",
+  "main": "dist/index.js",
+  "bin": {
+    "tinylang": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/cli/index.js",
+    "repl": "node dist/cli/index.js repl",
+    "dev": "ts-node src/cli/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src/ tests/",
+    "format": "prettier --write 'src/**/*.ts' 'tests/**/*.ts'",
+    "playground:build": "cd playground && npm run build",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "programming-language",
+    "interpreter",
+    "educational",
+    "repl",
+    "compiler",
+    "tinylang",
+    "learning",
+    "beginner-friendly"
+  ],
+  "author": "TinyLang Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "prettier": "^3.3.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  },
+  "dependencies": {
+    "chalk": "^5.3.0",
+    "commander": "^12.1.0",
+    "readline-sync": "^1.4.10"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ]
+}

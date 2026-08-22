@@ -1,0 +1,36 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Bytecode Compiler and Stack-based Virtual Machine - Compile TinyLang AST to bytecode instructions and execute them on a stack-based VM. This is a major new component that enables tinylang compile and tinylang exec commands.",
+  "status": "pending",
+  "steps": [
+    "Create src/compiler/ directory with bytecode instruction set definition in src/compiler/opcodes.ts. Define opcodes: CONST, POP, ADD, SUB, MUL, DIV, MOD, POW, NEGATE, NOT, EQ, NEQ, LT, LTE, GT, GTE, AND, OR, JMP, JMP_IF_FALSE, JMP_IF_TRUE, LOAD_LOCAL, STORE_LOCAL, LOAD_GLOBAL, STORE_GLOBAL, CALL, RETURN, ARRAY, OBJECT, INDEX, SET_INDEX, GET_PROP, SET_PROP, PRINT, CLOSURE, CLASS, METHOD, INHERIT, NEW_INSTANCE, DUP, HALT",
+    "Create src/compiler/chunk.ts - Bytecode chunk that holds instructions (Uint8Array), a constant pool (RuntimeValue[]), line number mapping for error messages, and serialization/deserialization to .tinyc binary format",
+    "Create src/compiler/compiler.ts - AST visitor that walks the parsed AST and emits bytecode instructions. Handle all Statement and Expression types from src/types/ast.ts. Track local variable scopes with a compile-time symbol table. Support closures by emitting CLOSURE instructions that capture upvalues. Handle classes, methods, inheritance.",
+    "Create src/vm/vm.ts - Stack-based virtual machine. Maintain an operand stack, call frame stack (each frame has its own instruction pointer, base pointer, local slots). Implement execution loop that fetches/decodes/executes each opcode. Handle function calls with CALL/RETURN. Implement garbage collection via reference counting on heap-allocated objects (arrays, objects, closures, instances).",
+    "Create src/vm/index.ts that exports the VM class",
+    "Create src/compiler/index.ts that exports Compiler and related types",
+    "Create src/compiler/disassembler.ts - Human-readable disassembly of bytecode chunks, showing instruction offset, opcode name, operands, and corresponding source line. Format: 0000 CONST 0 (line 1) followed by the constant value.",
+    "Create src/compiler/optimizer.ts - Optimization passes: constant folding (compile-time evaluate constant expressions), dead code elimination (remove code after unconditional return/break), strength reduction (replace pow(x,2) with x*x). Run between compilation and VM execution.",
+    "Integrate into src/tinylang.ts: add compile(source: string) method that returns a Chunk, and execVM(chunk: Chunk) method. Also add a compileAndRun(source: string) method.",
+    "Add tests in tests/compiler/compiler.test.ts testing compilation of expressions, statements, control flow, functions, classes. Verify correct bytecode sequences and that VM execution produces same results as tree-walk interpreter.",
+    "Add tests in tests/vm/vm.test.ts testing the VM execution of pre-compiled chunks, covering arithmetic, control flow, function calls, closures, class instantiation.",
+    "Create the binary .tinyc format: magic bytes 'TINY' + version byte + serialized constant pool + instruction bytes. Add serialize/deserialize methods to Chunk class."
+  ],
+  "acceptance_criteria": [
+    "npm run build succeeds with no type errors",
+    "Running npx vitest run passes all existing 124 tests plus new compiler/VM tests",
+    "Compiling a program with the Compiler class produces a valid Chunk",
+    "Executing the Chunk on the VM produces identical output to the tree-walk interpreter for all 10 example programs",
+    "The disassembler produces readable bytecode output",
+    "Optimization passes demonstrably reduce instruction count for constant expressions",
+    ".tinyc files can be serialized and deserialized correctly"
+  ],
+  "verification": [
+    "npm run build",
+    "npx vitest run",
+    "node -e \"const {TinyLang} = require('./dist'); const tl = new TinyLang(); console.log(tl.compile('let x = 1 + 2; print(x)'))\""
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

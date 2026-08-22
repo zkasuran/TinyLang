@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "Validate TinyLang Examples",
+      "trigger": "PostFileSave",
+      "matcher": "\\.tiny$",
+      "action": {
+        "type": "command",
+        "command": "cd /projects/sandbox/tinylang && node dist/cli/index.js check"
+      }
+    }
+  ]
+}

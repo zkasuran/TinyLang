@@ -1,0 +1,125 @@
+// ================================================
+// Classes and Object-Oriented Programming
+// ================================================
+// TinyLang supports classes with inheritance,
+// constructors, methods, and properties.
+
+// Basic class
+class Animal {
+  let name = ""
+  let sound = ""
+  let legs = 4
+
+  fn init(name, sound) {
+    this.name = name
+    this.sound = sound
+  }
+
+  fn speak() {
+    print(this.name + " says '" + this.sound + "'!")
+  }
+
+  fn describe() {
+    print(this.name + " has " + str(this.legs) + " legs")
+  }
+}
+
+// Inheritance
+class Dog extends Animal {
+  let tricks = []
+
+  fn init(name) {
+    this.name = name
+    this.sound = "Woof"
+    this.tricks = []
+  }
+
+  fn learn(trick) {
+    this.tricks.push(trick)
+    print(this.name + " learned: " + trick + " 🎓")
+  }
+
+  fn showTricks() {
+    if this.tricks.length == 0 {
+      print(this.name + " doesn't know any tricks yet")
+      return null
+    }
+    print(this.name + "'s tricks:")
+    for trick in this.tricks {
+      print("  ⭐ " + trick)
+    }
+  }
+}
+
+class Cat extends Animal {
+  fn init(name) {
+    this.name = name
+    this.sound = "Meow"
+  }
+
+  fn purr() {
+    print(this.name + " purrs... rrrrr 😺")
+  }
+}
+
+// Using classes
+print("=== Animals ===")
+let buddy = new Dog("Buddy")
+buddy.speak()
+buddy.describe()
+buddy.learn("sit")
+buddy.learn("shake")
+buddy.learn("roll over")
+buddy.showTricks()
+
+print("")
+let whiskers = new Cat("Whiskers")
+whiskers.speak()
+whiskers.purr()
+
+// Another class example
+print("\n=== Shapes ===")
+class Shape {
+  let name = "Shape"
+  
+  fn area() {
+    return 0
+  }
+
+  fn describe() {
+    print(this.name + " with area " + str(round(this.area() * 100) / 100))
+  }
+}
+
+class Circle extends Shape {
+  let radius = 0
+
+  fn init(r) {
+    this.name = "Circle"
+    this.radius = r
+  }
+
+  fn area() {
+    return PI * this.radius ** 2
+  }
+}
+
+class Rectangle extends Shape {
+  let width = 0
+  let height = 0
+
+  fn init(w, h) {
+    this.name = "Rectangle"
+    this.width = w
+    this.height = h
+  }
+
+  fn area() {
+    return this.width * this.height
+  }
+}
+
+let shapes = [new Circle(5), new Rectangle(4, 6), new Circle(3)]
+for shape in shapes {
+  shape.describe()
+}
