@@ -11243,8 +11243,26 @@ ${catchBody}
       case "OptionalMemberExpression":
       case "OptionalIndexExpression":
         return 14 /* Postfix */;
-      default:
+      // Literals, identifiers, `this`, `new` and `fn(){}` are all self-delimiting
+      // and never need parentheses.
+      case "NumberLiteral":
+      case "StringLiteral":
+      case "InterpolatedString":
+      case "BooleanLiteral":
+      case "NullLiteral":
+      case "ArrayLiteral":
+      case "ObjectLiteral":
+      case "Identifier":
+      case "FunctionExpression":
+      case "NewExpression":
+      case "ThisExpression":
         return 15 /* Primary */;
+      default: {
+        const unhandled = expr;
+        throw new FormatterError(
+          `Unknown precedence for expression type: ${unhandled.type}`
+        );
+      }
     }
   }
   function leftmostExpression(expr) {
@@ -11269,8 +11287,29 @@ ${catchBody}
       case "OptionalMemberExpression":
       case "OptionalIndexExpression":
         return leftmostExpression(expr.object);
-      default:
+      // Everything else supplies its own first token: a keyword, a bracket, a
+      // literal or a name.
+      case "NumberLiteral":
+      case "StringLiteral":
+      case "InterpolatedString":
+      case "BooleanLiteral":
+      case "NullLiteral":
+      case "ArrayLiteral":
+      case "ObjectLiteral":
+      case "Identifier":
+      case "UnaryExpression":
+      case "ArrowFunction":
+      case "FunctionExpression":
+      case "NewExpression":
+      case "ThisExpression":
+      case "SpreadExpression":
         return expr;
+      default: {
+        const unhandled = expr;
+        throw new FormatterError(
+          `Unknown leftmost token for expression type: ${unhandled.type}`
+        );
+      }
     }
   }
   function formatNumber(value) {

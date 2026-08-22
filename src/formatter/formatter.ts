@@ -839,10 +839,29 @@ function precedenceOf(expr: Expression): Prec {
     case 'OptionalMemberExpression':
     case 'OptionalIndexExpression':
       return Prec.Postfix;
-    default:
-      // Literals, identifiers, `this`, `new`, and `fn(){}` are all
-      // self-delimiting and never need parentheses.
+    // Literals, identifiers, `this`, `new` and `fn(){}` are all self-delimiting
+    // and never need parentheses.
+    case 'NumberLiteral':
+    case 'StringLiteral':
+    case 'InterpolatedString':
+    case 'BooleanLiteral':
+    case 'NullLiteral':
+    case 'ArrayLiteral':
+    case 'ObjectLiteral':
+    case 'Identifier':
+    case 'FunctionExpression':
+    case 'NewExpression':
+    case 'ThisExpression':
       return Prec.Primary;
+    default: {
+      // Exhaustive on purpose: a new expression type that silently defaulted to
+      // Primary would be printed without the parentheses it needs, which is the
+      // same class of quiet corruption the `default: return ''` cases were.
+      const unhandled: never = expr;
+      throw new FormatterError(
+        `Unknown precedence for expression type: ${(unhandled as Expression).type}`
+      );
+    }
   }
 }
 
@@ -875,8 +894,31 @@ function leftmostExpression(expr: Expression): Expression {
     case 'OptionalMemberExpression':
     case 'OptionalIndexExpression':
       return leftmostExpression(expr.object);
-    default:
+    // Everything else supplies its own first token: a keyword, a bracket, a
+    // literal or a name.
+    case 'NumberLiteral':
+    case 'StringLiteral':
+    case 'InterpolatedString':
+    case 'BooleanLiteral':
+    case 'NullLiteral':
+    case 'ArrayLiteral':
+    case 'ObjectLiteral':
+    case 'Identifier':
+    case 'UnaryExpression':
+    case 'ArrowFunction':
+    case 'FunctionExpression':
+    case 'NewExpression':
+    case 'ThisExpression':
+    case 'SpreadExpression':
       return expr;
+    default: {
+      // Exhaustive for the same reason as precedenceOf: a new node type with a
+      // left operand must be considered here, not silently treated as a leaf.
+      const unhandled: never = expr;
+      throw new FormatterError(
+        `Unknown leftmost token for expression type: ${(unhandled as Expression).type}`
+      );
+    }
   }
 }
 
