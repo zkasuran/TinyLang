@@ -28,7 +28,7 @@ import { Interpreter } from '../../src/interpreter';
 import { registerStdlib } from '../../src/stdlib';
 import { Compiler, optimize } from '../../src/compiler';
 import { VM } from '../../src/vm';
-import { Environment, stringify } from '../../src/types/values';
+import { Environment, stringify, StepLimitExceeded } from '../../src/types/values';
 
 /** Run source through the tree-walk interpreter (the reference). */
 function runInterpreter(source: string): string[] {
@@ -66,6 +66,35 @@ function expectAgreement(source: string): string[] {
     'optimized VM output must match interpreter'
   ).toEqual(expected);
   return expected;
+}
+
+/**
+ * Assert both backends abort with the same message.
+ *
+ * For programs whose whole point is that they fail, expectAgreement cannot be
+ * used: it compares output, and neither engine produces any. The message is
+ * still compared between the two, and pinned to `expectedMessage` so that "both
+ * fail" cannot be satisfied by two engines failing for different reasons.
+ */
+function expectSameError(source: string, expectedMessage: string): void {
+  const capture = (run: () => string[]): string => {
+    try {
+      run();
+      return '<no error>';
+    } catch (e) {
+      return (e as Error).message;
+    }
+  };
+
+  const fromInterpreter = capture(() => runInterpreter(source));
+  expect(fromInterpreter).toBe(expectedMessage);
+  expect(capture(() => runVM(source)), 'VM error must match interpreter').toBe(
+    fromInterpreter
+  );
+  expect(
+    capture(() => runVM(source, true)),
+    'optimized VM error must match interpreter'
+  ).toBe(fromInterpreter);
 }
 
 describe('Differential: interpreter vs VM', () => {
@@ -1050,6 +1079,480 @@ describe('Differential: interpreter vs VM', () => {
         print(a)
       `;
       expect(runVM(src)).toEqual(runVM(src));
+    });
+  });
+});
+
+
+/**
+ * Divergences found by auditing the two engines against each other rather than
+ * against their own tests. Each block names the engine that was wrong and why.
+ */
+describe('Differential: engine agreement audit', () => {
+  describe('native builtin arity (VM did not check)', () => {
+    it('agrees on too many arguments to a fixed-arity builtin', () => {
+      // The VM ignored NativeFunctionValue.arity, so this returned 3.
+      const out = expectAgreement(`
+        try { print(abs(-3, 99)) } catch e { print("caught:", e.message) }
+      `);
+      expect(out).toEqual([`caught: 'abs' expects 1 argument(s), but got 2`]);
+    });
+
+    it('agrees on too few arguments to a fixed-arity builtin', () => {
+      const out = expectAgreement(`
+        try { print(abs()) } catch e { print("caught:", e.message) }
+      `);
+      expect(out).toEqual([`caught: 'abs' expects 1 argument(s), but got 0`]);
+    });
+
+    it('agrees that arity -1 builtins stay variadic', () => {
+      expectAgreement(`
+        print(max(1, 2, 3))
+        print(min(4, 2))
+        let a = [1, 2]
+        push(a, 3)
+        print(a)
+      `);
+    });
+
+    it('agrees that builtin methods are not arity-checked', () => {
+      // The interpreter's tryBuiltinMethod runs before its arity check, so the
+      // VM must not be stricter here either.
+      expectAgreement(`
+        let a = [1, 2]
+        print(a.length())
+        print("a,b".split(","))
+      `);
+    });
+  });
+
+  describe('redeclaration in the same scope (VM silently overwrote)', () => {
+    it('agrees that a second top-level let is an error', () => {
+      const out = expectAgreement(`
+        try {
+          let x = 1
+          let x = 2
+          print(x)
+        } catch e { print("caught:", e.message) }
+      `);
+      expect(out).toEqual([`caught: Variable 'x' is already declared in this scope`]);
+    });
+
+    it('agrees that shadowing a stdlib name at top level is an error', () => {
+      // Must be at top level: a `try` block is a nested scope, where shadowing
+      // a global is legitimate in both engines (asserted below).
+      expectSameError(
+        `let abs = 1\nprint(abs)`,
+        `Variable 'abs' is already declared in this scope`
+      );
+    });
+
+    it('agrees that shadowing a stdlib name in a nested scope is allowed', () => {
+      const out = expectAgreement(`
+        if true { let abs = 1
+          print(abs) }
+        print(abs(-2))
+      `);
+      expect(out).toEqual(['1', '2']);
+    });
+
+    it('agrees that an uncaught redeclaration aborts with the same message', () => {
+      expectSameError(
+        `let x = 1\nlet x = 2\nprint(x)`,
+        `Variable 'x' is already declared in this scope`
+      );
+    });
+
+    it('agrees that a local shadowing a parameter is an error', () => {
+      const out = expectAgreement(`
+        fn f(a) { let a = 2
+          return a }
+        try { print(f(1)) } catch e { print("caught:", e.message) }
+      `);
+      expect(out).toEqual([`caught: Variable 'a' is already declared in this scope`]);
+    });
+
+    it('agrees that redeclaring the loop variable is an error', () => {
+      const out = expectAgreement(`
+        try {
+          for i in 0..2 { let i = 9
+            print(i) }
+        } catch e { print("caught:", e.message) }
+      `);
+      expect(out).toEqual([`caught: Variable 'i' is already declared in this scope`]);
+    });
+
+    it('agrees that redeclaring the catch variable is an error', () => {
+      const out = expectAgreement(`
+        try {
+          try { throw "boom" } catch e { let e = 1
+            print(e) }
+        } catch outer { print("caught:", outer.message) }
+      `);
+      expect(out).toEqual([`caught: Variable 'e' is already declared in this scope`]);
+    });
+
+    it('agrees that duplicate parameters are an error, reported at call time', () => {
+      const out = expectAgreement(`
+        fn dup(a, a) { return a }
+        print("declared")
+        try { print(dup(1, 2)) } catch e { print("caught:", e.message) }
+      `);
+      expect(out).toEqual([
+        'declared',
+        `caught: Variable 'a' is already declared in this scope`,
+      ]);
+    });
+
+    // The other side of the same coin: legitimate rebinding must keep working.
+    it('agrees that shadowing in a nested scope is allowed', () => {
+      const out = expectAgreement(`
+        let z = 1
+        if true { let z = 2
+          print(z) }
+        while z < 2 { let z = 5
+          print(z)
+          break }
+        print(z)
+      `);
+      expect(out).toEqual(['2', '5', '1']);
+    });
+
+    it('agrees that a loop body rebinds its own local every iteration', () => {
+      const out = expectAgreement(`
+        let sum = 0
+        for i in 0..4 {
+          let step = i * 2
+          sum = sum + step
+        }
+        print(sum)
+        let j = 0
+        while j < 3 {
+          let step = j + 1
+          print(step)
+          j = j + 1
+        }
+      `);
+      expect(out).toEqual(['12', '1', '2', '3']);
+    });
+
+    it('agrees that a redeclaration in a branch never taken is never reported', () => {
+      const out = expectAgreement(`
+        if false { let q = 1
+          let q = 2 }
+        print("fine")
+      `);
+      expect(out).toEqual(['fine']);
+    });
+
+    it('agrees that sibling blocks may each declare the same name', () => {
+      const out = expectAgreement(`
+        if true { let s = 1
+          print(s) }
+        if true { let s = 2
+          print(s) }
+      `);
+      expect(out).toEqual(['1', '2']);
+    });
+
+    it('agrees that assignment after declaration is not a redeclaration', () => {
+      const out = expectAgreement(`
+        let v = 1
+        v = 2
+        v += 3
+        print(v)
+      `);
+      expect(out).toEqual(['5']);
+    });
+  });
+
+  describe('detached methods and unbound this (VM bound this implicitly)', () => {
+    const CLS = `
+      class Counter {
+        let n = 0
+        fn init(v) { this.n = v }
+        fn get() { return this.n }
+      }
+    `;
+
+    it('agrees that reading a method yields the method itself', () => {
+      // The VM rendered this as '<unknown>'.
+      const out = expectAgreement(CLS + `
+        let c = new Counter(3)
+        print(c.get)
+      `);
+      expect(out).toEqual(['<fn get>']);
+    });
+
+    it('agrees that calling a detached method fails', () => {
+      // The VM attached the receiver when the property was read, so this worked
+      // there and threw in the interpreter.
+      const out = expectAgreement(CLS + `
+        let c = new Counter(3)
+        let m = c.get
+        try { print(m()) } catch e { print("caught:", e.message) }
+      `);
+      expect(out).toEqual([`caught: Variable 'this' is not defined. Did you mean 'trim'?`]);
+    });
+
+    it('agrees that a normal method call still binds the receiver', () => {
+      const out = expectAgreement(CLS + `
+        let c = new Counter(3)
+        print(c.get())
+        print(c.n)
+      `);
+      expect(out).toEqual(['3', '3']);
+    });
+
+    it('agrees that this outside a method is an undefined variable', () => {
+      // The VM pushed null, so `this` read as a legitimate null.
+      const out = expectAgreement(`
+        try { print(this) } catch e { print("caught:", e.message) }
+        fn plain() { return this }
+        try { print(plain()) } catch e { print("caught:", e.message) }
+      `);
+      expect(out).toEqual([
+        `caught: Variable 'this' is not defined. Did you mean 'trim'?`,
+        `caught: Variable 'this' is not defined. Did you mean 'trim'?`,
+      ]);
+    });
+
+    it('agrees that a function nested in a method still sees this', () => {
+      const out = expectAgreement(`
+        class Holder {
+          let v = 7
+          fn run() { let inner = fn() { return this.v }
+            return inner() }
+        }
+        print(new Holder().run())
+      `);
+      expect(out).toEqual(['7']);
+    });
+
+    it('agrees on how a plain function value prints', () => {
+      const out = expectAgreement(`
+        fn named(x) { return x }
+        let anon = fn(x) { return x }
+        print(named)
+        print(anon)
+      `);
+      expect(out).toEqual(['<fn named>', '<fn <anonymous>>']);
+    });
+
+    it('agrees on the undefined-variable message, hint included', () => {
+      // The VM omitted the "Did you mean?" suggestion entirely.
+      const out = expectAgreement(`
+        try { print(abz) } catch e { print("caught:", e.message) }
+        try { print(zzzzqqqq) } catch e { print("caught:", e.message) }
+      `);
+      expect(out).toEqual([
+        `caught: Variable 'abz' is not defined. Did you mean 'abs'?`,
+        `caught: Variable 'zzzzqqqq' is not defined. Did you forget to declare it with 'let' or 'const'?`,
+      ]);
+    });
+  });
+
+  describe('ternary expressions (previously unreachable dead code)', () => {
+    it('agrees on the basic form', () => {
+      const out = expectAgreement(`
+        print(true ? "yes" : "no")
+        print(false ? "yes" : "no")
+      `);
+      expect(out).toEqual(['yes', 'no']);
+    });
+
+    it('agrees on right-associative chaining', () => {
+      const out = expectAgreement(`
+        fn name(n) { return n == 1 ? "one" : n == 2 ? "two" : "many" }
+        print(name(1), name(2), name(9))
+      `);
+      expect(out).toEqual(['one two many']);
+    });
+
+    it('agrees on TinyLang truthiness in the condition', () => {
+      const out = expectAgreement(`
+        print(0 ? "t" : "f")
+        print("" ? "t" : "f")
+        print(null ? "t" : "f")
+        print([] ? "t" : "f")
+        print(1 ? "t" : "f")
+        print("x" ? "t" : "f")
+      `);
+      // An empty array is falsy in TinyLang, and both engines agree on that.
+      expect(out).toEqual(['f', 'f', 'f', 'f', 't', 't']);
+    });
+
+    it('agrees that only the taken arm is evaluated', () => {
+      const out = expectAgreement(`
+        let calls = []
+        fn note(tag) { push(calls, tag)
+          return tag }
+        print(true ? note("a") : note("b"))
+        print(false ? note("c") : note("d"))
+        print(calls)
+      `);
+      expect(out).toEqual(['a', 'd', '[a, d]']);
+    });
+
+    it('agrees when nested inside other expressions', () => {
+      const out = expectAgreement(`
+        let arr = [10, 20]
+        print(arr[true ? 0 : 1])
+        print({a: true ? 1 : 2, b: false ? 3 : 4})
+        print([true ? 1 : 2, false ? 3 : 4])
+        print("v=" + (5 > 0 ? "pos" : "neg"))
+        fn pick(a, b) { return a > b ? a : b }
+        print(pick(3, 9))
+      `);
+      expect(out).toEqual(['10', '{a: 1, b: 4}', '[1, 4]', 'v=pos', '9']);
+    });
+
+    it('agrees on precedence against assignment, ?? and |>', () => {
+      const out = expectAgreement(`
+        let x = 0
+        x = true ? 7 : 8
+        print(x)
+        let missing = null
+        print(missing ?? 1 ? "t" : "f")
+        fn dbl(v) { return v * 2 }
+        print(3 |> dbl ? "t" : "f")
+      `);
+      expect(out).toEqual(['7', 't', 't']);
+    });
+
+    it('agrees when an arm contains an assignment', () => {
+      const out = expectAgreement(`
+        let y = 0
+        let z = true ? y = 3 : 4
+        print(y, z)
+      `);
+      expect(out).toEqual(['3 3']);
+    });
+
+    it('agrees that ?? and ?. still lex and behave as before', () => {
+      const out = expectAgreement(`
+        let a = null
+        print(a ?? "dflt")
+        let o = {x: 1}
+        print(o?.x)
+        print(a?.x ?? "none")
+      `);
+      expect(out).toEqual(['dflt', '1', 'none']);
+    });
+
+    it('agrees when an arm throws', () => {
+      const out = expectAgreement(`
+        try { print(true ? 1 / 0 : 2) } catch e { print("caught:", e.message) }
+      `);
+      expect(out.length).toBe(1);
+      expect(out[0].startsWith('caught:')).toBe(true);
+    });
+  });
+
+  describe('step limit is uncatchable in both engines', () => {
+    /**
+     * expectAgreement cannot be used here: neither engine returns, both throw.
+     * The two are compared on the class and message of the throw instead, with
+     * an equal budget so the message (which names the budget) is comparable.
+     */
+    const LIMIT = 20_000;
+
+    function runToLimit(
+      source: string,
+      backend: 'interpreter' | 'vm'
+    ): { output: string[]; error: unknown } {
+      const output: string[] = [];
+      const program = new Parser(new Lexer(source).tokenize()).parse();
+      try {
+        if (backend === 'interpreter') {
+          const interpreter = new Interpreter({
+            output: (m) => output.push(m),
+            maxSteps: LIMIT,
+          });
+          const env = interpreter.getGlobalEnvironment();
+          registerStdlib(env, { output: (m) => output.push(m) });
+          interpreter.executeInEnvironment(program, env);
+        } else {
+          const chunk = new Compiler().compile(program);
+          new VM({ output: (m) => output.push(m), maxSteps: LIMIT }).run(chunk);
+        }
+        return { output, error: null };
+      } catch (e) {
+        return { output, error: e };
+      }
+    }
+
+    function expectSameLimitFailure(source: string): void {
+      const a = runToLimit(source, 'interpreter');
+      const b = runToLimit(source, 'vm');
+
+      expect(a.error, 'interpreter must hit the step limit').toBeInstanceOf(
+        StepLimitExceeded
+      );
+      expect(b.error, 'VM must hit the step limit').toBeInstanceOf(StepLimitExceeded);
+      expect((b.error as Error).message, 'same message').toBe(
+        (a.error as Error).message
+      );
+      expect(b.output, 'same output before the limit').toEqual(a.output);
+    }
+
+    it('a catch inside the runaway loop cannot swallow the limit', () => {
+      // The interpreter used to raise a plain RuntimeError here, so the catch
+      // caught it and the loop then spun forever.
+      expectSameLimitFailure(`
+        let i = 0
+        while true {
+          try { i = i + 1 } catch e { print("swallowed") }
+        }
+      `);
+    });
+
+    it('a catch outside the runaway loop cannot swallow the limit either', () => {
+      expectSameLimitFailure(`
+        try {
+          let i = 0
+          while true { i = i + 1 }
+        } catch e { print("outer caught:", e.message) }
+        print("continued")
+      `);
+    });
+
+    it('a runaway loop inside a function is not catchable', () => {
+      expectSameLimitFailure(`
+        fn spin() {
+          let i = 0
+          while true {
+            try { i = i + 1 } catch e { print("swallowed") }
+          }
+          return i
+        }
+        try { print(spin()) } catch e { print("caught:", e.message) }
+      `);
+    });
+
+    it('a runaway nested loop is not catchable', () => {
+      expectSameLimitFailure(`
+        let i = 0
+        while true {
+          let j = 0
+          while j < 10 {
+            try { j = j + 1 } catch e { print("swallowed") }
+          }
+          i = i + 1
+        }
+      `);
+    });
+
+    it('ordinary runtime errors are still catchable in both engines', () => {
+      const out = expectAgreement(`
+        try { let a = [1]
+          print(a[9]) } catch e { print("caught:", e.message) }
+        try { print(1 / 0) } catch e { print("div:", e.message) }
+        print("still running")
+      `);
+      expect(out.length).toBe(3);
+      expect(out[0].startsWith('caught:')).toBe(true);
+      expect(out[2]).toBe('still running');
     });
   });
 });

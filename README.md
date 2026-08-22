@@ -132,6 +132,19 @@ node dist/cli/index.js <command> [options]
 | `bench <file>` | Benchmark execution (interpreted vs compiled) |
 | `ast <file>` | Display the Abstract Syntax Tree for a source file |
 | `profile <file>` | Profile execution with timing and memory statistics |
+| `wasm <file>` | Compile the integer subset to WebAssembly text (`.wat`) |
+
+#### `wasm` and what it will not do
+
+The WASM target covers a deliberately narrow subset: integer functions,
+parameters, locals, `if`/`else`, `while`, direct calls and recursion, arithmetic,
+comparisons, and `and`/`or`. Every value is an `i32`.
+
+A function that uses anything outside that subset is **left out of the module
+entirely** and is not exported, and `tinylang wasm` says which function and why
+and exits non-zero. It will not emit a stand-in for an operation it cannot
+translate: a function that assembles and returns a plausible number while having
+quietly dropped the work it was asked to do is worse than a missing export.
 
 ### Usage Examples
 
@@ -201,6 +214,20 @@ match statusCode {
   when 404 => print("Not Found")
   else => print("Unknown")
 }
+```
+
+### Conditional Expression (Ternary)
+
+`cond ? whenTrue : whenFalse` is an expression, so it can go anywhere a value
+can. Only the taken arm is evaluated. It is right-associative, so chains read
+top to bottom, and it binds looser than every operator except assignment.
+
+```
+let label = score > 90 ? "A" : score > 80 ? "B" : "C"
+
+print(items.length() == 0 ? "empty" : "has items")
+
+let config = {retries: isProd ? 5 : 1}
 ```
 
 ### Classes and Inheritance

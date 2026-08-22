@@ -5,6 +5,39 @@ All notable changes to TinyLang are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Conditional expression: `cond ? whenTrue : whenFalse`. Right-associative, binds
+  looser than every operator except assignment, and only evaluates the taken arm.
+  The AST node and both backends' handling already existed but were unreachable
+  because the lexer rejected a bare `?`.
+
+### Fixed
+
+- **WASM target no longer emits functions with a placeholder in place of real
+  work.** Unsupported constructs were collected into a module-wide warning list
+  and `(i32.const 0)` was substituted for them, so e.g.
+  `fn usesString(name) { return "hello " + name }` produced an export that
+  assembled, validated and returned a number while having dropped the string
+  operation. Such a function is now left out of the module and not exported, with
+  the reason reported per function; `tinylang wasm` exits non-zero.
+- **Bytecode operands that do not fit in 16 bits are rejected** instead of being
+  truncated. A chunk over 64KB silently wrapped its jump targets.
+- **VM arity-checks native builtins.** `abs(-3, 99)` used to succeed there.
+- **The step limit is uncatchable in both engines.** The interpreter raised a
+  plain `RuntimeError`, so a `catch` inside the runaway loop swallowed it and the
+  loop then spun forever. Both engines now raise `StepLimitExceeded` with the
+  same message.
+- **Redeclaration in the same scope is rejected by both engines.** The VM
+  silently overwrote, including over stdlib names.
+- **Reading a method as a property no longer binds the receiver in the VM.**
+  `let m = t.show; m()` worked there and failed in the interpreter.
+- **`this` outside a method is reported** rather than reading as `null` in the VM.
+- **The VM's undefined-variable error includes the "Did you mean?" hint**, and
+  `print` renders a VM closure as `<fn name>` rather than `<unknown>`.
+
 ## [1.1.0] - 2025-08-22
 
 ### Added
