@@ -1,0 +1,2052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TinyLang IDE - Professional Programming Environment</title>
+  <meta name="description" content="TinyLang Web IDE: A professional programming environment with debugger, AST visualizer, bytecode viewer, and integrated toolchain.">
+  <!-- CodeMirror 6 from CDN -->
+  <script type="module">
+    import {EditorView, basicSetup} from 'https://cdn.jsdelivr.net/npm/codemirror@6.65.7/+esm';
+    import {EditorState} from 'https://cdn.jsdelivr.net/npm/@codemirror/state@6.4.1/+esm';
+    import {keymap} from 'https://cdn.jsdelivr.net/npm/@codemirror/view@6.26.3/+esm';
+    import {StreamLanguage} from 'https://cdn.jsdelivr.net/npm/@codemirror/language@6.10.1/+esm';
+    import {oneDark} from 'https://cdn.jsdelivr.net/npm/@codemirror/theme-one-dark@6.1.2/+esm';
+    import {autocompletion} from 'https://cdn.jsdelivr.net/npm/@codemirror/autocomplete@6.16.0/+esm';
+    import {linter as cmLinter, lintGutter} from 'https://cdn.jsdelivr.net/npm/@codemirror/lint@6.8.0/+esm';
+
+    // TinyLang syntax definition for StreamLanguage
+    const tinyLangDef = {
+      startState() { return { inString: false, inComment: false, stringChar: '' }; },
+      token(stream, state) {
+        if (stream.eatSpace()) return null;
+        // Single-line comments
+        if (stream.match('//')) { stream.skipToEnd(); return 'comment'; }
+        // Multi-line comments
+        if (stream.match('/*')) {
+          state.inComment = true;
+          while (!stream.eol()) {
+            if (stream.match('*/')) { state.inComment = false; return 'comment'; }
+            stream.next();
+          }
+          return 'comment';
+        }
+        if (state.inComment) {
+          while (!stream.eol()) {
+            if (stream.match('*/')) { state.inComment = false; return 'comment'; }
+            stream.next();
+          }
+          return 'comment';
+        }
+        // Strings
+        if (stream.match('"') || stream.match("'")) {
+          const ch = stream.current();
+          while (!stream.eol()) {
+            const c = stream.next();
+            if (c === '\\') { stream.next(); continue; }
+            if (c === ch) return 'string';
+          }
+          return 'string';
+        }
+        // Numbers
+        if (stream.match(/^\d+(\.\d+)?/)) return 'number';
+        // Keywords
+        if (stream.match(/^(let|const|fn|return|if|else|while|for|in|break|continue|class|extends|new|this|super|import|from|export|test|expect|match|enum|type|interface|try|catch|throw|async|await|yield|true|false|null)\b/)) return 'keyword';
+        // Built-in functions
+        if (stream.match(/^(print|println|len|push|pop|slice|keys|values|type|toString|toNumber|range|map|filter|reduce|forEach|some|every|find|indexOf|join|split|trim|replace|contains|startsWith|endsWith|abs|floor|ceil|round|sqrt|pow|min|max|random|PI|E|readLine|writeFile|readFile|assert|time)\b/)) return 'builtin';
+        // Operators
+        if (stream.match(/^[+\-*/%=<>!&|^~?:]+/)) return 'operator';
+        // Brackets
+        if (stream.match(/^[(){}\[\],;.]/)) return 'bracket';
+        // Identifiers
+        if (stream.match(/^[a-zA-Z_]\w*/)) return 'variableName';
+        stream.next();
+        return null;
+      }
+    };
+
+    // Completions
+    const tinyLangCompletions = (context) => {
+      const word = context.matchBefore(/\w*/);
+      if (!word || (word.from === word.to && !context.explicit)) return null;
+      return {
+        from: word.from,
+        options: [
+          // Keywords
+          ...'let const fn return if else while for in break continue class extends new this super import from export test expect match enum type interface try catch throw'.split(' ').map(w => ({label: w, type: 'keyword'})),
+          // Built-ins
+          ...'print println len push pop slice keys values type toString toNumber range map filter reduce forEach some every find indexOf join split trim replace contains startsWith endsWith abs floor ceil round sqrt pow min max random PI E readLine writeFile readFile assert time'.split(' ').map(w => ({label: w, type: 'function'})),
+          // Snippets
+          {label: 'fn', type: 'keyword', apply: 'fn name() {\n  \n}', detail: 'function'},
+          {label: 'for', type: 'keyword', apply: 'for (let i = 0; i < 10; i = i + 1) {\n  \n}', detail: 'for loop'},
+          {label: 'class', type: 'keyword', apply: 'class Name {\n  constructor() {\n    \n  }\n}', detail: 'class'},
+          {label: 'test', type: 'keyword', apply: 'test "description" {\n  expect(actual).toBe(expected)\n}', detail: 'test block'},
+        ]
+      };
+    };
+
+    // Store editor reference globally
+    window._cmReady = new Promise((resolve) => {
+      window._initCodeMirror = (container, initialCode) => {
+        const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+        const extensions = [
+          basicSetup,
+          StreamLanguage.define(tinyLangDef),
+          autocompletion({override: [tinyLangCompletions]}),
+          lintGutter(),
+          EditorView.lineWrapping,
+          EditorView.updateListener.of((update) => {
+            if (update.docChanged && window.IDE) {
+              window.IDE.onEditorChange();
+            }
+          }),
+          keymap.of([
+            {key: 'Ctrl-Enter', run: () => { window.IDE && window.IDE.runCode(); return true; }},
+            {key: 'Ctrl-s', run: () => { window.IDE && window.IDE.saveCurrentFile(); return true; }},
+            {key: 'Ctrl-Shift-f', run: () => { window.IDE && window.IDE.formatCode(); return true; }},
+            {key: 'Ctrl-Shift-l', run: () => { window.IDE && window.IDE.lintCode(); return true; }},
+            {key: 'F5', run: () => { window.IDE && window.IDE.startDebug(); return true; }},
+          ]),
+        ];
+        if (isDark) extensions.push(oneDark);
+
+        const state = EditorState.create({
+          doc: initialCode || '',
+          extensions,
+        });
+
+        const view = new EditorView({
+          state,
+          parent: container,
+        });
+
+        window._editorView = view;
+        window._EditorView = EditorView;
+        window._EditorState = EditorState;
+        window._basicSetup = basicSetup;
+        window._StreamLanguage = StreamLanguage;
+        window._tinyLangDef = tinyLangDef;
+        window._oneDark = oneDark;
+        window._autocompletion = autocompletion;
+        window._tinyLangCompletions = tinyLangCompletions;
+        window._lintGutter = lintGutter;
+        window._keymap = keymap;
+        resolve(view);
+        return view;
+      };
+    });
+  </script>
+  <style>
+    :root {
+      --bg-primary: #1e1e2e;
+      --bg-secondary: #181825;
+      --bg-surface: #2a2a3c;
+      --bg-hover: #3a3a4e;
+      --bg-active: #45475a;
+      --text-primary: #cdd6f4;
+      --text-secondary: #a6adc8;
+      --text-muted: #6c7086;
+      --accent: #89b4fa;
+      --accent-hover: #74c7ec;
+      --accent-dim: rgba(137, 180, 250, 0.15);
+      --green: #a6e3a1;
+      --green-dim: rgba(166, 227, 161, 0.15);
+      --red: #f38ba8;
+      --red-dim: rgba(243, 139, 168, 0.15);
+      --yellow: #f9e2af;
+      --yellow-dim: rgba(249, 226, 175, 0.15);
+      --purple: #cba6f7;
+      --peach: #fab387;
+      --border: #3a3a4e;
+      --radius: 6px;
+      --radius-lg: 10px;
+      --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --shadow: 0 2px 8px rgba(0,0,0,0.3);
+      --panel-gap: 4px;
+      --header-height: 44px;
+      --toolbar-height: 36px;
+      --sidebar-width: 220px;
+    }
+
+    [data-theme="light"] {
+      --bg-primary: #ffffff;
+      --bg-secondary: #f5f5f7;
+      --bg-surface: #eaeaef;
+      --bg-hover: #dcdce3;
+      --bg-active: #d0d0d8;
+      --text-primary: #1e1e2e;
+      --text-secondary: #4a4a5a;
+      --text-muted: #8888a0;
+      --accent: #2563eb;
+      --accent-hover: #1d4ed8;
+      --accent-dim: rgba(37, 99, 235, 0.1);
+      --green: #16a34a;
+      --green-dim: rgba(22, 163, 74, 0.1);
+      --red: #dc2626;
+      --red-dim: rgba(220, 38, 38, 0.1);
+      --yellow: #ca8a04;
+      --yellow-dim: rgba(202, 138, 4, 0.1);
+      --purple: #7c3aed;
+      --peach: #ea580c;
+      --border: #d4d4dc;
+      --shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: var(--font-sans);
+      background: var(--bg-secondary);
+      color: var(--text-primary);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* Layout */
+    .app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .header {
+      height: var(--header-height);
+      background: var(--bg-primary);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      gap: 12px;
+      flex-shrink: 0;
+      z-index: 100;
+    }
+
+    .header-brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 14px;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
+    .header-brand svg { width: 22px; height: 22px; }
+
+    .toolbar {
+      height: var(--toolbar-height);
+      background: var(--bg-primary);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      gap: 4px;
+      flex-shrink: 0;
+      overflow-x: auto;
+    }
+
+    .toolbar-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: var(--radius);
+      color: var(--text-secondary);
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.15s;
+    }
+    .toolbar-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .toolbar-btn.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+    .toolbar-btn.run { background: var(--green-dim); color: var(--green); border-color: var(--green); }
+    .toolbar-btn.run:hover { background: var(--green); color: #000; }
+    .toolbar-btn.debug { background: var(--yellow-dim); color: var(--yellow); }
+    .toolbar-btn.debug:hover { background: var(--yellow); color: #000; }
+
+    .toolbar-sep { width: 1px; height: 20px; background: var(--border); margin: 0 4px; }
+
+    .main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* Sidebar */
+    .sidebar {
+      width: var(--sidebar-width);
+      background: var(--bg-primary);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+      transition: width 0.2s;
+    }
+    .sidebar.collapsed { width: 0; border-right: none; }
+
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .sidebar-actions { display: flex; gap: 4px; }
+    .sidebar-actions button {
+      background: none; border: none; color: var(--text-muted);
+      cursor: pointer; padding: 2px; border-radius: 3px; font-size: 14px;
+    }
+    .sidebar-actions button:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+    .file-tree {
+      flex: 1;
+      overflow-y: auto;
+      padding: 4px 0;
+    }
+
+    .file-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px 4px 16px;
+      cursor: pointer;
+      font-size: 12px;
+      color: var(--text-secondary);
+      border-left: 2px solid transparent;
+      transition: all 0.1s;
+    }
+    .file-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .file-item.active { background: var(--accent-dim); border-left-color: var(--accent); color: var(--accent); }
+    .file-item .file-icon { font-size: 13px; opacity: 0.7; }
+    .file-item .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-item .file-actions {
+      display: none; gap: 2px;
+    }
+    .file-item:hover .file-actions { display: flex; }
+    .file-item .file-actions button {
+      background: none; border: none; color: var(--text-muted);
+      cursor: pointer; font-size: 11px; padding: 1px 3px; border-radius: 2px;
+    }
+    .file-item .file-actions button:hover { background: var(--bg-active); color: var(--red); }
+
+    /* Center panels */
+    .center {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .editor-area {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .editor-area .cm-editor {
+      height: 100%;
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+    .editor-area .cm-editor .cm-scroller { overflow: auto; }
+    .editor-area .cm-editor.cm-focused { outline: none; }
+
+    /* Breakpoint gutter */
+    .breakpoint-gutter {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 16px;
+      height: 100%;
+      z-index: 10;
+    }
+    .bp-marker {
+      position: absolute;
+      left: 2px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--red);
+      cursor: pointer;
+    }
+
+    /* Bottom panel */
+    .bottom-panel {
+      height: 220px;
+      background: var(--bg-primary);
+      border-top: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+
+    .panel-tabs {
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      padding: 0 8px;
+      gap: 0;
+      flex-shrink: 0;
+      background: var(--bg-secondary);
+    }
+
+    .panel-tab {
+      padding: 6px 12px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .panel-tab:hover { color: var(--text-primary); }
+    .panel-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .panel-content {
+      flex: 1;
+      overflow: auto;
+      padding: 8px 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+    }
+    .panel-content.hidden { display: none; }
+
+    /* Output styling */
+    .output-line { margin: 1px 0; white-space: pre-wrap; word-break: break-all; }
+    .output-line.error { color: var(--red); }
+    .output-line.warning { color: var(--yellow); }
+    .output-line.success { color: var(--green); }
+    .output-line.info { color: var(--accent); }
+    .output-line.system { color: var(--text-muted); font-style: italic; }
+
+    /* Right panel (debugger/AST) */
+    .right-panel {
+      width: 280px;
+      background: var(--bg-primary);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow: hidden;
+      transition: width 0.2s;
+    }
+    .right-panel.collapsed { width: 0; border-left: none; }
+
+    .right-panel-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-secondary);
+      flex-shrink: 0;
+    }
+    .right-panel-tabs .panel-tab { font-size: 10px; padding: 5px 8px; }
+
+    .right-panel-content {
+      flex: 1;
+      overflow: auto;
+      padding: 8px;
+    }
+    .right-panel-content.hidden { display: none; }
+
+    /* Debugger controls */
+    .debug-controls {
+      display: flex;
+      gap: 4px;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-surface);
+      flex-shrink: 0;
+    }
+    .debug-controls button {
+      padding: 3px 8px;
+      font-size: 11px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--bg-primary);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .debug-controls button:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .debug-controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Variables inspector */
+    .var-section { margin-bottom: 12px; }
+    .var-section-title {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+      padding-bottom: 3px;
+      border-bottom: 1px solid var(--border);
+    }
+    .var-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 2px 4px;
+      font-size: 11px;
+      border-radius: 3px;
+    }
+    .var-item:hover { background: var(--bg-hover); }
+    .var-name { color: var(--purple); font-family: var(--font-mono); }
+    .var-value { color: var(--peach); font-family: var(--font-mono); max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+
+    /* Call stack */
+    .stack-frame {
+      padding: 3px 6px;
+      font-size: 11px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-family: var(--font-mono);
+      color: var(--text-secondary);
+    }
+    .stack-frame:hover { background: var(--bg-hover); }
+    .stack-frame.current { background: var(--accent-dim); color: var(--accent); }
+
+    /* Watch expressions */
+    .watch-input {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 6px;
+    }
+    .watch-input input {
+      flex: 1;
+      padding: 3px 6px;
+      font-size: 11px;
+      font-family: var(--font-mono);
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      color: var(--text-primary);
+      outline: none;
+    }
+    .watch-input input:focus { border-color: var(--accent); }
+    .watch-input button {
+      padding: 3px 8px;
+      font-size: 11px;
+      background: var(--accent-dim);
+      border: 1px solid var(--accent);
+      border-radius: 3px;
+      color: var(--accent);
+      cursor: pointer;
+    }
+    .watch-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 2px 4px;
+      font-size: 11px;
+      border-radius: 3px;
+    }
+    .watch-item:hover { background: var(--bg-hover); }
+    .watch-expr { color: var(--text-secondary); font-family: var(--font-mono); }
+    .watch-val { color: var(--green); font-family: var(--font-mono); max-width: 100px; overflow: hidden; text-overflow: ellipsis; }
+    .watch-remove { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 12px; }
+
+    /* AST tree */
+    .ast-tree { font-family: var(--font-mono); font-size: 11px; }
+    .ast-node {
+      margin-left: 14px;
+      border-left: 1px solid var(--border);
+      padding-left: 8px;
+    }
+    .ast-node-header {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 0;
+      cursor: pointer;
+      color: var(--text-secondary);
+    }
+    .ast-node-header:hover { color: var(--text-primary); }
+    .ast-node-type { color: var(--accent); font-weight: 600; }
+    .ast-node-info { color: var(--text-muted); font-size: 10px; }
+    .ast-node-toggle { font-size: 9px; width: 12px; text-align: center; color: var(--text-muted); }
+    .ast-node-children { display: block; }
+    .ast-node-children.collapsed { display: none; }
+
+    /* Bytecode viewer */
+    .bytecode-line {
+      display: flex;
+      gap: 10px;
+      padding: 1px 0;
+      font-family: var(--font-mono);
+      font-size: 11px;
+    }
+    .bc-offset { color: var(--text-muted); min-width: 40px; }
+    .bc-opcode { color: var(--accent); min-width: 80px; font-weight: 600; }
+    .bc-operand { color: var(--peach); }
+
+    /* Terminal */
+    .terminal-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+    .terminal-output {
+      flex: 1;
+      overflow-y: auto;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 4px 0;
+    }
+    .terminal-input-line {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 0;
+      border-top: 1px solid var(--border);
+    }
+    .terminal-prompt { color: var(--green); font-family: var(--font-mono); font-size: 12px; }
+    .terminal-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      outline: none;
+    }
+
+    /* Profiler */
+    .profiler-stat {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+    }
+    .profiler-label { color: var(--text-secondary); }
+    .profiler-value { color: var(--accent); font-family: var(--font-mono); font-weight: 600; }
+    .profiler-bar {
+      height: 4px;
+      background: var(--bg-surface);
+      border-radius: 2px;
+      margin-top: 4px;
+      overflow: hidden;
+    }
+    .profiler-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 2px;
+      transition: width 0.3s;
+    }
+
+    /* Lint diagnostics */
+    .lint-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 4px 8px;
+      border-radius: var(--radius);
+      margin-bottom: 4px;
+      font-size: 12px;
+    }
+    .lint-item.error { background: var(--red-dim); }
+    .lint-item.warning { background: var(--yellow-dim); }
+    .lint-item.info { background: var(--accent-dim); }
+    .lint-severity { font-weight: 600; font-size: 10px; text-transform: uppercase; }
+    .lint-message { flex: 1; color: var(--text-primary); }
+    .lint-location { color: var(--text-muted); font-family: var(--font-mono); font-size: 11px; }
+
+    /* Share modal */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+    .modal-overlay.hidden { display: none; }
+    .modal {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      min-width: 400px;
+      max-width: 90vw;
+      box-shadow: var(--shadow);
+    }
+    .modal h3 { margin-bottom: 12px; font-size: 15px; }
+    .modal-input {
+      width: 100%;
+      padding: 8px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-primary);
+      outline: none;
+      margin-bottom: 12px;
+    }
+    .modal-input:focus { border-color: var(--accent); }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .modal-btn {
+      padding: 6px 14px;
+      border-radius: var(--radius);
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--bg-surface);
+      color: var(--text-primary);
+      transition: all 0.15s;
+    }
+    .modal-btn:hover { background: var(--bg-hover); }
+    .modal-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .modal-btn.primary:hover { background: var(--accent-hover); }
+
+    /* Resize handle */
+    .resize-h {
+      width: 4px;
+      cursor: col-resize;
+      background: transparent;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+    .resize-h:hover, .resize-h.active { background: var(--accent); }
+    .resize-v {
+      height: 4px;
+      cursor: row-resize;
+      background: transparent;
+      transition: background 0.2s;
+      flex-shrink: 0;
+    }
+    .resize-v:hover, .resize-v.active { background: var(--accent); }
+
+    /* Status bar */
+    .status-bar {
+      height: 22px;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      gap: 16px;
+      font-size: 11px;
+      color: var(--text-muted);
+      flex-shrink: 0;
+    }
+    .status-item { display: flex; align-items: center; gap: 4px; }
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--green);
+    }
+    .status-dot.error { background: var(--red); }
+    .status-dot.warning { background: var(--yellow); }
+
+    /* Mobile responsive */
+    @media (max-width: 768px) {
+      .sidebar { position: fixed; left: 0; top: calc(var(--header-height) + var(--toolbar-height)); bottom: 22px; z-index: 50; box-shadow: var(--shadow); }
+      .sidebar.collapsed { left: -100%; }
+      .right-panel { position: fixed; right: 0; top: calc(var(--header-height) + var(--toolbar-height)); bottom: 22px; z-index: 50; box-shadow: var(--shadow); }
+      .right-panel.collapsed { right: -100%; }
+      .bottom-panel { height: 160px; }
+      .header-brand span.full { display: none; }
+    }
+
+    /* Mobile hamburger */
+    .hamburger {
+      display: none;
+      background: none;
+      border: none;
+      color: var(--text-primary);
+      font-size: 18px;
+      cursor: pointer;
+      padding: 4px;
+    }
+    @media (max-width: 768px) {
+      .hamburger { display: inline-flex; }
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--bg-active); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+    /* Highlight current debug line */
+    .debug-line-highlight {
+      background: var(--yellow-dim) !important;
+      border-left: 3px solid var(--yellow) !important;
+    }
+
+    /* Tab file indicator */
+    .file-tab-bar {
+      display: flex;
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      flex-shrink: 0;
+    }
+    .file-tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      font-size: 11px;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-right: 1px solid var(--border);
+      white-space: nowrap;
+      transition: all 0.1s;
+    }
+    .file-tab:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .file-tab.active { background: var(--bg-primary); color: var(--text-primary); border-bottom: 2px solid var(--accent); }
+    .file-tab .close-tab {
+      font-size: 13px;
+      opacity: 0;
+      color: var(--text-muted);
+      cursor: pointer;
+      border: none;
+      background: none;
+      padding: 0 2px;
+      border-radius: 2px;
+    }
+    .file-tab:hover .close-tab { opacity: 1; }
+    .file-tab .close-tab:hover { background: var(--bg-active); color: var(--red); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <button class="hamburger" onclick="IDE.toggleSidebar()" title="Toggle sidebar">&#9776;</button>
+      <div class="header-brand">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M7 8l-4 4 4 4M17 8l4 4-4 4M14 4l-4 16"/>
+        </svg>
+        <span class="full">TinyLang IDE</span>
+        <span style="display:none" class="short">TL</span>
+      </div>
+      <div style="flex:1"></div>
+      <button class="toolbar-btn" onclick="IDE.toggleTheme()" title="Toggle theme">
+        <span id="theme-icon">&#9790;</span> Theme
+      </button>
+      <button class="toolbar-btn" onclick="IDE.showShareModal()" title="Share code">
+        &#128279; Share
+      </button>
+      <button class="toolbar-btn" onclick="IDE.exportFile()" title="Export file">
+        &#128190; Export
+      </button>
+      <button class="toolbar-btn" onclick="IDE.importFile()" title="Import file">
+        &#128194; Import
+      </button>
+    </header>
+
+    <!-- Toolbar -->
+    <div class="toolbar">
+      <button class="toolbar-btn run" onclick="IDE.runCode()" title="Run (Ctrl+Enter)">&#9654; Run</button>
+      <button class="toolbar-btn debug" onclick="IDE.startDebug()" title="Debug (F5)">&#128030; Debug</button>
+      <div class="toolbar-sep"></div>
+      <button class="toolbar-btn" onclick="IDE.compileCode()" title="Compile to bytecode">&#9881; Compile</button>
+      <button class="toolbar-btn" onclick="IDE.formatCode()" title="Format (Ctrl+Shift+F)">&#10067; Format</button>
+      <button class="toolbar-btn" onclick="IDE.lintCode()" title="Lint (Ctrl+Shift+L)">&#128269; Lint</button>
+      <button class="toolbar-btn" onclick="IDE.runTests()" title="Run tests">&#9989; Test</button>
+      <div class="toolbar-sep"></div>
+      <button class="toolbar-btn" onclick="IDE.togglePanel('right')" title="Toggle right panel">&#9881; Panels</button>
+      <button class="toolbar-btn" onclick="IDE.togglePanel('bottom')" title="Toggle bottom panel">&#9604; Bottom</button>
+    </div>
+
+    <!-- Main Area -->
+    <div class="main">
+      <!-- Sidebar / File Explorer -->
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+          <span>Explorer</span>
+          <div class="sidebar-actions">
+            <button onclick="IDE.createFile()" title="New File">+</button>
+            <button onclick="IDE.createFolder()" title="New Folder">&#128193;</button>
+          </div>
+        </div>
+        <div class="file-tree" id="file-tree"></div>
+      </aside>
+
+      <div class="resize-h" id="resize-sidebar"></div>
+
+      <!-- Center: Editor + Bottom -->
+      <div class="center">
+        <!-- File Tabs -->
+        <div class="file-tab-bar" id="file-tab-bar"></div>
+        <!-- Editor -->
+        <div class="editor-area" id="editor-area"></div>
+
+        <div class="resize-v" id="resize-bottom"></div>
+
+        <!-- Bottom Panel -->
+        <div class="bottom-panel" id="bottom-panel">
+          <div class="panel-tabs">
+            <div class="panel-tab active" data-panel="output" onclick="IDE.switchBottomTab('output')">Output</div>
+            <div class="panel-tab" data-panel="terminal" onclick="IDE.switchBottomTab('terminal')">Terminal</div>
+            <div class="panel-tab" data-panel="lint" onclick="IDE.switchBottomTab('lint')">Problems</div>
+            <div class="panel-tab" data-panel="bytecode" onclick="IDE.switchBottomTab('bytecode')">Bytecode</div>
+            <div class="panel-tab" data-panel="profiler" onclick="IDE.switchBottomTab('profiler')">Profiler</div>
+          </div>
+          <div class="panel-content" id="panel-output"></div>
+          <div class="panel-content hidden" id="panel-terminal">
+            <div class="terminal-container">
+              <div class="terminal-output" id="terminal-output"></div>
+              <div class="terminal-input-line">
+                <span class="terminal-prompt">tinylang&gt;</span>
+                <input class="terminal-input" id="terminal-input" placeholder="Enter command (run, compile, fmt, lint, test)" onkeydown="if(event.key==='Enter')IDE.execTerminal()">
+              </div>
+            </div>
+          </div>
+          <div class="panel-content hidden" id="panel-lint"></div>
+          <div class="panel-content hidden" id="panel-bytecode"></div>
+          <div class="panel-content hidden" id="panel-profiler"></div>
+        </div>
+      </div>
+
+      <div class="resize-h" id="resize-right"></div>
+
+      <!-- Right Panel: Debugger / AST -->
+      <div class="right-panel" id="right-panel">
+        <div class="right-panel-tabs">
+          <div class="panel-tab active" data-panel="debugger" onclick="IDE.switchRightTab('debugger')">Debugger</div>
+          <div class="panel-tab" data-panel="ast" onclick="IDE.switchRightTab('ast')">AST</div>
+          <div class="panel-tab" data-panel="watches" onclick="IDE.switchRightTab('watches')">Watch</div>
+        </div>
+        <div class="debug-controls" id="debug-controls">
+          <button onclick="IDE.debugContinue()" title="Continue (F5)">&#9654;</button>
+          <button onclick="IDE.debugStep()" title="Step Over (F10)">&#8631;</button>
+          <button onclick="IDE.debugStepInto()" title="Step Into (F11)">&#8615;</button>
+          <button onclick="IDE.debugStepOut()" title="Step Out (Shift+F11)">&#8613;</button>
+          <button onclick="IDE.debugStop()" title="Stop">&#9632;</button>
+        </div>
+        <div class="right-panel-content" id="rpanel-debugger">
+          <div class="var-section">
+            <div class="var-section-title">Variables</div>
+            <div id="debug-vars"><span style="color:var(--text-muted);font-size:11px;">Not debugging</span></div>
+          </div>
+          <div class="var-section">
+            <div class="var-section-title">Call Stack</div>
+            <div id="debug-callstack"><span style="color:var(--text-muted);font-size:11px;">No active session</span></div>
+          </div>
+        </div>
+        <div class="right-panel-content hidden" id="rpanel-ast">
+          <div id="ast-view"><span style="color:var(--text-muted);font-size:11px;">Run or parse to see AST</span></div>
+        </div>
+        <div class="right-panel-content hidden" id="rpanel-watches">
+          <div class="watch-input">
+            <input id="watch-expr-input" placeholder="Expression..." onkeydown="if(event.key==='Enter')IDE.addWatch()">
+            <button onclick="IDE.addWatch()">Add</button>
+          </div>
+          <div id="watch-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div class="status-item"><div class="status-dot" id="status-dot"></div><span id="status-text">Ready</span></div>
+      <div class="status-item" id="status-cursor">Ln 1, Col 1</div>
+      <div class="status-item" id="status-file">main.tiny</div>
+      <div style="flex:1"></div>
+      <div class="status-item">TinyLang IDE v1.0</div>
+    </div>
+  </div>
+
+  <!-- Share Modal -->
+  <div class="modal-overlay hidden" id="share-modal">
+    <div class="modal">
+      <h3>Share Code</h3>
+      <p style="font-size:12px;color:var(--text-secondary);margin-bottom:10px;">Copy this URL to share your code:</p>
+      <input class="modal-input" id="share-url" readonly onclick="this.select()">
+      <div class="modal-actions">
+        <button class="modal-btn" onclick="IDE.closeShareModal()">Close</button>
+        <button class="modal-btn primary" onclick="IDE.copyShareUrl()">Copy URL</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden file input for imports -->
+  <input type="file" id="file-import-input" accept=".tiny,.tinyc,.txt" style="display:none" onchange="IDE.handleImport(event)">
+
+  <!-- Engine Bundle Injection Point -->
+  <script>
+    {{ENGINE_BUNDLE}}
+  </script>
+
+  <!-- IDE Application Logic -->
+  <script>
+  (function() {
+    'use strict';
+
+    // Default example code
+    const DEFAULT_CODE = `// Welcome to TinyLang IDE!
+// Try running this program with Ctrl+Enter
+
+fn fibonacci(n) {
+  if (n <= 1) return n
+  return fibonacci(n - 1) + fibonacci(n - 2)
+}
+
+// Print the first 10 Fibonacci numbers
+for (let i = 0; i < 10; i = i + 1) {
+  println("fib(" + toString(i) + ") = " + toString(fibonacci(i)))
+}
+
+// Classes and objects
+class Animal {
+  constructor(name, sound) {
+    this.name = name
+    this.sound = sound
+  }
+
+  speak() {
+    println(this.name + " says " + this.sound + "!")
+  }
+}
+
+let dog = new Animal("Rex", "Woof")
+let cat = new Animal("Whiskers", "Meow")
+dog.speak()
+cat.speak()
+
+// Higher-order functions
+let numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+let evens = filter(numbers, fn(x) { return x % 2 == 0 })
+let doubled = map(evens, fn(x) { return x * 2 })
+println("Doubled evens: " + toString(doubled))
+`;
+
+    // ============ Virtual Filesystem ============
+    class VirtualFS {
+      constructor() {
+        this.files = {};
+        this.load();
+      }
+
+      load() {
+        try {
+          const stored = localStorage.getItem('tinylang-fs');
+          if (stored) {
+            this.files = JSON.parse(stored);
+          } else {
+            this.files = { 'main.tiny': DEFAULT_CODE };
+          }
+        } catch(e) {
+          this.files = { 'main.tiny': DEFAULT_CODE };
+        }
+      }
+
+      save() {
+        try {
+          localStorage.setItem('tinylang-fs', JSON.stringify(this.files));
+        } catch(e) { /* quota exceeded or similar */ }
+      }
+
+      listFiles() {
+        return Object.keys(this.files).sort();
+      }
+
+      readFile(name) {
+        return this.files[name] || '';
+      }
+
+      writeFile(name, content) {
+        this.files[name] = content;
+        this.save();
+      }
+
+      deleteFile(name) {
+        delete this.files[name];
+        this.save();
+      }
+
+      renameFile(oldName, newName) {
+        if (this.files[oldName] !== undefined) {
+          this.files[newName] = this.files[oldName];
+          delete this.files[oldName];
+          this.save();
+        }
+      }
+
+      exists(name) {
+        return name in this.files;
+      }
+    }
+
+    // ============ IDE Controller ============
+    class TinyLangIDE {
+      constructor() {
+        this.fs = new VirtualFS();
+        this.currentFile = 'main.tiny';
+        this.openTabs = ['main.tiny'];
+        this.debugSession = null;
+        this.breakpoints = new Set();
+        this.watches = [];
+        this.lastOutput = [];
+        this.isDebugging = false;
+        this.theme = localStorage.getItem('tinylang-theme') || 'dark';
+
+        // Apply theme
+        if (this.theme === 'light') {
+          document.documentElement.setAttribute('data-theme', 'light');
+        }
+
+        this.init();
+      }
+
+      async init() {
+        // Check URL for shared code
+        this.loadFromUrl();
+
+        // Render file tree
+        this.renderFileTree();
+        this.renderTabs();
+
+        // Initialize CodeMirror
+        const editorArea = document.getElementById('editor-area');
+        const code = this.fs.readFile(this.currentFile);
+
+        // Wait for CodeMirror module to load
+        if (window._initCodeMirror) {
+          this.editor = window._initCodeMirror(editorArea, code);
+        }
+
+        // Set up resize handles
+        this.setupResize();
+
+        // Set up keyboard shortcuts
+        this.setupGlobalShortcuts();
+
+        // Update status
+        this.updateStatus('Ready');
+      }
+
+      // ============ Editor ============
+
+      getCode() {
+        if (window._editorView) {
+          return window._editorView.state.doc.toString();
+        }
+        return '';
+      }
+
+      setCode(code) {
+        if (window._editorView) {
+          const view = window._editorView;
+          view.dispatch({
+            changes: { from: 0, to: view.state.doc.length, insert: code }
+          });
+        }
+      }
+
+      onEditorChange() {
+        // Auto-save
+        const code = this.getCode();
+        this.fs.writeFile(this.currentFile, code);
+      }
+
+      // ============ File Management ============
+
+      renderFileTree() {
+        const tree = document.getElementById('file-tree');
+        const files = this.fs.listFiles();
+        tree.innerHTML = files.map(f => `
+          <div class="file-item ${f === this.currentFile ? 'active' : ''}" onclick="IDE.openFile('${this.escHtml(f)}')">
+            <span class="file-icon">${f.endsWith('.tiny') ? '&#128196;' : '&#128195;'}</span>
+            <span class="file-name">${this.escHtml(f)}</span>
+            <div class="file-actions">
+              <button onclick="event.stopPropagation();IDE.renameFilePrompt('${this.escHtml(f)}')" title="Rename">&#9998;</button>
+              <button onclick="event.stopPropagation();IDE.deleteFilePrompt('${this.escHtml(f)}')" title="Delete">&times;</button>
+            </div>
+          </div>
+        `).join('');
+      }
+
+      renderTabs() {
+        const bar = document.getElementById('file-tab-bar');
+        bar.innerHTML = this.openTabs.map(f => `
+          <div class="file-tab ${f === this.currentFile ? 'active' : ''}" onclick="IDE.openFile('${this.escHtml(f)}')">
+            <span>${this.escHtml(f)}</span>
+            <button class="close-tab" onclick="event.stopPropagation();IDE.closeTab('${this.escHtml(f)}')">&times;</button>
+          </div>
+        `).join('');
+      }
+
+      openFile(name) {
+        if (!this.fs.exists(name)) return;
+        // Save current
+        this.fs.writeFile(this.currentFile, this.getCode());
+        this.currentFile = name;
+        if (!this.openTabs.includes(name)) this.openTabs.push(name);
+        this.setCode(this.fs.readFile(name));
+        this.renderFileTree();
+        this.renderTabs();
+        document.getElementById('status-file').textContent = name;
+      }
+
+      closeTab(name) {
+        const idx = this.openTabs.indexOf(name);
+        if (idx === -1) return;
+        this.openTabs.splice(idx, 1);
+        if (this.openTabs.length === 0) this.openTabs.push('main.tiny');
+        if (this.currentFile === name) {
+          this.openFile(this.openTabs[Math.max(0, idx - 1)]);
+        }
+        this.renderTabs();
+      }
+
+      createFile() {
+        const name = prompt('File name (e.g., utils.tiny):');
+        if (!name || !name.trim()) return;
+        const fileName = name.trim();
+        if (this.fs.exists(fileName)) { alert('File already exists'); return; }
+        this.fs.writeFile(fileName, '// ' + fileName + '\n');
+        this.openFile(fileName);
+      }
+
+      createFolder() {
+        const name = prompt('Create file with folder path (e.g., lib/utils.tiny):');
+        if (!name || !name.trim()) return;
+        const fileName = name.trim();
+        if (this.fs.exists(fileName)) { alert('File already exists'); return; }
+        this.fs.writeFile(fileName, '// ' + fileName + '\n');
+        this.openFile(fileName);
+      }
+
+      renameFilePrompt(oldName) {
+        const newName = prompt('New name:', oldName);
+        if (!newName || newName === oldName) return;
+        this.fs.renameFile(oldName, newName);
+        if (this.currentFile === oldName) this.currentFile = newName;
+        const tabIdx = this.openTabs.indexOf(oldName);
+        if (tabIdx !== -1) this.openTabs[tabIdx] = newName;
+        this.renderFileTree();
+        this.renderTabs();
+        document.getElementById('status-file').textContent = this.currentFile;
+      }
+
+      deleteFilePrompt(name) {
+        if (!confirm('Delete "' + name + '"?')) return;
+        this.fs.deleteFile(name);
+        if (this.fs.listFiles().length === 0) {
+          this.fs.writeFile('main.tiny', DEFAULT_CODE);
+        }
+        this.closeTab(name);
+        if (this.currentFile === name) {
+          this.openFile(this.fs.listFiles()[0]);
+        }
+        this.renderFileTree();
+      }
+
+      saveCurrentFile() {
+        this.fs.writeFile(this.currentFile, this.getCode());
+        this.updateStatus('Saved');
+        this.appendOutput('File saved: ' + this.currentFile, 'system');
+      }
+
+      // ============ Run Code ============
+
+      runCode() {
+        this.clearOutput();
+        this.updateStatus('Running...');
+        const code = this.getCode();
+        const startTime = performance.now();
+
+        try {
+          const tl = new window.TinyLang({
+            output: (msg) => this.appendOutput(msg),
+            maxSteps: 5000000,
+          });
+          tl.run(code);
+          const elapsed = performance.now() - startTime;
+          this.appendOutput(`\n--- Program finished (${elapsed.toFixed(2)}ms) ---`, 'success');
+          this.updateProfiler(elapsed, code);
+          this.updateStatus('Done');
+          this.setStatusDot('');
+        } catch(e) {
+          const elapsed = performance.now() - startTime;
+          this.appendOutput(`Error: ${e.message}`, 'error');
+          this.updateProfiler(elapsed, code);
+          this.updateStatus('Error');
+          this.setStatusDot('error');
+        }
+
+        // Update AST
+        this.updateAST(code);
+      }
+
+      // ============ Compile ============
+
+      compileCode() {
+        this.clearOutput();
+        this.switchBottomTab('bytecode');
+        const code = this.getCode();
+
+        try {
+          const lexer = new window.TinyLangLexer(code);
+          const tokens = lexer.tokenize();
+          const parser = new window.TinyLangParser(tokens);
+          const ast = parser.parse();
+          const compiler = new window.TinyLangCompiler();
+          const chunk = compiler.compile(ast);
+          const disasm = window.TinyLangDisassemble(chunk);
+          this.renderBytecode(disasm);
+          this.appendOutput('Compilation successful', 'success');
+          this.updateStatus('Compiled');
+        } catch(e) {
+          this.appendOutput(`Compile Error: ${e.message}`, 'error');
+          document.getElementById('panel-bytecode').innerHTML = `<span class="output-line error">${this.escHtml(e.message)}</span>`;
+          this.updateStatus('Compile Error');
+          this.setStatusDot('error');
+        }
+      }
+
+      // ============ Format ============
+
+      formatCode() {
+        const code = this.getCode();
+        try {
+          const formatter = new window.TinyLangFormatter();
+          const formatted = formatter.format(code);
+          this.setCode(formatted);
+          this.appendOutput('Code formatted', 'success');
+          this.updateStatus('Formatted');
+        } catch(e) {
+          this.appendOutput(`Format Error: ${e.message}`, 'error');
+          this.updateStatus('Format Error');
+        }
+      }
+
+      // ============ Lint ============
+
+      lintCode() {
+        this.switchBottomTab('lint');
+        const code = this.getCode();
+        try {
+          const linter = new window.TinyLangLinter();
+          const diagnostics = linter.lint(code);
+          this.renderLintResults(diagnostics);
+          if (diagnostics.length === 0) {
+            this.appendOutput('No issues found', 'success');
+            this.updateStatus('No issues');
+            this.setStatusDot('');
+          } else {
+            this.updateStatus(diagnostics.length + ' issue(s)');
+            this.setStatusDot('warning');
+          }
+        } catch(e) {
+          this.appendOutput(`Lint Error: ${e.message}`, 'error');
+          this.updateStatus('Lint Error');
+        }
+      }
+
+      // ============ Test Runner ============
+
+      runTests() {
+        this.clearOutput();
+        this.switchBottomTab('output');
+        const code = this.getCode();
+
+        try {
+          const runner = new window.TinyLangTestRunner();
+          const results = runner.runTests(code);
+
+          let passed = 0, failed = 0;
+          for (const r of results) {
+            if (r.passed) {
+              passed++;
+              this.appendOutput(`  PASS  ${r.name}`, 'success');
+            } else {
+              failed++;
+              this.appendOutput(`  FAIL  ${r.name}`, 'error');
+              if (r.error) this.appendOutput(`         ${r.error}`, 'error');
+            }
+          }
+
+          this.appendOutput('');
+          this.appendOutput(`Tests: ${passed} passed, ${failed} failed, ${results.length} total`, failed > 0 ? 'error' : 'success');
+          this.updateStatus(failed > 0 ? `${failed} test(s) failed` : 'All tests passed');
+          this.setStatusDot(failed > 0 ? 'error' : '');
+        } catch(e) {
+          this.appendOutput(`Test Error: ${e.message}`, 'error');
+          this.updateStatus('Test Error');
+          this.setStatusDot('error');
+        }
+      }
+
+      // ============ Debugger ============
+
+      startDebug() {
+        this.clearOutput();
+        this.isDebugging = true;
+        this.switchRightTab('debugger');
+        const code = this.getCode();
+        this.debugOutput = [];
+
+        try {
+          this.debugSession = new window.TinyLangDebugger(code, {
+            output: (msg) => {
+              this.debugOutput.push(msg);
+              this.appendOutput(msg);
+            }
+          });
+
+          // Add breakpoints
+          for (const line of this.breakpoints) {
+            this.debugSession.addBreakpoint(line);
+          }
+
+          this.debugSession.start();
+          this.updateDebugUI();
+          this.appendOutput('Debugger started. Use controls to step through code.', 'info');
+          this.updateStatus('Debugging (paused)');
+          this.setStatusDot('warning');
+        } catch(e) {
+          this.appendOutput(`Debug Error: ${e.message}`, 'error');
+          this.isDebugging = false;
+          this.updateStatus('Debug Error');
+          this.setStatusDot('error');
+        }
+      }
+
+      debugContinue() {
+        if (!this.debugSession) return;
+        try {
+          this.debugSession.continue();
+          this.updateDebugUI();
+        } catch(e) {
+          this.debugFinished();
+        }
+      }
+
+      debugStep() {
+        if (!this.debugSession) return;
+        try {
+          this.debugSession.step();
+          this.updateDebugUI();
+        } catch(e) {
+          this.debugFinished();
+        }
+      }
+
+      debugStepInto() {
+        if (!this.debugSession) return;
+        try {
+          this.debugSession.stepInto();
+          this.updateDebugUI();
+        } catch(e) {
+          this.debugFinished();
+        }
+      }
+
+      debugStepOut() {
+        if (!this.debugSession) return;
+        try {
+          this.debugSession.stepOut();
+          this.updateDebugUI();
+        } catch(e) {
+          this.debugFinished();
+        }
+      }
+
+      debugStop() {
+        if (this.debugSession) {
+          this.debugSession.stop();
+        }
+        this.debugFinished();
+      }
+
+      debugFinished() {
+        this.isDebugging = false;
+        this.debugSession = null;
+        document.getElementById('debug-vars').innerHTML = '<span style="color:var(--text-muted);font-size:11px;">Not debugging</span>';
+        document.getElementById('debug-callstack').innerHTML = '<span style="color:var(--text-muted);font-size:11px;">No active session</span>';
+        this.appendOutput('\n--- Debug session ended ---', 'system');
+        this.updateStatus('Ready');
+        this.setStatusDot('');
+      }
+
+      updateDebugUI() {
+        if (!this.debugSession) return;
+        const state = this.debugSession.getState();
+
+        if (state === 'stopped' || state === 'finished') {
+          this.debugFinished();
+          return;
+        }
+
+        // Variables
+        const locals = this.debugSession.getLocals();
+        const varsEl = document.getElementById('debug-vars');
+        if (locals && locals.size > 0) {
+          let html = '';
+          locals.forEach((value, name) => {
+            const valStr = this.stringifyValue(value);
+            html += `<div class="var-item"><span class="var-name">${this.escHtml(name)}</span><span class="var-value">${this.escHtml(valStr)}</span></div>`;
+          });
+          varsEl.innerHTML = html;
+        } else {
+          varsEl.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">No variables in scope</span>';
+        }
+
+        // Call stack
+        const stack = this.debugSession.getCallStack();
+        const stackEl = document.getElementById('debug-callstack');
+        if (stack && stack.length > 0) {
+          stackEl.innerHTML = stack.map((frame, i) => 
+            `<div class="stack-frame ${i === stack.length - 1 ? 'current' : ''}">${this.escHtml(frame.name || '<main>')} :${frame.line || '?'}</div>`
+          ).join('');
+        } else {
+          stackEl.innerHTML = '<div class="stack-frame current">&lt;main&gt;</div>';
+        }
+
+        // Update watches
+        this.updateWatches();
+
+        // Highlight current line
+        const line = this.debugSession.getCurrentLine();
+        if (line > 0) {
+          this.updateStatus(`Debugging (paused at line ${line})`);
+        }
+      }
+
+      toggleBreakpoint(line) {
+        if (this.breakpoints.has(line)) {
+          this.breakpoints.delete(line);
+        } else {
+          this.breakpoints.add(line);
+        }
+        if (this.debugSession) {
+          // Re-sync breakpoints with session
+          const bps = this.debugSession.listBreakpoints();
+          bps.forEach(bp => this.debugSession.removeBreakpoint(bp.id));
+          for (const l of this.breakpoints) {
+            this.debugSession.addBreakpoint(l);
+          }
+        }
+      }
+
+      // ============ Watch Expressions ============
+
+      addWatch() {
+        const input = document.getElementById('watch-expr-input');
+        const expr = input.value.trim();
+        if (!expr) return;
+        this.watches.push(expr);
+        input.value = '';
+        this.updateWatches();
+      }
+
+      removeWatch(idx) {
+        this.watches.splice(idx, 1);
+        this.updateWatches();
+      }
+
+      updateWatches() {
+        const list = document.getElementById('watch-list');
+        if (this.watches.length === 0) {
+          list.innerHTML = '<span style="color:var(--text-muted);font-size:11px;">No watch expressions</span>';
+          return;
+        }
+        list.innerHTML = this.watches.map((expr, idx) => {
+          let val = '-';
+          if (this.debugSession && this.debugSession.getState() === 'paused') {
+            try {
+              val = this.debugSession.evaluateExpression(expr);
+            } catch(e) {
+              val = '<error>';
+            }
+          }
+          return `<div class="watch-item">
+            <span class="watch-expr">${this.escHtml(expr)}</span>
+            <span class="watch-val">${this.escHtml(val)}</span>
+            <button class="watch-remove" onclick="IDE.removeWatch(${idx})">&times;</button>
+          </div>`;
+        }).join('');
+      }
+
+      // ============ AST Visualizer ============
+
+      updateAST(code) {
+        try {
+          const lexer = new window.TinyLangLexer(code);
+          const tokens = lexer.tokenize();
+          const parser = new window.TinyLangParser(tokens);
+          const ast = parser.parse();
+          const astEl = document.getElementById('ast-view');
+          astEl.innerHTML = this.renderASTNode(ast, 0);
+        } catch(e) {
+          document.getElementById('ast-view').innerHTML = `<span class="output-line error">Parse error: ${this.escHtml(e.message)}</span>`;
+        }
+      }
+
+      renderASTNode(node, depth) {
+        if (!node || typeof node !== 'object') return '';
+        if (depth > 15) return '<span class="ast-node-info">...</span>';
+
+        const type = node.type || node.kind || Object.keys(node).find(k => k === 'type') || 'Node';
+        const id = 'ast-' + Math.random().toString(36).substr(2, 6);
+
+        let info = '';
+        if (node.name) info = node.name;
+        else if (node.value !== undefined && typeof node.value !== 'object') info = JSON.stringify(node.value);
+        else if (node.operator) info = node.operator;
+
+        let children = '';
+        const childKeys = Object.keys(node).filter(k => 
+          k !== 'type' && k !== 'kind' && k !== 'position' && k !== 'loc' &&
+          (Array.isArray(node[k]) || (typeof node[k] === 'object' && node[k] !== null && node[k].type))
+        );
+
+        for (const key of childKeys) {
+          const child = node[key];
+          if (Array.isArray(child)) {
+            for (let i = 0; i < Math.min(child.length, 50); i++) {
+              if (child[i] && typeof child[i] === 'object') {
+                children += this.renderASTNode(child[i], depth + 1);
+              }
+            }
+          } else if (child && typeof child === 'object') {
+            children += this.renderASTNode(child, depth + 1);
+          }
+        }
+
+        const hasChildren = children.length > 0;
+        return `<div class="ast-node">
+          <div class="ast-node-header" onclick="document.getElementById('${id}').classList.toggle('collapsed')">
+            <span class="ast-node-toggle">${hasChildren ? '&#9660;' : '&#8226;'}</span>
+            <span class="ast-node-type">${this.escHtml(type)}</span>
+            ${info ? `<span class="ast-node-info">${this.escHtml(String(info))}</span>` : ''}
+          </div>
+          ${hasChildren ? `<div class="ast-node-children" id="${id}">${children}</div>` : ''}
+        </div>`;
+      }
+
+      // ============ Bytecode Viewer ============
+
+      renderBytecode(disasm) {
+        const el = document.getElementById('panel-bytecode');
+        const lines = disasm.split('\n');
+        el.innerHTML = lines.map(line => {
+          const match = line.match(/^(\s*\d+)\s+(\w+)\s*(.*)?$/);
+          if (match) {
+            return `<div class="bytecode-line"><span class="bc-offset">${this.escHtml(match[1])}</span><span class="bc-opcode">${this.escHtml(match[2])}</span><span class="bc-operand">${this.escHtml(match[3] || '')}</span></div>`;
+          }
+          return `<div class="bytecode-line"><span style="color:var(--text-secondary)">${this.escHtml(line)}</span></div>`;
+        }).join('');
+      }
+
+      // ============ Profiler ============
+
+      updateProfiler(elapsed, code) {
+        const el = document.getElementById('panel-profiler');
+        const lines = code.split('\n').length;
+        const chars = code.length;
+        const maxBar = Math.min(elapsed / 1000 * 100, 100);
+
+        el.innerHTML = `
+          <div class="profiler-stat"><span class="profiler-label">Execution Time</span><span class="profiler-value">${elapsed.toFixed(2)} ms</span></div>
+          <div class="profiler-bar"><div class="profiler-bar-fill" style="width:${maxBar}%"></div></div>
+          <div class="profiler-stat"><span class="profiler-label">Source Lines</span><span class="profiler-value">${lines}</span></div>
+          <div class="profiler-stat"><span class="profiler-label">Source Characters</span><span class="profiler-value">${chars}</span></div>
+          <div class="profiler-stat"><span class="profiler-label">Throughput</span><span class="profiler-value">${elapsed > 0 ? (lines / elapsed * 1000).toFixed(0) : '-'} lines/s</span></div>
+          <div class="profiler-stat"><span class="profiler-label">Speed Rating</span><span class="profiler-value">${elapsed < 10 ? 'Excellent' : elapsed < 100 ? 'Good' : elapsed < 500 ? 'Average' : 'Slow'}</span></div>
+        `;
+      }
+
+      // ============ Lint Results ============
+
+      renderLintResults(diagnostics) {
+        const el = document.getElementById('panel-lint');
+        if (diagnostics.length === 0) {
+          el.innerHTML = '<span style="color:var(--green);font-size:12px;">&#9989; No problems found</span>';
+          return;
+        }
+        el.innerHTML = diagnostics.map(d => {
+          const severity = d.severity || 'warning';
+          const line = d.line || d.position?.line || '?';
+          const col = d.column || d.position?.column || '?';
+          return `<div class="lint-item ${severity}">
+            <span class="lint-severity" style="color:var(--${severity === 'error' ? 'red' : severity === 'warning' ? 'yellow' : 'accent'})">${severity}</span>
+            <span class="lint-message">${this.escHtml(d.message)}</span>
+            <span class="lint-location">Ln ${line}, Col ${col}</span>
+          </div>`;
+        }).join('');
+      }
+
+      // ============ Terminal ============
+
+      execTerminal() {
+        const input = document.getElementById('terminal-input');
+        const cmd = input.value.trim();
+        input.value = '';
+        if (!cmd) return;
+
+        const output = document.getElementById('terminal-output');
+        output.innerHTML += `<div class="output-line info">$ tinylang ${this.escHtml(cmd)}</div>`;
+
+        const parts = cmd.split(/\s+/);
+        const command = parts[0];
+        const code = this.getCode();
+
+        try {
+          switch (command) {
+            case 'run':
+              const tl = new window.TinyLang({
+                output: (msg) => { output.innerHTML += `<div class="output-line">${this.escHtml(msg)}</div>`; },
+                maxSteps: 5000000,
+              });
+              tl.run(code);
+              output.innerHTML += `<div class="output-line success">Program finished</div>`;
+              break;
+
+            case 'compile':
+              const lexer = new window.TinyLangLexer(code);
+              const tokens = lexer.tokenize();
+              const parser = new window.TinyLangParser(tokens);
+              const ast = parser.parse();
+              const compiler = new window.TinyLangCompiler();
+              const chunk = compiler.compile(ast);
+              const disasm = window.TinyLangDisassemble(chunk);
+              output.innerHTML += `<div class="output-line success">Compiled successfully</div>`;
+              output.innerHTML += `<div class="output-line">${this.escHtml(disasm).replace(/\n/g, '<br>')}</div>`;
+              break;
+
+            case 'fmt':
+            case 'format':
+              const formatter = new window.TinyLangFormatter();
+              const formatted = formatter.format(code);
+              this.setCode(formatted);
+              output.innerHTML += `<div class="output-line success">Code formatted</div>`;
+              break;
+
+            case 'lint':
+              const linter = new window.TinyLangLinter();
+              const diags = linter.lint(code);
+              if (diags.length === 0) {
+                output.innerHTML += `<div class="output-line success">No issues found</div>`;
+              } else {
+                diags.forEach(d => {
+                  output.innerHTML += `<div class="output-line warning">[${d.severity}] ${this.escHtml(d.message)} (line ${d.line || '?'})</div>`;
+                });
+              }
+              break;
+
+            case 'test':
+              const runner = new window.TinyLangTestRunner();
+              const results = runner.runTests(code);
+              results.forEach(r => {
+                output.innerHTML += `<div class="output-line ${r.passed ? 'success' : 'error'}">${r.passed ? 'PASS' : 'FAIL'} ${this.escHtml(r.name)}</div>`;
+              });
+              break;
+
+            case 'clear':
+              output.innerHTML = '';
+              break;
+
+            case 'help':
+              output.innerHTML += `<div class="output-line info">Available commands: run, compile, fmt, lint, test, clear, help</div>`;
+              break;
+
+            default:
+              output.innerHTML += `<div class="output-line error">Unknown command: ${this.escHtml(command)}. Type 'help' for available commands.</div>`;
+          }
+        } catch(e) {
+          output.innerHTML += `<div class="output-line error">Error: ${this.escHtml(e.message)}</div>`;
+        }
+
+        output.scrollTop = output.scrollHeight;
+      }
+
+      // ============ Share ============
+
+      showShareModal() {
+        const code = this.getCode();
+        const encoded = btoa(unescape(encodeURIComponent(code)));
+        const url = window.location.origin + window.location.pathname + '?code=' + encoded;
+        document.getElementById('share-url').value = url;
+        document.getElementById('share-modal').classList.remove('hidden');
+      }
+
+      closeShareModal() {
+        document.getElementById('share-modal').classList.add('hidden');
+      }
+
+      copyShareUrl() {
+        const input = document.getElementById('share-url');
+        input.select();
+        try {
+          navigator.clipboard.writeText(input.value);
+          this.appendOutput('URL copied to clipboard', 'success');
+        } catch(e) {
+          document.execCommand('copy');
+        }
+        this.closeShareModal();
+      }
+
+      loadFromUrl() {
+        const params = new URLSearchParams(window.location.search);
+        const encoded = params.get('code');
+        if (encoded) {
+          try {
+            const code = decodeURIComponent(escape(atob(encoded)));
+            this.fs.writeFile('main.tiny', code);
+            // Clean URL
+            window.history.replaceState({}, '', window.location.pathname);
+          } catch(e) { /* ignore invalid encoding */ }
+        }
+      }
+
+      // ============ Import/Export ============
+
+      exportFile() {
+        const code = this.getCode();
+        const blob = new Blob([code], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = this.currentFile;
+        a.click();
+        URL.revokeObjectURL(url);
+        this.appendOutput('File exported: ' + this.currentFile, 'system');
+      }
+
+      importFile() {
+        document.getElementById('file-import-input').click();
+      }
+
+      handleImport(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const content = e.target.result;
+          const name = file.name;
+          this.fs.writeFile(name, content);
+          this.openFile(name);
+          this.appendOutput('File imported: ' + name, 'success');
+        };
+        reader.readAsText(file);
+        event.target.value = '';
+      }
+
+      // ============ Theme ============
+
+      toggleTheme() {
+        this.theme = this.theme === 'dark' ? 'light' : 'dark';
+        localStorage.setItem('tinylang-theme', this.theme);
+        if (this.theme === 'light') {
+          document.documentElement.setAttribute('data-theme', 'light');
+        } else {
+          document.documentElement.removeAttribute('data-theme');
+        }
+        document.getElementById('theme-icon').textContent = this.theme === 'dark' ? '\u263E' : '\u2600';
+        // Recreate editor with proper theme
+        this.recreateEditor();
+      }
+
+      async recreateEditor() {
+        const code = this.getCode();
+        const container = document.getElementById('editor-area');
+        container.innerHTML = '';
+        if (window._initCodeMirror) {
+          // Re-initialize with updated theme by reloading the page approach
+          // Instead we rebuild the editor in place
+          const isDark = this.theme === 'dark';
+          const extensions = [
+            window._basicSetup,
+            window._StreamLanguage.define(window._tinyLangDef),
+            window._autocompletion({override: [window._tinyLangCompletions]}),
+            window._lintGutter(),
+            window._EditorView.lineWrapping,
+            window._EditorView.updateListener.of((update) => {
+              if (update.docChanged && window.IDE) {
+                window.IDE.onEditorChange();
+              }
+            }),
+            window._keymap.of([
+              {key: 'Ctrl-Enter', run: () => { window.IDE && window.IDE.runCode(); return true; }},
+              {key: 'Ctrl-s', run: () => { window.IDE && window.IDE.saveCurrentFile(); return true; }},
+              {key: 'Ctrl-Shift-f', run: () => { window.IDE && window.IDE.formatCode(); return true; }},
+              {key: 'Ctrl-Shift-l', run: () => { window.IDE && window.IDE.lintCode(); return true; }},
+              {key: 'F5', run: () => { window.IDE && window.IDE.startDebug(); return true; }},
+            ]),
+          ];
+          if (isDark) extensions.push(window._oneDark);
+
+          const state = window._EditorState.create({ doc: code, extensions });
+          window._editorView = new window._EditorView({ state, parent: container });
+        }
+      }
+
+      // ============ Panel Toggles ============
+
+      togglePanel(which) {
+        if (which === 'right') {
+          document.getElementById('right-panel').classList.toggle('collapsed');
+        } else if (which === 'bottom') {
+          const bp = document.getElementById('bottom-panel');
+          bp.style.display = bp.style.display === 'none' ? '' : 'none';
+        }
+      }
+
+      toggleSidebar() {
+        document.getElementById('sidebar').classList.toggle('collapsed');
+      }
+
+      switchBottomTab(name) {
+        document.querySelectorAll('.bottom-panel .panel-tab').forEach(t => t.classList.toggle('active', t.dataset.panel === name));
+        document.querySelectorAll('.bottom-panel .panel-content').forEach(p => p.classList.toggle('hidden', p.id !== 'panel-' + name));
+      }
+
+      switchRightTab(name) {
+        document.querySelectorAll('.right-panel-tabs .panel-tab').forEach(t => t.classList.toggle('active', t.dataset.panel === name));
+        document.querySelectorAll('.right-panel-content').forEach(p => p.classList.toggle('hidden', p.id !== 'rpanel-' + name));
+      }
+
+      // ============ Resize Handling ============
+
+      setupResize() {
+        this.setupResizeHandle('resize-sidebar', 'sidebar', 'width', 120, 400);
+        this.setupResizeHandle('resize-right', 'right-panel', 'width', 150, 500, true);
+        this.setupResizeV('resize-bottom', 'bottom-panel', 80, 400);
+      }
+
+      setupResizeHandle(handleId, panelId, prop, min, max, invert) {
+        const handle = document.getElementById(handleId);
+        const panel = document.getElementById(panelId);
+        if (!handle || !panel) return;
+
+        let startX, startW;
+        const onMove = (e) => {
+          const dx = invert ? startX - e.clientX : e.clientX - startX;
+          const newW = Math.min(max, Math.max(min, startW + dx));
+          panel.style[prop] = newW + 'px';
+          handle.classList.add('active');
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          handle.classList.remove('active');
+        };
+        handle.addEventListener('mousedown', (e) => {
+          startX = e.clientX;
+          startW = panel.getBoundingClientRect().width;
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+      }
+
+      setupResizeV(handleId, panelId, min, max) {
+        const handle = document.getElementById(handleId);
+        const panel = document.getElementById(panelId);
+        if (!handle || !panel) return;
+
+        let startY, startH;
+        const onMove = (e) => {
+          const dy = startY - e.clientY;
+          const newH = Math.min(max, Math.max(min, startH + dy));
+          panel.style.height = newH + 'px';
+          handle.classList.add('active');
+        };
+        const onUp = () => {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+          handle.classList.remove('active');
+        };
+        handle.addEventListener('mousedown', (e) => {
+          startY = e.clientY;
+          startH = panel.getBoundingClientRect().height;
+          document.addEventListener('mousemove', onMove);
+          document.addEventListener('mouseup', onUp);
+        });
+      }
+
+      // ============ Global Shortcuts ============
+
+      setupGlobalShortcuts() {
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'F5') {
+            e.preventDefault();
+            if (this.isDebugging) this.debugContinue();
+            else this.startDebug();
+          }
+          if (e.key === 'F10' && this.isDebugging) { e.preventDefault(); this.debugStep(); }
+          if (e.key === 'F11' && this.isDebugging) {
+            e.preventDefault();
+            if (e.shiftKey) this.debugStepOut();
+            else this.debugStepInto();
+          }
+        });
+      }
+
+      // ============ Output ============
+
+      clearOutput() {
+        document.getElementById('panel-output').innerHTML = '';
+        this.lastOutput = [];
+      }
+
+      appendOutput(msg, cls) {
+        const el = document.getElementById('panel-output');
+        const line = document.createElement('div');
+        line.className = 'output-line' + (cls ? ' ' + cls : '');
+        line.textContent = msg;
+        el.appendChild(line);
+        el.scrollTop = el.scrollHeight;
+        this.lastOutput.push(msg);
+      }
+
+      // ============ Status ============
+
+      updateStatus(text) {
+        document.getElementById('status-text').textContent = text;
+      }
+
+      setStatusDot(type) {
+        const dot = document.getElementById('status-dot');
+        dot.className = 'status-dot' + (type ? ' ' + type : '');
+      }
+
+      // ============ Helpers ============
+
+      escHtml(str) {
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+      }
+
+      stringifyValue(val) {
+        if (val === null || val === undefined) return 'null';
+        if (typeof val === 'object') {
+          if (val.type === 'number') return String(val.value);
+          if (val.type === 'string') return '"' + val.value + '"';
+          if (val.type === 'boolean') return String(val.value);
+          if (val.type === 'null') return 'null';
+          if (val.type === 'array') return '[...]';
+          if (val.type === 'object') return '{...}';
+          if (val.type === 'function') return 'fn(...)';
+          return JSON.stringify(val).substring(0, 50);
+        }
+        return String(val);
+      }
+    }
+
+    // Initialize IDE
+    window.IDE = new TinyLangIDE();
+  })();
+  </script>
+</body>
+</html>

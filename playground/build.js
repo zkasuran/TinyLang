@@ -31,9 +31,9 @@ async function build() {
     define: {
       'process.env.NODE_ENV': '"production"',
       'process.argv': '[]',
-      'process.exit': '(function(){})',
-      'process.stdout': '({write:function(){}})',
-      'process.stderr': '({write:function(){}})',
+    },
+    banner: {
+      js: 'var process = {env:{NODE_ENV:"production"},argv:[],exit:function(){},stdout:{write:function(){}},stderr:{write:function(){}}};',
     },
     external: ['fs', 'path', 'readline-sync', 'readline', 'child_process'],
   });
