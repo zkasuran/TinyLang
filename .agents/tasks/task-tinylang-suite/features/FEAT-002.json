@@ -2,7 +2,7 @@
   "id": "FEAT-002",
   "type": "feat",
   "description": "Interactive Debugger with breakpoints, stepping, variable inspection, and watch expressions. Works from CLI via tinylang debug command.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create src/debugger/debugger.ts - Debugger class that wraps the tree-walk interpreter with debugging hooks. Add breakpoint management (set/remove/list by line number, conditional breakpoints with expressions). Implement stepping modes: step-over (execute next statement), step-into (enter function calls), step-out (run until current function returns). Track call stack with frame info (function name, line, local variables).",
     "Create src/debugger/inspector.ts - Variable inspection at any scope. Display all variables in current scope and parent scopes. Support watch expressions (evaluate arbitrary expressions in current context). Format output with colorized display showing variable names, types, and values.",
@@ -25,5 +25,5 @@
     "npx vitest run"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Debugger uses replay-and-pause architecture: since the interpreter is synchronous, pausing is implemented by throwing a DebugPauseSignal. Resuming re-executes from the beginning with output suppressed for already-completed statements. The interpreter's debugHook is an optional property (stmt, env, callStack) => DebugAction that fires before each statement in executeStatements(). Call stack is tracked by push/pop in callFunction(). The Environment's internal variables Map is accessed via type assertion in the inspector (getLocalsFromEnv). All 223 original tests plus 43 new debugger tests pass (266 total)."
 }
