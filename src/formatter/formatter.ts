@@ -865,9 +865,96 @@ export class Formatter {
   }
 
   private formatCallExpression(expr: CallExpression): string {
+    // A fluent chain of two or more calls is the one call shape worth breaking
+    // across lines, and it gets the same width-aware treatment as an array or
+    // object literal. Everything else renders flat, however long it is.
+    const chain = this.methodChain(expr);
+    if (chain !== null) {
+      return this.formatMethodChain(chain.receiver, chain.links);
+    }
+
     const callee = this.formatExpression(expr.callee, Prec.Postfix);
     const args = expr.args.map(a => this.formatExpression(a)).join(', ');
     return `${callee}(${args})`;
+  }
+
+  /**
+   * Decompose a fluent method chain into its receiver and its `.method(...)`
+   * links, or return null if this is not a chain worth breaking.
+   *
+   * A chain is left-nested, so it is collected from the outside in: `a.b().c()`
+   * is `Call{callee: Member{object: Call{callee: Member{object: a}}}}`. Peeling
+   * stops at the first node that is not a call through a `.` member, and
+   * whatever is left is the receiver. That is what distinguishes a chain from
+   * plain member access: `a.b.c` is a MemberExpression, never reaches here, and
+   * so is left alone, while `a.b().c` peels one link and keeps `a.b().c` whole.
+   *
+   * Peeling deliberately also stops at an `OptionalMemberExpression` callee. The
+   * parser treats a newline as a chain continuation only when the next
+   * significant token is a lone `.` (`nextSignificantIsDot`), so a line may
+   * never *begin* with `?.` - `items\n  ?.filter(f)` is a parse error. Folding
+   * the `?.` step into the receiver keeps it on the first line, where it parses,
+   * and still allows the `.` links above it to break: `a?.b().c().d()` breaks
+   * after `a?.b()`.
+   *
+   * Returns null for a chain of fewer than two links, so a single call is never
+   * broken: there is no natural break point in `foo.bar(1)`, and splitting a
+   * long one at an arbitrary place would be worse than leaving it long.
+   */
+  private methodChain(
+    expr: CallExpression
+  ): { receiver: Expression; links: CallExpression[] } | null {
+    const links: CallExpression[] = [];
+    let node: Expression = expr;
+    while (node.type === 'CallExpression' && node.callee.type === 'MemberExpression') {
+      links.push(node);
+      node = node.callee.object;
+    }
+
+    if (links.length < 2) return null;
+    return { receiver: node, links: links.reverse() };
+  }
+
+  /**
+   * Render a chain flat, and fall back to one call per line when it does not
+   * fit - the same single-line-first shape as `formatArrayLiteral`.
+   *
+   * The receiver stays on the first line and each link is indented one level
+   * beyond the statement. The first line carries no indent of its own: the
+   * caller has already emitted the statement prefix (`let x = `), exactly as it
+   * has for a multi-line array literal.
+   *
+   * No newline is ever emitted before anything but a `.`, which is what keeps
+   * the broken form parseable in every position - as a call argument, in an `if`
+   * condition or after `return` - because the enclosing `)` or `{` follows the
+   * final link on the same line.
+   */
+  private formatMethodChain(receiver: Expression, links: CallExpression[]): string {
+    const head = this.formatExpression(receiver, Prec.Postfix);
+    const singleLine = head + links.map(link => this.formatChainLink(link)).join('');
+
+    if (
+      !singleLine.includes('\n') &&
+      this.currentLineWidth(singleLine) <= this.options.maxLineWidth
+    ) {
+      return singleLine;
+    }
+
+    // Multi-line: receiver, then one `.method(...)` per continuation line.
+    const lines: string[] = [head];
+    this.indentLevel++;
+    for (const link of links) {
+      lines.push(this.indentStr() + this.formatChainLink(link));
+    }
+    this.indentLevel--;
+    return lines.join('\n');
+  }
+
+  /** One `.method(...)` step of a chain, without its leading indentation. */
+  private formatChainLink(link: CallExpression): string {
+    const callee = link.callee as MemberExpression;
+    const args = link.args.map(a => this.formatExpression(a)).join(', ');
+    return `.${callee.property}(${args})`;
   }
 
   private formatMemberExpression(expr: MemberExpression): string {

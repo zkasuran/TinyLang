@@ -329,6 +329,222 @@ test "error throwing works" {
     );
   });
 
+  describe('fluent method chains (regression: hand-broken chains were collapsed)', () => {
+    // The formatter was width-blind for chains, so it joined a deliberately
+    // broken chain onto one line however long the result was. In
+    // examples/09-functional.tiny that produced a 98-column line. The parser has
+    // explicit support for this shape (a NEWLINE before `.` continues the
+    // expression), so collapsing it both hurt the examples and threw away an
+    // authoring choice the language went out of its way to allow.
+    //
+    // `expectPreserved` already asserts same-AST, same-comments and idempotency
+    // for every case below, which covers the round-trip requirement; the extra
+    // assertions pin the exact layout and the runtime behaviour.
+
+    /** Long enough that the flat form is over the 80-column default. */
+    const longChain =
+      'let names = people.filter((p) => p.city == "NYC").filter((p) => p.age > 28).map((p) => p.name)';
+
+    it('leaves a chain that fits on one line', () => {
+      expect(expectPreserved('let x = a.b(1).c(2)')).toBe('let x = a.b(1).c(2)\n');
+    });
+
+    it('joins a chain that was broken by hand but fits', () => {
+      // The collapsing direction is still correct when the result fits.
+      expect(expectPreserved('let x = a\n  .b(1)\n  .c(2)')).toBe('let x = a.b(1).c(2)\n');
+    });
+
+    it('breaks a chain that exceeds maxLineWidth, one call per line', () => {
+      expect(expectPreserved(longChain)).toBe(
+        'let names = people\n' +
+          '  .filter((p) => p.city == "NYC")\n' +
+          '  .filter((p) => p.age > 28)\n' +
+          '  .map((p) => p.name)\n'
+      );
+    });
+
+    it('is idempotent on the broken form and round-trips to the same AST', () => {
+      // The property most likely to break: the broken form must be a fixed
+      // point, not something the next pass rejoins and re-splits.
+      const broken = formatter.format(longChain);
+      expect(broken).toContain('\n  .map(');
+
+      const again = expectPreserved(broken);
+      expect(again, 'the broken form is not a fixed point').toBe(broken);
+      expect(astDifference(parse(longChain), parse(broken))).toBeNull();
+    });
+
+    it('does not break a single long call', () => {
+      // There is no natural break point in one call, so a long one is left
+      // alone rather than split at an arbitrary place.
+      const single =
+        'let x = someObject.aVeryLongMethodNameThatGoesOn("an argument here", "another one", 12345)';
+      const formatted = expectPreserved(single);
+      expect(formatted).toBe(single + '\n');
+      expect(formatted).not.toContain('\n  .');
+    });
+
+    it('does not touch plain member access, however long', () => {
+      // `a.b.c` has no calls and is not a chain; there is nothing to break.
+      const members =
+        'let x = someNamespace.someModule.someSection.someGroup.someEntry.someField.someLeaf';
+      expect(expectPreserved(members)).toBe(members + '\n');
+    });
+
+    it('produces identical interpreter output once broken', () => {
+      const source =
+        'let people = [{city: "NYC", age: 30, name: "Ada"}, {city: "LA", age: 41, name: "Bo"}]\n' +
+        longChain +
+        '\nprint(names)';
+      const formatted = expectPreserved(source);
+      expect(formatted).toContain('\n  .map((p) => p.name)');
+      expect(run(formatted), 'broken chain behaves differently').toEqual(run(source));
+    });
+
+    describe('inside other constructs', () => {
+      // Each of these puts a closing token (`)`, `{`) or an operator directly
+      // after the final link. The parser only treats a newline as a
+      // continuation when the next significant token is a lone `.`, so the
+      // rendering must never put a newline before that closing token.
+      // Long enough (98 columns) to be over the limit at every nesting depth
+      // used below, so each case really does take the breaking path.
+      const chain =
+        'nums.filter((value) => value > 0).map((value) => value * 2).reduce((acc, value) => acc + value, 0)';
+
+      /**
+       * Format, assert the chain actually broke, and return the output.
+       *
+       * The explicit "it broke" assertion is the point: an earlier draft of
+       * these tests used a chain that fit within 80 columns, so every one of
+       * them passed while exercising only the flat path they were written to
+       * avoid. Asserting the break makes that failure mode visible.
+       */
+      function expectBroken(source: string): string {
+        const formatted = expectPreserved(source);
+        expect(formatted, 'chain did not break, so this case proves nothing').toMatch(
+          /\n\s+\.filter\(/
+        );
+        return formatted;
+      }
+
+      it('round-trips as a call argument', () => {
+        const formatted = expectBroken(`let nums = [1, 2, 3]\nprint(${chain})`);
+        expect(run(formatted)).toEqual(['12']);
+      });
+
+      it('round-trips as a non-final call argument', () => {
+        // The `,` after the final link must stay on the final link's line.
+        const formatted = expectBroken(`let nums = [1, 2, 3]\nprint(${chain}, "done")`);
+        expect(run(formatted)).toEqual(['12 done']);
+      });
+
+      it('round-trips inside an if condition', () => {
+        // The `{` opening the block must stay on the final link's line.
+        const formatted = expectBroken(
+          `let nums = [1, 2, 3]\nif ${chain} > 5 {\n  print("big")\n}`
+        );
+        expect(run(formatted)).toEqual(['big']);
+      });
+
+      it('round-trips as a return value', () => {
+        const formatted = expectBroken(
+          `fn total(nums) {\n  return ${chain}\n}\nprint(total([1, 2, 3]))`
+        );
+        expect(formatted).toContain('  return nums\n    .filter(');
+        expect(run(formatted)).toEqual(['12']);
+      });
+
+      it('round-trips inside an array literal', () => {
+        // The chain forces the enclosing literal multi-line too, because its
+        // own single-line form now contains a newline.
+        const formatted = expectBroken(`let nums = [1, 2, 3]\nprint([${chain}])`);
+        expect(run(formatted)).toEqual(['[12]']);
+      });
+
+      it('round-trips as an object literal value', () => {
+        const formatted = expectBroken(`let nums = [1, 2, 3]\nprint({t: ${chain}}.t)`);
+        expect(run(formatted)).toEqual(['12']);
+      });
+
+      it('round-trips when nested two blocks deep', () => {
+        // The continuation indent is absolute, so a chain in a nested block must
+        // indent past the block, not back to column 2.
+        const formatted = expectBroken(
+          'fn outer(nums) {\n' +
+            '  if true {\n' +
+            `    let longVariableNameHere = ${chain} + 100000\n` +
+            '    return longVariableNameHere\n' +
+            '  }\n' +
+            '  return 0\n' +
+            '}\n' +
+            'print(outer([1, 2, 3]))'
+        );
+        expect(formatted).toContain('    let longVariableNameHere = nums\n      .filter(');
+        // The trailing `+ 100000` stays on the final link's line.
+        expect(formatted).toContain('.reduce((acc, value) => acc + value, 0) + 100000\n');
+        expect(run(formatted)).toEqual(['100012']);
+      });
+    });
+
+    it('measures the chain, not the finished line (a known imprecision)', () => {
+      // `currentLineWidth` counts the indentation plus the text it is handed, and
+      // nothing knows how wide the statement prefix already is. So the decision
+      // is made on the chain alone: here the chain is 75 columns and stays flat,
+      // even though `let result = ` pushes the finished line to 88.
+      //
+      // This is inherited rather than introduced - `formatArrayLiteral` and
+      // `formatObjectLiteral` have always measured the same way - and it is why
+      // examples/04-arrays.tiny still has an 88-column chain. Pinning it here so
+      // the limit is a documented property rather than a surprise; fixing it
+      // means threading the prefix column through `formatExpression`, which
+      // would change array and object breaking too.
+      // Copied from examples/04-arrays.tiny, which is why that file still has a
+      // line over the limit.
+      const source =
+        'let result = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].filter((x) => x % 2 == 0).map((x) => x * x)';
+      expect(source.length).toBe(88);
+
+      const formatted = expectPreserved(source + '\nprint(result)');
+      expect(formatted).toBe(source + '\nprint(result)\n');
+      expect(run(formatted)).toEqual(['[4, 16, 36, 64, 100]']);
+    });
+
+    it('never starts a line with `?.`, which the parser cannot read back', () => {
+      // `nextSignificantIsDot` requires a lone `.`, so `items\n  ?.filter(f)` is
+      // a parse error. An optional step is folded into the receiver and stays on
+      // the first line; the plain `.` links above it still break.
+      const source =
+        'let x = aMuchLongerReceiverName?.aFirstMethodCall().aSecondMethodCall().aThirdMethodCall()';
+      const formatted = expectPreserved(source);
+      expect(formatted).toBe(
+        'let x = aMuchLongerReceiverName?.aFirstMethodCall()\n' +
+          '  .aSecondMethodCall()\n' +
+          '  .aThirdMethodCall()\n'
+      );
+      expect(formatted).not.toContain('?.\n');
+      expect(formatted).not.toContain('\n  ?.');
+    });
+
+    it('leaves pipe expressions alone, however long', () => {
+      // PipeMethodExpression is a separate node with its own rendering, and it is
+      // deliberately untouched. A continuation line may not *begin* with `|>`
+      // (`v\n  |> .map(g)` is a parse error), so the only layout the parser
+      // accepts leaves `|>` dangling at the end of each line - a different and
+      // worse shape than the leading-`.` style this change is about. No example
+      // has an over-width pipe, so there is no evidence the same problem affects
+      // them; if that changes, the dangling-`|>` question has to be settled
+      // first.
+      const source =
+        'let outcome = sourceCollection |> .filterEntries((value) => value > 0) |> .mapEntries((value) => value * 2)';
+      expect(source.length).toBeGreaterThan(80);
+
+      const formatted = expectPreserved(source);
+      expect(formatted).toBe(source + '\n');
+      // The only newline is the final one; the pipe chain itself is unbroken.
+      expect(formatted.trimEnd()).not.toContain('\n');
+    });
+  });
+
   describe('the safety net itself', () => {
     it('throws instead of returning output that changes the meaning', () => {
       // Simulate the class of bug that shipped: an expression that renders to

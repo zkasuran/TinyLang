@@ -28,6 +28,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   throws rather than return output that dropped, added or altered one. The AST
   round-trip check could not catch this on its own, because comments are not in
   the AST.
+- **`tinylang fmt` no longer collapses a hand-broken method chain onto one long
+  line.** The formatter was width-aware for array and object literals but not for
+  call chains, so it joined every chain regardless of the result: in
+  `examples/09-functional.tiny` a three-call chain became a single 98-column line.
+  Multi-line chaining is a supported shape - the parser treats a newline before a
+  `.` as a continuation - so this both hurt the examples and undid a deliberate
+  authoring choice. A chain of two or more `.method(...)` calls is now rendered on
+  one line only if it fits within `maxLineWidth`; otherwise the receiver stays on
+  the first line and each call moves to its own continuation line, indented one
+  level. A single call is never broken, since it has no natural break point, and
+  plain member access (`a.b.c`) is untouched. Two shapes are deliberately left
+  flat because the parser cannot read them back: a line may not begin with `?.`,
+  so an optional step stays with the receiver, and it may not begin with `|>`, so
+  `PipeMethodExpression` is unchanged. Note the width test measures the chain, not
+  the finished line - the statement prefix is not counted, the same approximation
+  the literal formatters have always made - so a chain can still exceed the limit
+  once `let x = ` is prepended.
 - **WASM target no longer emits functions with a placeholder in place of real
   work.** Unsupported constructs were collected into a module-wide warning list
   and `(i32.const 0)` was substituted for them, so e.g.
