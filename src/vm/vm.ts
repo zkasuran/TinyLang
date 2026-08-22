@@ -69,9 +69,31 @@ interface TryHandler {
   stackHeight: number;
 }
 
+/**
+ * A captured variable, shared by every closure that captures it.
+ *
+ * An upvalue has two states, and the distinction is the whole point of the
+ * type. While the variable's owning frame is still on the stack the upvalue is
+ * OPEN: `location` is the index of that live stack slot and `value` is unused.
+ * Reads and writes go straight through to the stack, so the owning frame and
+ * every closure over it observe one another's assignments -- there is exactly
+ * one storage location, and it is the stack slot.
+ *
+ * When the owning slot dies -- the frame returns, or the block scope holding
+ * the local ends -- the upvalue is CLOSED: the value is lifted out of the
+ * dying slot into `value` and `location` becomes null. A closure that outlives
+ * its defining frame keeps working, reading and writing the lifted copy, which
+ * it still shares with any sibling closure that captured the same variable.
+ *
+ * Capturing by value instead (which is what this used to do) makes every
+ * closure a private snapshot: `fn inner() { c = 2 }` wrote to its own copy and
+ * the enclosing `c` never changed.
+ */
 interface UpvalueObj {
+  /** The lifted value. Only meaningful once closed (`location === null`). */
   value: RuntimeValue;
-  location: number | null; // stack index, or null if closed
+  /** Index of the live stack slot while open; null once closed. */
+  location: number | null;
 }
 
 /**
@@ -112,6 +134,22 @@ export class VM {
    * constant declared on an earlier line is still constant on a later one.
    */
   private constGlobals: Set<string> = new Set();
+  /**
+   * Every upvalue that is currently open, i.e. still pointing at a live stack
+   * slot. Two purposes:
+   *
+   *   - Sharing. CLOSURE consults this list so that two closures capturing the
+   *     same variable get the *same* UpvalueObj, which is what makes a write
+   *     through one visible through the other.
+   *   - Closing. When a slot dies the upvalue over it must be closed, and that
+   *     cannot be discovered from the closure, only from the slot. This list is
+   *     the slot-to-upvalue index.
+   *
+   * Kept unsorted and short: it only ever holds upvalues for variables that are
+   * both captured and still in scope. The empty case is the overwhelmingly
+   * common one and every hook below is guarded on it.
+   */
+  private openUpvalues: UpvalueObj[] = [];
   private output: OutputHandler;
   private maxSteps: number;
   private steps: number = 0;
@@ -210,6 +248,9 @@ export class VM {
     this.stack = [];
     this.frames = [];
     this.handlers = [];
+    // Stack indices from the previous chunk mean nothing against a fresh stack,
+    // so no upvalue may survive into this run still claiming to be open.
+    this.openUpvalues = [];
     this.steps = 0;
     this.outputBuffer = [];
 
@@ -253,6 +294,17 @@ export class VM {
   }
 
   private pop(): RuntimeValue {
+    // A captured local is discarded with a plain POP when its block scope ends
+    // (see Compiler.endScope), so popping is one of the two ways a captured
+    // slot dies and the upvalue over it has to be closed here. Closing must
+    // happen while the slot is still readable, hence before the pop.
+    //
+    // Without this, a loop body that captures its own binding would hand every
+    // iteration's closure the one recycled slot, and all of them would end up
+    // reading the last iteration's value.
+    if (this.openUpvalues.length > 0 && this.stack.length > 0) {
+      this.closeUpvaluesFrom(this.stack.length - 1);
+    }
     const value = this.stack.pop();
     if (value === undefined) {
       throw new RuntimeError('Stack underflow');
@@ -262,6 +314,81 @@ export class VM {
 
   private peek(distance: number = 0): RuntimeValue {
     return this.stack[this.stack.length - 1 - distance];
+  }
+
+  /**
+   * Discard stack slots from `newLength` upwards, closing any upvalue over one
+   * of them first.
+   *
+   * Every bulk shrink of the stack goes through here rather than assigning
+   * `stack.length` directly, so that no path can drop a captured slot without
+   * lifting its value out.
+   */
+  private shrinkStackTo(newLength: number): void {
+    if (this.openUpvalues.length > 0) {
+      this.closeUpvaluesFrom(newLength);
+    }
+    this.stack.length = newLength;
+  }
+
+  /**
+   * Return the upvalue for stack slot `stackIndex`, creating it only if no open
+   * upvalue already refers to that slot.
+   *
+   * Reuse is not an optimisation, it is the semantics: `fn set() { v = 42 }` and
+   * `fn get() { return v }` capture the same `v`, and unless both closures come
+   * away holding the identical UpvalueObj, `set()` writes somewhere `get()`
+   * cannot see.
+   */
+  private captureUpvalue(stackIndex: number): UpvalueObj {
+    for (const existing of this.openUpvalues) {
+      if (existing.location === stackIndex) {
+        return existing;
+      }
+    }
+    const created: UpvalueObj = {
+      value: this.stack[stackIndex] ?? createNull(),
+      location: stackIndex,
+    };
+    this.openUpvalues.push(created);
+    return created;
+  }
+
+  /**
+   * Close every open upvalue whose slot is at or above `minIndex`, lifting each
+   * value out of the slot that is about to disappear.
+   *
+   * Callers must invoke this while the slots are still populated.
+   */
+  private closeUpvaluesFrom(minIndex: number): void {
+    let keep = 0;
+    for (let i = 0; i < this.openUpvalues.length; i++) {
+      const upvalue = this.openUpvalues[i];
+      if (upvalue.location !== null && upvalue.location >= minIndex) {
+        upvalue.value = this.stack[upvalue.location] ?? createNull();
+        upvalue.location = null;
+      } else {
+        this.openUpvalues[keep++] = upvalue;
+      }
+    }
+    this.openUpvalues.length = keep;
+  }
+
+  /** Read through an upvalue: the live slot while open, the lifted value once closed. */
+  private readUpvalue(upvalue: UpvalueObj): RuntimeValue {
+    if (upvalue.location !== null) {
+      return this.stack[upvalue.location] ?? createNull();
+    }
+    return upvalue.value;
+  }
+
+  /** Write through an upvalue, into the live slot while open so the owning frame sees it. */
+  private writeUpvalue(upvalue: UpvalueObj, value: RuntimeValue): void {
+    if (upvalue.location !== null) {
+      this.stack[upvalue.location] = value;
+    } else {
+      upvalue.value = value;
+    }
   }
 
   private currentLine(): number {
@@ -325,7 +452,9 @@ export class VM {
 
       this.frames.length = handler.frameIndex + 1;
       this.frames[handler.frameIndex].ip = handler.handlerIp;
-      this.stack.length = handler.stackHeight;
+      // Unwinding abandons frames without running their RETURN, so the closing
+      // that RETURN would have done has to happen here too.
+      this.shrinkStackTo(handler.stackHeight);
       this.push(this.makeErrorValue(error));
       return true;
     }
@@ -671,7 +800,7 @@ export class VM {
           const idx = this.read16();
           const upvalue = this.currentFrame.upvalues[idx];
           if (upvalue) {
-            this.push(upvalue.value);
+            this.push(this.readUpvalue(upvalue));
           } else {
             this.push(createNull());
           }
@@ -681,8 +810,12 @@ export class VM {
         case OpCode.STORE_UPVALUE: {
           const idx = this.read16();
           const upvalue = this.currentFrame.upvalues[idx];
+          const value = this.peek();
           if (upvalue) {
-            upvalue.value = this.peek();
+            // Goes to the enclosing frame's live slot while that frame is still
+            // running, which is what makes `fn inner() { c = 2 }` change the
+            // `c` that outer() goes on to print.
+            this.writeUpvalue(upvalue, value);
           }
           this.pop(); // Consume the value
           break;
@@ -702,6 +835,19 @@ export class VM {
         case OpCode.RETURN: {
           const result = this.pop();
           const frame = this.frames.pop()!;
+
+          // The frame's slots are about to stop existing, so any upvalue still
+          // referring to one has to be closed now, while the values are still
+          // there to lift out. This is what lets a closure outlive the function
+          // that created it.
+          //
+          // Driven by the frame being popped rather than by the dispatch loop
+          // exiting, because callFromNative() re-enters dispatch for array
+          // callbacks: a loop exit is not a frame exit, and a frame can exit
+          // without any loop exiting.
+          if (this.openUpvalues.length > 0) {
+            this.closeUpvaluesFrom(Math.max(0, frame.basePointer - 1));
+          }
 
           // A `return` inside a try block jumps straight out without reaching
           // TRY_END, so drop any handlers the departing frame installed.
@@ -745,9 +891,10 @@ export class VM {
           if (fnWithUpvalues.upvalues) {
             for (const uv of fnWithUpvalues.upvalues) {
               if (uv.isLocal) {
-                // Capture from current frame's locals
-                const value = this.stack[this.currentFrame.basePointer + uv.index];
-                upvalues.push({ value, location: this.currentFrame.basePointer + uv.index });
+                // Capture the enclosing frame's live slot, not a copy of what is
+                // in it right now, and share the upvalue with any closure that
+                // already captured the same slot.
+                upvalues.push(this.captureUpvalue(this.currentFrame.basePointer + uv.index));
               } else {
                 // Capture from enclosing closure's upvalues
                 upvalues.push(this.currentFrame.upvalues[uv.index]);

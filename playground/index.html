@@ -8153,6 +8153,22 @@ var TinyLangBundle = (() => {
        * constant declared on an earlier line is still constant on a later one.
        */
       __publicField(this, "constGlobals", /* @__PURE__ */ new Set());
+      /**
+       * Every upvalue that is currently open, i.e. still pointing at a live stack
+       * slot. Two purposes:
+       *
+       *   - Sharing. CLOSURE consults this list so that two closures capturing the
+       *     same variable get the *same* UpvalueObj, which is what makes a write
+       *     through one visible through the other.
+       *   - Closing. When a slot dies the upvalue over it must be closed, and that
+       *     cannot be discovered from the closure, only from the slot. This list is
+       *     the slot-to-upvalue index.
+       *
+       * Kept unsorted and short: it only ever holds upvalues for variables that are
+       * both captured and still in scope. The empty case is the overwhelmingly
+       * common one and every hook below is guarded on it.
+       */
+      __publicField(this, "openUpvalues", []);
       __publicField(this, "output");
       __publicField(this, "maxSteps");
       __publicField(this, "steps", 0);
@@ -8227,6 +8243,7 @@ var TinyLangBundle = (() => {
       this.stack = [];
       this.frames = [];
       this.handlers = [];
+      this.openUpvalues = [];
       this.steps = 0;
       this.outputBuffer = [];
       this.frames.push({
@@ -8261,6 +8278,9 @@ var TinyLangBundle = (() => {
       this.stack.push(value);
     }
     pop() {
+      if (this.openUpvalues.length > 0 && this.stack.length > 0) {
+        this.closeUpvaluesFrom(this.stack.length - 1);
+      }
       const value = this.stack.pop();
       if (value === void 0) {
         throw new RuntimeError("Stack underflow");
@@ -8269,6 +8289,76 @@ var TinyLangBundle = (() => {
     }
     peek(distance = 0) {
       return this.stack[this.stack.length - 1 - distance];
+    }
+    /**
+     * Discard stack slots from `newLength` upwards, closing any upvalue over one
+     * of them first.
+     *
+     * Every bulk shrink of the stack goes through here rather than assigning
+     * `stack.length` directly, so that no path can drop a captured slot without
+     * lifting its value out.
+     */
+    shrinkStackTo(newLength) {
+      if (this.openUpvalues.length > 0) {
+        this.closeUpvaluesFrom(newLength);
+      }
+      this.stack.length = newLength;
+    }
+    /**
+     * Return the upvalue for stack slot `stackIndex`, creating it only if no open
+     * upvalue already refers to that slot.
+     *
+     * Reuse is not an optimisation, it is the semantics: `fn set() { v = 42 }` and
+     * `fn get() { return v }` capture the same `v`, and unless both closures come
+     * away holding the identical UpvalueObj, `set()` writes somewhere `get()`
+     * cannot see.
+     */
+    captureUpvalue(stackIndex) {
+      for (const existing of this.openUpvalues) {
+        if (existing.location === stackIndex) {
+          return existing;
+        }
+      }
+      const created = {
+        value: this.stack[stackIndex] ?? createNull(),
+        location: stackIndex
+      };
+      this.openUpvalues.push(created);
+      return created;
+    }
+    /**
+     * Close every open upvalue whose slot is at or above `minIndex`, lifting each
+     * value out of the slot that is about to disappear.
+     *
+     * Callers must invoke this while the slots are still populated.
+     */
+    closeUpvaluesFrom(minIndex) {
+      let keep = 0;
+      for (let i = 0; i < this.openUpvalues.length; i++) {
+        const upvalue = this.openUpvalues[i];
+        if (upvalue.location !== null && upvalue.location >= minIndex) {
+          upvalue.value = this.stack[upvalue.location] ?? createNull();
+          upvalue.location = null;
+        } else {
+          this.openUpvalues[keep++] = upvalue;
+        }
+      }
+      this.openUpvalues.length = keep;
+    }
+    /** Read through an upvalue: the live slot while open, the lifted value once closed. */
+    readUpvalue(upvalue) {
+      if (upvalue.location !== null) {
+        return this.stack[upvalue.location] ?? createNull();
+      }
+      return upvalue.value;
+    }
+    /** Write through an upvalue, into the live slot while open so the owning frame sees it. */
+    writeUpvalue(upvalue, value) {
+      if (upvalue.location !== null) {
+        this.stack[upvalue.location] = value;
+      } else {
+        upvalue.value = value;
+      }
     }
     currentLine() {
       const frame = this.currentFrame;
@@ -8317,7 +8407,7 @@ var TinyLangBundle = (() => {
         }
         this.frames.length = handler.frameIndex + 1;
         this.frames[handler.frameIndex].ip = handler.handlerIp;
-        this.stack.length = handler.stackHeight;
+        this.shrinkStackTo(handler.stackHeight);
         this.push(this.makeErrorValue(error));
         return true;
       }
@@ -8610,7 +8700,7 @@ var TinyLangBundle = (() => {
             const idx = this.read16();
             const upvalue = this.currentFrame.upvalues[idx];
             if (upvalue) {
-              this.push(upvalue.value);
+              this.push(this.readUpvalue(upvalue));
             } else {
               this.push(createNull());
             }
@@ -8619,8 +8709,9 @@ var TinyLangBundle = (() => {
           case 85 /* STORE_UPVALUE */: {
             const idx = this.read16();
             const upvalue = this.currentFrame.upvalues[idx];
+            const value = this.peek();
             if (upvalue) {
-              upvalue.value = this.peek();
+              this.writeUpvalue(upvalue, value);
             }
             this.pop();
             break;
@@ -8637,6 +8728,9 @@ var TinyLangBundle = (() => {
           case 97 /* RETURN */: {
             const result = this.pop();
             const frame = this.frames.pop();
+            if (this.openUpvalues.length > 0) {
+              this.closeUpvaluesFrom(Math.max(0, frame.basePointer - 1));
+            }
             while (this.handlers.length > 0 && this.handlers[this.handlers.length - 1].frameIndex >= this.frames.length) {
               this.handlers.pop();
             }
@@ -8660,8 +8754,7 @@ var TinyLangBundle = (() => {
             if (fnWithUpvalues.upvalues) {
               for (const uv of fnWithUpvalues.upvalues) {
                 if (uv.isLocal) {
-                  const value = this.stack[this.currentFrame.basePointer + uv.index];
-                  upvalues.push({ value, location: this.currentFrame.basePointer + uv.index });
+                  upvalues.push(this.captureUpvalue(this.currentFrame.basePointer + uv.index));
                 } else {
                   upvalues.push(this.currentFrame.upvalues[uv.index]);
                 }

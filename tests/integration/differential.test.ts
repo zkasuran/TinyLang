@@ -1731,4 +1731,341 @@ describe('Differential: engine agreement audit', () => {
       expect(out[2]).toBe('still running');
     });
   });
+
+  /**
+   * The VM captured upvalues by value: OpCode.CLOSURE copied whatever was in the
+   * enclosing local's stack slot into the closure, and STORE_UPVALUE then wrote
+   * to that private copy. So a closure could read an enclosing variable but
+   * never write one, and two closures over the same variable each got their own
+   * snapshot.
+   *
+   *     fn outer() {
+   *       let c = 1
+   *       fn inner() { c = 2 }
+   *       inner()
+   *       print(c)      // interpreter 2, VM 1
+   *     }
+   *
+   * Upvalues are now open while the owning slot is live -- reads and writes go
+   * through the stack, so there is one storage location shared by the owning
+   * frame and every closure -- and closed when that slot dies, lifting the value
+   * out so a closure that outlives its frame keeps working.
+   */
+  describe('closures writing to enclosing variables (VM captured by value)', () => {
+    it('a closure assigning to an enclosing local is seen by the enclosing frame', () => {
+      expect(
+        expectAgreement(`
+          fn outer() {
+            let c = 1
+            fn inner() { c = 2 }
+            inner()
+            print(c)
+          }
+          outer()
+        `)
+      ).toEqual(['2']);
+    });
+
+    it('a counter closure accumulates across calls instead of resetting', () => {
+      expect(
+        expectAgreement(`
+          fn makeCounter() {
+            let n = 0
+            fn inc() {
+              n = n + 1
+              return n
+            }
+            return inc
+          }
+          let next = makeCounter()
+          print(next())
+          print(next())
+          print(next())
+        `)
+      ).toEqual(['1', '2', '3']);
+    });
+
+    it('two counters from the same factory do not share state', () => {
+      expect(
+        expectAgreement(`
+          fn makeCounter() {
+            let n = 0
+            fn inc() {
+              n = n + 1
+              return n
+            }
+            return inc
+          }
+          let a = makeCounter()
+          let b = makeCounter()
+          print(a())
+          print(a())
+          print(b())
+        `)
+      ).toEqual(['1', '2', '1']);
+    });
+
+    it('two closures over one variable share it: a write through one is read through the other', () => {
+      expect(
+        expectAgreement(`
+          fn pair() {
+            let v = 0
+            fn set() { v = 42 }
+            fn get() { return v }
+            print(get())
+            set()
+            print(get())
+          }
+          pair()
+        `)
+      ).toEqual(['0', '42']);
+    });
+
+    it('sharing survives the defining frame returning, which is what closing is for', () => {
+      expect(
+        expectAgreement(`
+          fn make() {
+            let s = "start"
+            fn get() { return s }
+            fn set(x) { s = x }
+            return [get, set]
+          }
+          let fns = make()
+          let get = fns[0]
+          let set = fns[1]
+          print(get())
+          set("changed")
+          print(get())
+          set("again")
+          print(get())
+        `)
+      ).toEqual(['start', 'changed', 'again']);
+    });
+
+    it('an escaped closure still writes to its captured variable after the frame is gone', () => {
+      expect(
+        expectAgreement(`
+          fn make() {
+            let n = 10
+            fn bump() {
+              n = n + 5
+              return n
+            }
+            return bump
+          }
+          let bump = make()
+          print(bump())
+          print(bump())
+        `)
+      ).toEqual(['15', '20']);
+    });
+
+    it('one closure per loop iteration captures that iteration\u2019s binding', () => {
+      expect(
+        expectAgreement(`
+          let fs = []
+          for i in 0..4 {
+            let captured = i * 10
+            fn f() { return captured }
+            fs = fs + [f]
+          }
+          for f in fs {
+            print(f())
+          }
+        `)
+      ).toEqual(['0', '10', '20', '30']);
+    });
+
+    it('a per-iteration closure can also write to its own binding', () => {
+      expect(
+        expectAgreement(`
+          let fs = []
+          for i in 0..3 {
+            let n = i
+            fn bump() {
+              n = n + 100
+              return n
+            }
+            fs = fs + [bump]
+          }
+          for f in fs {
+            print(f())
+            print(f())
+          }
+        `)
+      ).toEqual(['100', '200', '101', '201', '102', '202']);
+    });
+
+    it('a closure writes through two levels of nesting', () => {
+      expect(
+        expectAgreement(`
+          fn a() {
+            let x = 1
+            fn b() {
+              fn c() { x = 99 }
+              c()
+            }
+            b()
+            print(x)
+          }
+          a()
+        `)
+      ).toEqual(['99']);
+    });
+
+    it('three levels of nesting each read and write the outermost binding', () => {
+      expect(
+        expectAgreement(`
+          fn level1() {
+            let acc = ""
+            fn level2() {
+              acc = acc + "2"
+              fn level3() {
+                acc = acc + "3"
+                fn level4() { acc = acc + "4" }
+                level4()
+              }
+              level3()
+            }
+            level2()
+            print(acc)
+          }
+          level1()
+        `)
+      ).toEqual(['234']);
+    });
+
+    it('a closure passed to forEach writes to the enclosing accumulator', () => {
+      expect(
+        expectAgreement(`
+          fn total(xs) {
+            let sum = 0
+            xs.forEach(fn(v) { sum = sum + v })
+            return sum
+          }
+          print(total([1, 2, 3, 4]))
+        `)
+      ).toEqual(['10']);
+    });
+
+    it('a native callback re-entering the VM still closes upvalues per frame', () => {
+      expect(
+        expectAgreement(`
+          fn collect(xs) {
+            let fs = []
+            xs.forEach(fn(v) {
+              let own = v * 2
+              fn get() { return own }
+              fs = fs + [get]
+            })
+            return fs
+          }
+          for f in collect([1, 2, 3]) {
+            print(f())
+          }
+        `)
+      ).toEqual(['2', '4', '6']);
+    });
+
+    it('a closure captured inside a method writes to the method\u2019s local', () => {
+      expect(
+        expectAgreement(`
+          class Tally {
+            fn init() { this.items = [1, 2, 3] }
+            fn sum() {
+              let s = 0
+              this.items.forEach(fn(v) { s = s + v })
+              return s
+            }
+          }
+          print(new Tally().sum())
+        `)
+      ).toEqual(['6']);
+    });
+
+    it('a write through an upvalue inside a try block survives the catch', () => {
+      expect(
+        expectAgreement(`
+          fn f() {
+            let n = 0
+            fn bump() {
+              n = n + 1
+              throw "boom"
+            }
+            try { bump() } catch e { print("caught " + e.message) }
+            print(n)
+          }
+          f()
+        `)
+      ).toEqual(['caught boom', '1']);
+    });
+
+    it('an escaped closure survives an error unwinding the frame that made it', () => {
+      expect(
+        expectAgreement(`
+          let saved = null
+          fn make() {
+            let n = 7
+            fn get() { return n }
+            saved = get
+            throw "abort"
+          }
+          try { make() } catch e { print("caught") }
+          print(saved())
+        `)
+      ).toEqual(['caught', '7']);
+    });
+
+    it('reassigning an enclosing const through a closure is still rejected', () => {
+      expectSameError(
+        `fn outer() {\n  const C = 1\n  fn inner() { C = 2 }\n  inner()\n}\nouter()`,
+        `Cannot reassign constant 'C'`
+      );
+    });
+
+    it('a compound assignment through a closure reaches the enclosing variable', () => {
+      expect(
+        expectAgreement(`
+          fn outer() {
+            let n = 1
+            fn inner() { n += 41 }
+            inner()
+            print(n)
+          }
+          outer()
+        `)
+      ).toEqual(['42']);
+    });
+
+    it('a closure capturing a parameter writes to the caller\u2019s frame slot', () => {
+      expect(
+        expectAgreement(`
+          fn outer(n) {
+            fn inner() { n = n * 2 }
+            inner()
+            inner()
+            print(n)
+          }
+          outer(3)
+        `)
+      ).toEqual(['12']);
+    });
+
+    it('recursion does not let two invocations share one captured variable', () => {
+      expect(
+        expectAgreement(`
+          fn rec(depth) {
+            let mine = depth
+            fn bump() { mine = mine + 100 }
+            if depth > 0 {
+              rec(depth - 1)
+            }
+            bump()
+            print(mine)
+          }
+          rec(2)
+        `)
+      ).toEqual(['100', '101', '102']);
+    });
+  });
 });
