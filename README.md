@@ -26,7 +26,8 @@
 
 <p align="center">
   <strong><a href="https://zkasuran.github.io/TinyLang/">Live site</a></strong> &nbsp;·&nbsp;
-  <strong><a href="https://zkasuran.github.io/TinyLang/playground/index.html">Try the Web IDE in your browser</a></strong>
+  <strong><a href="https://zkasuran.github.io/TinyLang/playground/index.html">Try the Web IDE in your browser</a></strong> &nbsp;·&nbsp;
+  <strong><a href="https://youtu.be/sFkafBDiH_w">Watch the 2-minute demo</a></strong>
 </p>
 
 ---
