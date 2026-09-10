@@ -5,15 +5,33 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TinyLang IDE - Professional Programming Environment</title>
   <meta name="description" content="TinyLang Web IDE: A professional programming environment with debugger, AST visualizer, bytecode viewer, and integrated toolchain.">
-  <!-- CodeMirror 6 from CDN -->
+  <!-- CodeMirror 6 from CDN.
+       An import map maps the bare specifiers that esm.sh emits for the shared
+       externals (@codemirror/state, @codemirror/view) to concrete URLs, so all
+       CodeMirror packages resolve a SINGLE copy of @codemirror/state. This
+       avoids the "multiple instances of @codemirror/state" error. -->
+  <script type="importmap">
+  {
+    "imports": {
+      "@codemirror/state": "https://esm.sh/@codemirror/state@6.7.4",
+      "@codemirror/view": "https://esm.sh/@codemirror/view@6.43.11"
+    }
+  }
+  </script>
   <script type="module">
-    import {EditorView, basicSetup} from 'https://cdn.jsdelivr.net/npm/codemirror@6.65.7/+esm';
-    import {EditorState} from 'https://cdn.jsdelivr.net/npm/@codemirror/state@6.4.1/+esm';
-    import {keymap} from 'https://cdn.jsdelivr.net/npm/@codemirror/view@6.26.3/+esm';
-    import {StreamLanguage} from 'https://cdn.jsdelivr.net/npm/@codemirror/language@6.10.1/+esm';
-    import {oneDark} from 'https://cdn.jsdelivr.net/npm/@codemirror/theme-one-dark@6.1.2/+esm';
-    import {autocompletion} from 'https://cdn.jsdelivr.net/npm/@codemirror/autocomplete@6.16.0/+esm';
-    import {linter as cmLinter, lintGutter} from 'https://cdn.jsdelivr.net/npm/@codemirror/lint@6.8.0/+esm';
+    // CodeMirror is loaded from esm.sh. @codemirror/state and @codemirror/view
+    // are imported as bare specifiers resolved by the import map above, and the
+    // remaining packages mark them as externals (?external=...) so esm.sh does
+    // NOT bundle its own copies. Every package therefore resolves the SAME
+    // @codemirror/state instance, avoiding the "multiple instances of
+    // @codemirror/state" / "Unrecognized extension value" error.
+    import {EditorState} from '@codemirror/state';
+    import {EditorView, keymap} from '@codemirror/view';
+    import {basicSetup} from 'https://esm.sh/codemirror@6.0.1?external=@codemirror/state,@codemirror/view';
+    import {StreamLanguage} from 'https://esm.sh/@codemirror/language@6.10.1?external=@codemirror/state,@codemirror/view';
+    import {oneDark} from 'https://esm.sh/@codemirror/theme-one-dark@6.1.2?external=@codemirror/state,@codemirror/view';
+    import {autocompletion} from 'https://esm.sh/@codemirror/autocomplete@6.16.0?external=@codemirror/state,@codemirror/view';
+    import {linter as cmLinter, lintGutter} from 'https://esm.sh/@codemirror/lint@6.8.0?external=@codemirror/state,@codemirror/view';
 
     // TinyLang syntax definition for StreamLanguage
     const tinyLangDef = {
@@ -86,7 +104,9 @@
     };
 
     // Store editor reference globally
-    window._cmReady = new Promise((resolve) => {
+    let _resolveCmReady;
+    window._cmReady = new Promise((resolve) => { _resolveCmReady = resolve; });
+    {
       window._initCodeMirror = (container, initialCode) => {
         const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
         const extensions = [
@@ -131,10 +151,13 @@
         window._tinyLangCompletions = tinyLangCompletions;
         window._lintGutter = lintGutter;
         window._keymap = keymap;
-        resolve(view);
         return view;
       };
-    });
+    }
+    // Signal that the CodeMirror module has loaded and _initCodeMirror is
+    // defined. This resolves independently of whether the editor has been
+    // created yet, so init() can safely await it without deadlocking.
+    _resolveCmReady();
   </script>
   <style>
     :root {
@@ -13492,9 +13515,34 @@ for i in 0..3 {
         const editorArea = document.getElementById('editor-area');
         const code = this.fs.readFile(this.currentFile);
 
-        // Wait for CodeMirror module to load
-        if (window._initCodeMirror) {
-          this.editor = window._initCodeMirror(editorArea, code);
+        // Wait for the CodeMirror ES module to finish loading. The module is
+        // loaded via <script type="module"> which is deferred, so it runs AFTER
+        // this classic script -- meaning window._cmReady / _initCodeMirror may
+        // not exist yet when init() first runs. Poll until the module has
+        // defined _initCodeMirror (with a timeout) so we never deadlock and
+        // never silently skip editor creation.
+        try {
+          const deadline = Date.now() + 15000;
+          while (!window._initCodeMirror && Date.now() < deadline) {
+            if (window._cmReady) {
+              await window._cmReady;
+              break;
+            }
+            await new Promise((r) => setTimeout(r, 30));
+          }
+          if (window._initCodeMirror) {
+            this.editor = window._initCodeMirror(editorArea, code);
+          } else {
+            throw new Error('CodeMirror failed to load within the timeout');
+          }
+        } catch (err) {
+          console.error('Failed to initialize the code editor:', err);
+          if (editorArea) {
+            editorArea.innerHTML =
+              '<div style="padding:16px;color:var(--red);font-family:monospace;">' +
+              'Failed to load the code editor. Check your network connection ' +
+              '(CodeMirror is loaded from a CDN) and reload the page.</div>';
+          }
         }
 
         // Set up resize handles
