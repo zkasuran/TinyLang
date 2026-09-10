@@ -13492,9 +13492,27 @@ for i in 0..3 {
         const editorArea = document.getElementById('editor-area');
         const code = this.fs.readFile(this.currentFile);
 
-        // Wait for CodeMirror module to load
-        if (window._initCodeMirror) {
-          this.editor = window._initCodeMirror(editorArea, code);
+        // Wait for the CodeMirror ES module to finish loading. The module is
+        // loaded via <script type="module"> which is deferred, so it runs AFTER
+        // this classic script. Awaiting _cmReady avoids a race where
+        // _initCodeMirror is still undefined and the editor never initializes.
+        try {
+          if (window._cmReady) {
+            await window._cmReady;
+          }
+          if (window._initCodeMirror) {
+            this.editor = window._initCodeMirror(editorArea, code);
+          } else {
+            throw new Error('CodeMirror initializer unavailable');
+          }
+        } catch (err) {
+          console.error('Failed to initialize the code editor:', err);
+          if (editorArea) {
+            editorArea.innerHTML =
+              '<div style="padding:16px;color:var(--red);font-family:monospace;">' +
+              'Failed to load the code editor. Check your network connection ' +
+              '(CodeMirror is loaded from a CDN) and reload the page.</div>';
+          }
         }
 
         // Set up resize handles
